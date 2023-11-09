@@ -32,12 +32,65 @@ def gaussianblur_max_min_2d(data, sigma):
 
     return max_i, min_bg
 
+def derivative_int_gauss_1d(ii, x, sigma, N, PSFy):
+    """
+    Compute the derivative of the 1D Gaussian.
+    
+    Args:
+        ii (int): Pixel index.
+        x (float): Mean value of the Gaussian.
+        sigma (float): Standard deviation of the Gaussian.
+        N (float): Amplitude of the Gaussian.
+        PSFy (float): Scaling factor along y.
+    
+    Returns:
+        float: Derivative of the Gaussian with respect to x at ii.
+        float: Second derivative of the Gaussian with respect to x at ii (optional).
+    """
+    a = np.exp(-0.5 * ((ii + 0.5 - x) / sigma)**2)
+    b = np.exp(-0.5 * ((ii - 0.5 - x) / sigma)**2)
+
+    dudt = -N / np.sqrt(2 * np.pi) / sigma * (a - b) * PSFy
+    d2udt2 = -N / np.sqrt(2 * np.pi) / sigma**3 * ((ii + 0.5 - x) * a - (ii - 0.5 - x) * b) * PSFy
+
+    return dudt, d2udt2
+
+def center_of_mass_2d(data, ax=0, ay=0):
+    """
+    Compute the 2D center of mass of a subregion.
+
+    Parameters:
+    - data: 2D numpy array representing the subregion to search
+- ax: optional adjustment in x
+    - ay: optional adjustment in y
+
+    Returns:
+    - x: x coordinate of the center of mass
+    - y: y coordinate of the center of mass
+    """
+    # sz = data.shape[0]  # Assume data is square (sz x sz)
+    ii, jj = np.indices(data.shape)
+    adjusted_data = data - ax * ii - ay * jj 
+    tmpx = np.sum((adjusted_data) * ii)
+    tmpy = np.sum((adjusted_data) * jj)
+    tmpsum = np.sum(adjusted_data)
+    
+    if tmpsum == 0:
+        return np.nan, np.nan  # Avoid division by zero
+    
+    x = tmpx / tmpsum
+    y = tmpy / tmpsum
+    
+    return x, y
+
 def integrate_gauss_1d(ii, x, sigma):
     
     norm = 1/2/sigma**2
     return 1.0/2.0*(erf((ii-x+0.5)*np.sqrt(norm))-erf((ii-x-0.5)*np.sqrt(norm)))
+    # the above, re-written using exponential function integrals is as below:
+    # integral(from ii-0.5 to ii+0.5) [1/2sqrt(pi)*exp(-norm*(t-x)**2) dt]
 
-def kernel_calc_llr_prop(cr, i_theta, t_g):
+def calc_llr_prop(cr, i_theta, t_g):
     """
     Returns probabilities corresponding to LLR.
     
@@ -61,7 +114,7 @@ def kernel_calc_llr_prop(cr, i_theta, t_g):
     
     return llr
 
-def gaussian_mle_ratio_test(data, psf_sigma, sz_x, iterations):
+def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
     """ Returns parameters, crlbs, and loglikelihoods
 
     Args:
@@ -71,17 +124,19 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz_x, iterations):
         iterations (_type_): _description_
         nfit (_type_): _description_
     """
+    # Initialization
     nv_rh0 = 1
     nv_rh1 = 2 
-    sz = sz_x
+
     fisher_mat = np.zeros((nv_rh1, nv_rh1))
     inv_fisher_mat = np.zeros((nv_rh1, nv_rh1))
-    diag = np.zeros(nv_rh1)
+
     theta_h1 = np.zeros(nv_rh1)
     theta_h0 = np.zeros(nv_rh0)
-    # Should the fofilter_center_yowing data be a picked subset of the whole roi_stack?
-    i_max, theta_h1[1] = gaussianblur_max_min_2d(data, psf_sigma)
-    theta_h1[0] = max(0.1, (i_max - theta_h1[1]) * 4 * np.pi * psf_sigma**2)  # It is not clear from the original code why 4 instead of 2.
+
+    # initial starting values
+    max_estimate, theta_h1[1] = gaussianblur_max_min_2d(data, psf_sigma)
+    theta_h1[0] = max(0.1, (max_estimate - theta_h1[1]) * 4 * np.pi * psf_sigma**2)
 
     for kk in range(iterations):
         nr_numerator = np.zeros(nv_rh1)
@@ -110,13 +165,12 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz_x, iterations):
                 cf = min(cf, 10e4)
                 df = min(df, 10e4)
 
-                # Fisher information matrix
                 for ll in range(nv_rh1):
                     nr_numerator[ll] += dudt[ll] * cf
                     nr_denominator[ll] += d2udt2[ll] * cf - dudt[ll] ** 2 * df
 
         theta_h1[0] -= min(max(nr_numerator[0] / nr_denominator[0] / 2, -theta_h1[0]), theta_h1[0]/2)
-        theta_h1[0] = max(theta_h1[0], i_max/2)
+        theta_h1[0] = max(theta_h1[0], max_estimate/2)
 
         theta_h1[1] -= nr_numerator[1] / nr_denominator[1]
         theta_h1[1] = max(theta_h1[1], 0.01)
@@ -142,7 +196,7 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz_x, iterations):
             dudt[0] = psf_x * psf_y
             dudt[1] = 1.0
 
-            # Building the Fisher Information Matrix
+            # Building the Fisher Information Matrix - This Fisher info Mat is only related to H1.
             for kk in range(nv_rh1):
                 for ll in range(kk, nv_rh1):
                     fisher_mat[kk, ll] += dudt[ll] * dudt[kk] / model # dividing by model is averating, effectively? - yes.
@@ -156,14 +210,140 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz_x, iterations):
 
     # Matrix inverse (CRLB=F^-1)
     inv_fisher_mat = np.linalg.inv(fisher_mat)
-    diag = np.diag(inv_fisher_mat)
+    crlbs = np.diag(inv_fisher_mat)
     
     # Calculate the return values
-    loglikelihoods = kernel_calc_llr_prop(diag[0], theta_h1[0], t_g)
+    llr = calc_llr_prop(crlbs[0], theta_h1[0], t_g)
     parameters = np.concatenate([theta_h1, theta_h0])
+
+    return parameters, crlbs, llr
+
+def gaussian_mle_fit(data, psf_sigma, sz, iterations):
+    """ Returns parameters, crlbs, and loglikelihoods
+    Args:
+        data (_type_): _description_
+        psf_sigma (_type_): _description_
+        sz_x (_type_): _description_
+        iterations (_type_): _description_
+    """
+    # initialization
+    nv_rh0 = 1
+    nv_rh1 = 4 
+
+    fisher_mat = np.zeros((nv_rh1, nv_rh1))
+    inv_fisher_mat = np.zeros((nv_rh1, nv_rh1))
+
+    theta_h1 = np.zeros(nv_rh1)
+    theta_h0 = np.zeros(nv_rh0)
+
+    maxjump = np.array([1.0, 1.0, 100.0, 2.0])
+    gamma = np.array([1.0, 1.0, 0.5, 1.0])
+    
+    # initial strting values 
+    theta_h1[0], theta_h1[1] = center_of_mass_2d(data)
+    max_estimate, theta_h1[3] = gaussianblur_max_min_2d(data, psf_sigma)
+    theta_h1[2] = max(0.1, (max_estimate - theta_h1[3]) * 2 * np.pi*psf_sigma**2)
+
+    for kk in range(iterations):
+        nr_numerator = np.zeros(nv_rh1)
+        nr_denominator = np.zeros(nv_rh1)
+
+        for ii in range(sz):
+            for jj in range(sz):
+                psf_x = integrate_gauss_1d(ii, theta_h1[0], psf_sigma)
+                psf_y = integrate_gauss_1d(jj, theta_h1[1], psf_sigma)
+
+                model = theta_h1[3] + theta_h1[2] * psf_x * psf_y
+                data_val = data[jj, ii]
+
+                # Calculating derivatives
+                dudt = np.zeros(nv_rh1)
+                d2udt2 = np.zeros(nv_rh1)
+
+                # Here you would calculate the derivatives. As an example, I'm using placeholders
+                # Replace these with the actual derivative calculations
+                dudt[0], d2udt2[0] = derivative_int_gauss_1d(ii, theta_h1[0], psf_sigma, theta_h1[2], psf_x) 
+                dudt[1], d2udt2[1] = derivative_int_gauss_1d(ii, theta_h1[1], psf_sigma, theta_h1[2], psf_y) 
+                dudt[2] = psf_x * psf_y  # derivative of model w.r.t. N
+                d2udt2[2] = 0.0
+                dudt[3] = 1.0  # derivative of model w.r.t. bg
+                d2udt2[3] = 0.0
+
+                # Correction factor and derivative factor
+                cf = 0.0
+                df = 0.0
+                if model > 10e-3:
+                    cf = data_val / model - 1
+                    df = data_val / model**2
+                cf = min(cf, 10e4)
+                df = min(df, 10e4)
+
+                # Newton-Raphson update denominators and numerators
+                for ll in range(nv_rh1):
+                    nr_numerator[ll] += dudt[ll] * cf
+                    nr_denominator[ll] += d2udt2[ll] * cf - dudt[ll]**2 * df
+
+        # Parameter update, with gamma and maxjump to control the step size
+        if kk < 2:
+            for ll in range(nv_rh1):
+                theta_h1[ll] -= gamma[ll] * np.clip(nr_numerator[ll] / nr_denominator[ll], -maxjump[ll], maxjump[ll])
+        else:
+            for ll in range(nv_rh1):
+                theta_h1[ll] -= np.clip(nr_numerator[ll] / nr_denominator[ll], -maxjump[ll], maxjump[ll])
+
+        # if kk < 2:  
+        #     for ll in range(nv_rh1):
+        #         update_step = nr_numerator[ll] / (nr_denominator[ll] + 1e-6)  # add a small constant to prevent division by zero
+        #         theta_h1[ll] -= gamma[ll] * min(max(update_step, -maxjump[ll]), maxjump[ll])
+        # else:
+        #     for ll in range(nv_rh1):
+        #         update_step = nr_numerator[ll] / (nr_denominator[ll] + 1e-6)  # add a small constant to prevent division by zero
+        #         theta_h1[ll] -= min(max(update_step, -maxjump[ll]), maxjump[ll])
+           
+        # Any other constraints
+        theta_h1[2] = max(theta_h1[2], 1.0)
+        theta_h1[3] = max(theta_h1[3], 0.01)
+
+    # Maximum likelihood estimate of background model
+    theta_h0[0] = 0.0
+    for ii in range(sz):
+        for jj in range(sz):
+            theta_h0[0] += data[jj, ii]
+    theta_h0[0] = theta_h0[0] / sz**2
+
+    # Calculate the CRLB and LogLikelihood
+    t_g = 0.0
+    for ii in range(sz):
+        for jj in range(sz):
+            psf_x = integrate_gauss_1d(ii, theta_h1[0], psf_sigma)
+            psf_y = integrate_gauss_1d(jj, theta_h1[1], psf_sigma)
+
+            model = theta_h1[3] + theta_h1[2] * psf_x * psf_y
+            data_val = data[jj, ii]
+
+            dudt[0], _ = derivative_int_gauss_1d(ii, theta_h1[0], psf_sigma, theta_h1[2], psf_x) 
+            dudt[1], _ = derivative_int_gauss_1d(ii, theta_h1[1], psf_sigma, theta_h1[2], psf_y) 
+
+            # Fisher Information Matrix calculation
+            for kk in range(nv_rh1):
+                for ll in range(kk, nv_rh1):
+                    fisher_mat[kk, ll] += dudt[ll] * dudt[kk] / (model + 1e-6)
+                    fisher_mat[ll, kk] = fisher_mat[kk, ll]
+
+            # LogLikelihood calculation
+            log_model = np.log(model / (theta_h0[0] + 1e-5))
+            if log_model > 0 and data_val > 0:
+                t_g += 2 * (data_val * (log_model + 1e-5) - model + theta_h0[0])
+
+    # Compute the CRLB as the inverse of the Fisher Information Matrix
+    inv_fisher_mat = np.linalg.inv(fisher_mat)
     crlbs = np.diag(inv_fisher_mat)
 
-    return parameters, crlbs, loglikelihoods
+    # Output parameters
+    parameters = np.concatenate((theta_h1, theta_h0))
+    llr = calc_llr_prop(crlbs[2], theta_h1[2], t_g) 
+
+    return parameters, crlbs, llr
 
 def fdr_bh(pvals, q=0.05, method='pdep', report='no'):
     if np.any(pvals < 0):
@@ -240,19 +420,25 @@ def generalized_likelihood_ratio_test(roi_stack, psf_sigma, iterations=8, fittyp
     data_shape = roi_stack.shape
     data_ndim = roi_stack.ndim
     
-    if (data_ndim == 2):
+    if data_ndim == 2:
         sz_x = data_shape[0] # sz_y == sz_x always.
         # sz_z = 1 
     else:
        pass 
 
-    if (fittype == 0):
-        # nfit = 2
-        params, crlbs, loglikelihoods = gaussian_mle_ratio_test(roi_stack, psf_sigma, sz_x, iterations) 
-    else:
+    if fittype == 0:
+        # fittype=0:  Fits (Photons,Bg) under H1 and (Bg) under H0 given PSF_sigma. 
+        # params: theta_h1[0], theta_h1[1], theta_h0[0]
+        params, crlbs, llr = gaussian_mle_ratio_test(roi_stack, psf_sigma, sz_x, iterations) 
+    elif fittype == 1:
+        # fittype=1:  Fits (x,y,bg,Photons) under H1 and (Bg) under H0 given PSF_sigma. 
+        # params: theta_h1[0], theta_h1[1], theta_h1[2], theta_h1[3], theta_h0[0]
+        params, crlbs, llr = gaussian_mle_fit(roi_stack, psf_sigma, sz_x, iterations) 
+        pass
+    else:   
         pass
    
-    p_values = loglikelihoods[2]
+    p_values = llr[2]
      
     # Don't worry about params and crlbs for now.
     return params, crlbs, p_values
