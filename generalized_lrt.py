@@ -50,10 +50,10 @@ def derivative_int_gauss_1d(ii, x, sigma, N, PSFy):
     a = np.exp(-0.5 * ((ii + 0.5 - x) / sigma)**2)
     b = np.exp(-0.5 * ((ii - 0.5 - x) / sigma)**2)
 
-    dudt = -N / np.sqrt(2 * np.pi) / sigma * (a - b) * PSFy
-    d2udt2 = -N / np.sqrt(2 * np.pi) / sigma**3 * ((ii + 0.5 - x) * a - (ii - 0.5 - x) * b) * PSFy
+    dmodel_dt = -N / np.sqrt(2 * np.pi) / sigma * (a - b) * PSFy
+    d2model_dt2 = -N / np.sqrt(2 * np.pi) / sigma**3 * ((ii + 0.5 - x) * a - (ii - 0.5 - x) * b) * PSFy
 
-    return dudt, d2udt2
+    return dmodel_dt, d2model_dt2
 
 def center_of_mass_2d(data, ax=0, ay=0):
     """
@@ -114,7 +114,7 @@ def calc_llr_prop(cr, i_theta, t_g):
     
     return llr
 
-def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
+def gaussian_mle_test_two_params(data, psf_sigma, sz, iterations):
     """ Returns parameters, crlbs, and loglikelihoods
 
     Args:
@@ -141,7 +141,7 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
     for kk in range(iterations):
         nr_numerator = np.zeros(nv_rh1)
         nr_denominator = np.zeros(nv_rh1)
-        for ii in range(sz):
+        for ii in range(sz): # sz: width of the image
             for jj in range(sz):
                 psf_x = integrate_gauss_1d(ii, (sz-1) / 2, psf_sigma) # calculates the psf function's value at the corresponding ii's pixel.
                 psf_y = integrate_gauss_1d(jj, (sz-1) / 2, psf_sigma)
@@ -149,14 +149,15 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
                 model = theta_h1[1] + theta_h1[0] * psf_x * psf_y 
                 data_val = data[jj, ii]  
 
-                dudt = np.zeros(nv_rh1)
-                d2udt2 = np.zeros(nv_rh1)
-                # dudt[0]: d/d(theta_h1[0]) [model] and so on.
-                dudt[0] = psf_x * psf_y 
-                d2udt2[0] = 0.0
-                dudt[1] = 1.0 
-                d2udt2[1] = 0.0
+                dmodel_dt = np.zeros(nv_rh1)
+                d2model_dt2 = np.zeros(nv_rh1)
+                # dmodel_dt[0]: d/d(theta_h1[0]) [model] and so on.
+                dmodel_dt[0] = psf_x * psf_y  # d (mode) / d (theta_h1[0])
+                d2model_dt2[0] = 0.0
+                dmodel_dt[1] = 1.0 
+                d2model_dt2[1] = 0.0
 
+                # See https://doi.org/10.1364/OPEX.13.010503, Section 2.5 to better understand cf and df
                 cf = 0.0
                 df = 0.0
                 if model > 10e-3: 
@@ -165,9 +166,9 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
                 cf = min(cf, 10e4)
                 df = min(df, 10e4)
 
-                for ll in range(nv_rh1):
-                    nr_numerator[ll] += dudt[ll] * cf
-                    nr_denominator[ll] += d2udt2[ll] * cf - dudt[ll] ** 2 * df
+                for ll in range(nv_rh1): # nv_rh1 == 2 (number of estimators under hypothesis 1)
+                    nr_numerator[ll] += dmodel_dt[ll] * cf
+                    nr_denominator[ll] += d2model_dt2[ll] * cf - dmodel_dt[ll] ** 2 * df
 
         theta_h1[0] -= min(max(nr_numerator[0] / nr_denominator[0] / 2, -theta_h1[0]), theta_h1[0]/2)
         theta_h1[0] = max(theta_h1[0], max_estimate/2)
@@ -192,21 +193,24 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
             model = theta_h1[1] + theta_h1[0] * psf_x * psf_y
             data_val = data[jj, ii]
 
-            dudt = np.zeros(nv_rh1)
-            dudt[0] = psf_x * psf_y
-            dudt[1] = 1.0
+            dmodel_dt = np.zeros(nv_rh1)
+            dmodel_dt[0] = psf_x * psf_y
+            dmodel_dt[1] = 1.0
 
             # Building the Fisher Information Matrix - This Fisher info Mat is only related to H1.
             for kk in range(nv_rh1):
                 for ll in range(kk, nv_rh1):
-                    fisher_mat[kk, ll] += dudt[ll] * dudt[kk] / model # dividing by model is averating, effectively? - yes.
+                    fisher_mat[kk, ll] += dmodel_dt[ll] * dmodel_dt[kk] / model # Note that fisher_mat_ij should be E[((d/dti log_model)(d/dtj log_model)d/dti log_model)(d/dtj log_model)]
+                    # but d/dti model = d/dti log_model * model
+                    # Thus (d/dti model)(d/dtj model) = (d/dti log_model)(d/dtj log_model) * model**2 
+
                     fisher_mat[ll, kk] = fisher_mat[kk, ll]
 
             # LogLikelihood
             likelihood_ratio = model / (theta_h0[0] + 1e-5) 
             if likelihood_ratio > 0 and data_val > 0:
                 # log likelihood ratio = data_val ( log(model_h1/model_h0) - model_h1 + model_h0)
-                t_g += 2 * (data_val * np.log(likelihood_ratio + 1e-5) - model + theta_h0[0]) # 2 times log likelihood-ratio follows chi-sqrd distribution
+                t_g += 2 * (data_val * np.log(likelihood_ratio + 1e-5) - model + theta_h0[0]) # t_g is used for its property that it follows chi-sqrd distribution
 
     # Matrix inverse (CRLB=F^-1)
     inv_fisher_mat = np.linalg.inv(fisher_mat)
@@ -218,7 +222,7 @@ def gaussian_mle_ratio_test(data, psf_sigma, sz, iterations):
 
     return parameters, crlbs, llr
 
-def gaussian_mle_fit(data, psf_sigma, sz, iterations):
+def gaussian_mle_test_four_params(data, psf_sigma, sz, iterations):
     """ Returns parameters, crlbs, and loglikelihoods
     Args:
         data (_type_): _description_
@@ -242,7 +246,8 @@ def gaussian_mle_fit(data, psf_sigma, sz, iterations):
     # initial strting values 
     theta_h1[0], theta_h1[1] = center_of_mass_2d(data)
     max_estimate, theta_h1[3] = gaussianblur_max_min_2d(data, psf_sigma)
-    theta_h1[2] = max(0.1, (max_estimate - theta_h1[3]) * 2 * np.pi*psf_sigma**2)
+    # theta_h1[2] = max(0.1, (max_estimate - theta_h1[3]) * 2 * np.pi*psf_sigma**2) - It's okay to rid this [6. 4:14pm 11/15/2023]
+    theta_h1[2] = max(0, (max_estimate - theta_h1[3]) * 2 * np.pi*psf_sigma**2)
 
     for kk in range(iterations):
         nr_numerator = np.zeros(nv_rh1)
@@ -257,31 +262,32 @@ def gaussian_mle_fit(data, psf_sigma, sz, iterations):
                 data_val = data[jj, ii]
 
                 # Calculating derivatives
-                dudt = np.zeros(nv_rh1)
-                d2udt2 = np.zeros(nv_rh1)
+                dmodel_dt = np.zeros(nv_rh1)
+                d2model_dt2 = np.zeros(nv_rh1)
 
                 # Here you would calculate the derivatives. As an example, I'm using placeholders
                 # Replace these with the actual derivative calculations
-                dudt[0], d2udt2[0] = derivative_int_gauss_1d(ii, theta_h1[0], psf_sigma, theta_h1[2], psf_x) 
-                dudt[1], d2udt2[1] = derivative_int_gauss_1d(ii, theta_h1[1], psf_sigma, theta_h1[2], psf_y) 
-                dudt[2] = psf_x * psf_y  # derivative of model w.r.t. N
-                d2udt2[2] = 0.0
-                dudt[3] = 1.0  # derivative of model w.r.t. bg
-                d2udt2[3] = 0.0
+                dmodel_dt[0], d2model_dt2[0] = derivative_int_gauss_1d(ii, theta_h1[0], psf_sigma, theta_h1[2], psf_x) 
+                dmodel_dt[1], d2model_dt2[1] = derivative_int_gauss_1d(jj, theta_h1[1], psf_sigma, theta_h1[2], psf_y) 
+                dmodel_dt[2] = psf_x * psf_y  # derivative of model w.r.t. N
+                d2model_dt2[2] = 0.0
+                dmodel_dt[3] = 1.0  # derivative of model w.r.t. bg
+                d2model_dt2[3] = 0.0
 
                 # Correction factor and derivative factor
                 cf = 0.0
                 df = 0.0
-                if model > 10e-3:
+                # if model > 10e-3:
+                if model > 0:
                     cf = data_val / model - 1
                     df = data_val / model**2
-                cf = min(cf, 10e4)
-                df = min(df, 10e4)
+                # cf = min(cf, 10e4) - It's okay to rid this [5. 4:09pm 11/15/2023]
+                # df = min(df, 10e4) - it's okay to rid [6.]
 
                 # Newton-Raphson update denominators and numerators
                 for ll in range(nv_rh1):
-                    nr_numerator[ll] += dudt[ll] * cf
-                    nr_denominator[ll] += d2udt2[ll] * cf - dudt[ll]**2 * df
+                    nr_numerator[ll] += dmodel_dt[ll] * cf
+                    nr_denominator[ll] += d2model_dt2[ll] * cf - dmodel_dt[ll]**2 * df
 
         # Parameter update, with gamma and maxjump to control the step size
         if kk < 2:
@@ -301,8 +307,10 @@ def gaussian_mle_fit(data, psf_sigma, sz, iterations):
         #         theta_h1[ll] -= min(max(update_step, -maxjump[ll]), maxjump[ll])
            
         # Any other constraints
-        theta_h1[2] = max(theta_h1[2], 1.0)
-        theta_h1[3] = max(theta_h1[3], 0.01)
+        theta_h1[2] = max(theta_h1[2], 0)
+        # theta_h1[2] = max(theta_h1[2], 1.0) - It's okay to turn 1.0 to 0 [4.]
+        theta_h1[3] = max(theta_h1[3], 0)
+        # theta_h1[3] = max(theta_h1[3], 0.01) - It's okay to turn 0.01 to 0. [3. 4:05pm 11/15/2023]
 
     # Maximum likelihood estimate of background model
     theta_h0[0] = 0.0
@@ -321,19 +329,25 @@ def gaussian_mle_fit(data, psf_sigma, sz, iterations):
             model = theta_h1[3] + theta_h1[2] * psf_x * psf_y
             data_val = data[jj, ii]
 
-            dudt[0], _ = derivative_int_gauss_1d(ii, theta_h1[0], psf_sigma, theta_h1[2], psf_x) 
-            dudt[1], _ = derivative_int_gauss_1d(ii, theta_h1[1], psf_sigma, theta_h1[2], psf_y) 
+            dmodel_dt[0], _ = derivative_int_gauss_1d(ii, theta_h1[0], psf_sigma, theta_h1[2], psf_x) 
+            dmodel_dt[1], _ = derivative_int_gauss_1d(jj, theta_h1[1], psf_sigma, theta_h1[2], psf_y) 
+            dmodel_dt[2] = psf_x * psf_y  
+            dmodel_dt[3] = 1.0  
 
             # Fisher Information Matrix calculation
             for kk in range(nv_rh1):
                 for ll in range(kk, nv_rh1):
-                    fisher_mat[kk, ll] += dudt[ll] * dudt[kk] / (model + 1e-6)
+                    if kk == ll and 2 < ii < 6 and 2 < jj < 6:
+                        pass
+                    fisher_mat[kk, ll] += dmodel_dt[ll] * dmodel_dt[kk] / model
                     fisher_mat[ll, kk] = fisher_mat[kk, ll]
 
             # LogLikelihood calculation
-            log_model = np.log(model / (theta_h0[0] + 1e-5))
+            log_model = np.log(model / (theta_h0[0] )) 
+            # log_model = np.log(model / (theta_h0[0] + 1e-5)) - It's okay to remove 1e-5 [1. 401pm 11/15/2023]
             if log_model > 0 and data_val > 0:
-                t_g += 2 * (data_val * (log_model + 1e-5) - model + theta_h0[0])
+                t_g += 2 * (data_val * (log_model ) - model + theta_h0[0])
+                # t_g += 2 * (data_val * (log_model + 1e-5) - model + theta_h0[0]) - It's okay to remove 1e-5 [2. 4:03pm 11/15/2023]
 
     # Compute the CRLB as the inverse of the Fisher Information Matrix
     inv_fisher_mat = np.linalg.inv(fisher_mat)
@@ -429,11 +443,11 @@ def generalized_likelihood_ratio_test(roi_stack, psf_sigma, iterations=8, fittyp
     if fittype == 0:
         # fittype=0:  Fits (Photons,Bg) under H1 and (Bg) under H0 given PSF_sigma. 
         # params: theta_h1[0], theta_h1[1], theta_h0[0]
-        params, crlbs, llr = gaussian_mle_ratio_test(roi_stack, psf_sigma, sz_x, iterations) 
+        params, crlbs, llr = gaussian_mle_test_two_params(roi_stack, psf_sigma, sz_x, iterations) 
     elif fittype == 1:
         # fittype=1:  Fits (x,y,bg,Photons) under H1 and (Bg) under H0 given PSF_sigma. 
         # params: theta_h1[0], theta_h1[1], theta_h1[2], theta_h1[3], theta_h0[0]
-        params, crlbs, llr = gaussian_mle_fit(roi_stack, psf_sigma, sz_x, iterations) 
+        params, crlbs, llr = gaussian_mle_test_four_params(roi_stack, psf_sigma, sz_x, iterations) 
         pass
     else:   
         pass
