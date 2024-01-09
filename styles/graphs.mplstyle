@@ -1,9 +1,0 @@
-font.size: 11
-figure.figsize: 5, 5
-axes.linewidth: 2
-xtick.direction: in
-ytick.direction: in
-xtick.major.width: 2
-xtick.minor.width: 2
-ytick.major.width: 2
-ytick.minor.width: 2
