@@ -1,4 +1,3 @@
-import math
 import numpy as np
 from scipy.special import erf
 from scipy.stats import norm
@@ -136,10 +135,10 @@ def gaussian_mle_test_two_params(image, psf_sd, sz, iterations):
     theta_h1 = np.zeros(numvar_h1)
     theta_h0 = np.zeros(numvar_h0)
 
-    # initial starting values
+    # Starting values
     blurred_max, blurred_min = gaussianblur_max_min_2d(image, psf_sd)
-    theta_h1[0] = (blurred_max - blurred_min) * 4 * np.pi * psf_sd**2
-    theta_h1[0] = max(theta_h1[0], 0)
+    theta_h1[0] = (blurred_max - blurred_min) * 2 * np.pi * psf_sd**2
+    theta_h1[0] = max(theta_h1[0], blurred_min)
     theta_h1[1] = blurred_min
 
     # Maximum Likelihood Estimation of H1
@@ -173,7 +172,7 @@ def gaussian_mle_test_two_params(image, psf_sd, sz, iterations):
                 # See https://doi.org/10.1364/OPEX.13.010503, Section 2.5 to better understand cf and df
                 cf = 0.0
                 df = 0.0
-                if modelh1 > 1e-2: 
+                if modelh1 > 0:
                     # TODO: Later check whether modelh1 values actually goes to zero or negative.
                     cf = pixel_val / modelh1 - 1
                     df = pixel_val / modelh1 ** 2
@@ -181,11 +180,12 @@ def gaussian_mle_test_two_params(image, psf_sd, sz, iterations):
                     cf = 1e5
                     df = 1e5
 
+                # Newton-Raphson update denominators and numerators
                 for ll in range(numvar_h1): 
                     nr_numerator[ll] += ddt_modelh1[ll] * cf
                     nr_denominator[ll] += d2dt2_modelh1[ll] * cf - ddt_modelh1[ll] ** 2 * df
 
-        # Parameter update, with gamma and maxjump to control the step size
+        # Parameter update
         theta_h1[0] -= min(max(nr_numerator[0] / nr_denominator[0] / 2, -theta_h1[0]), theta_h1[0]/2)
         theta_h1[0] = max(theta_h1[0], blurred_max/2)
 
@@ -240,7 +240,20 @@ def gaussian_mle_test_two_params(image, psf_sd, sz, iterations):
     return theta_h0, theta_h1, crlbs, pfa
 
 def gaussian_mle_test_four_params(image, psf_sd, sz, iterations):
-    """ This function hasn't been pruned yet."""
+    """Returns parameters, Cramer-Rao Lower Bounds (CRLBs), and statistics for the Gaussian Maximum Likelihood Estimation (MLE) test with four parameters of H1 (theta_h1[0], theta_h1[1], theta_h1[2], theta_h1[3]).
+    Args:
+        image (ndarray): Input image.
+        psf_sd (float): Standard deviation of the Point Spread Function (PSF).
+        sz (int): Width of the image.
+        iterations (int): Number of iterations for the MLE estimation.
+    Returns:
+        tuple: A tuple containing the estimated parameters, CRLBs, and statistics.
+            - theta_h0 (ndarray): Estimated parameters for H0.
+            - theta_h1 (ndarray): Estimated parameters for H1.
+            - crlbs (ndarray): Cramer-Rao Lower Bounds for the estimated parameters.
+            - pfa (float): Probability of false alarm (pfa) of deciding H1 when in fact H0 is true.
+    """
+    
     # initialization
     numvar_h0 = 1
     numvar_h1 = 4 
@@ -252,76 +265,66 @@ def gaussian_mle_test_four_params(image, psf_sd, sz, iterations):
     theta_h0 = np.zeros(numvar_h0)
 
     maxjump = np.array([1.0, 1.0, 100.0, 2.0])
-    gamma = np.array([1.0, 1.0, 0.5, 1.0])
     
-    # initial strting values 
+    # Strating values 
     theta_h1[0], theta_h1[1] = center_of_mass_2d(image)
-    max_estimate, theta_h1[3] = gaussianblur_max_min_2d(image, psf_sd)
-    # theta_h1[2] = max(0.1, (max_estimate - theta_h1[3]) * 2 * np.pi*psf_sd**2) - It's okay to rid this [6. 4:14pm 11/15/2023]
-    theta_h1[2] = max(0, (max_estimate - theta_h1[3]) * 2 * np.pi*psf_sd**2)
+    blurred_max, blurred_min = gaussianblur_max_min_2d(image, psf_sd)
+    theta_h1[2] = (blurred_max - blurred_min) * 2 * np.pi*psf_sd**2
+    theta_h1[2] = max(theta_h1[2], blurred_min)
+    theta_h1[3] = blurred_min
 
+    # Maximum Likelihood Estimation of H1
     for kk in range(iterations):
         nr_numerator = np.zeros(numvar_h1)
         nr_denominator = np.zeros(numvar_h1)
 
         for ii in range(sz):
             for jj in range(sz):
+                # Calculating the integral of the normalized 1D psf function for x ranging in the ii-th column.
                 psf_x = integrate_gauss_1d(ii, theta_h1[0], psf_sd)
+                # Calculating the integral of the normalized 1D psf function for y ranging in the jj-th row.
                 psf_y = integrate_gauss_1d(jj, theta_h1[1], psf_sd)
 
-                model = theta_h1[3] + theta_h1[2] * psf_x * psf_y
+                # Calculating the model value of the data at (ii, jj) under H1
+                modelh1 = theta_h1[3] + theta_h1[2] * psf_x * psf_y
+                # Retrieving the "actual" pixel value of the image at (ii, jj)
                 pixel_val = image[jj, ii]
 
                 # Calculating derivatives
-                dmodel_dt = np.zeros(numvar_h1)
-                d2model_dt2 = np.zeros(numvar_h1)
+                ddt_modelh1 = np.zeros(numvar_h1)
+                d2dt2_modelh1 = np.zeros(numvar_h1)
 
-                # Here you would calculate the derivatives. As an example, I'm using placeholders
-                # Replace these with the actual derivative calculations
-                dmodel_dt[0], d2model_dt2[0] = derivative_int_gauss_1d(ii, theta_h1[0], psf_sd, theta_h1[2], psf_x) 
-                dmodel_dt[1], d2model_dt2[1] = derivative_int_gauss_1d(jj, theta_h1[1], psf_sd, theta_h1[2], psf_y) 
-                dmodel_dt[2] = psf_x * psf_y  # derivative of model w.r.t. N
-                d2model_dt2[2] = 0.0
-                dmodel_dt[3] = 1.0  # derivative of model w.r.t. bg
-                d2model_dt2[3] = 0.0
+                # First and second derivatives of the model w.r.t. x, y, N, and bg
+                ddt_modelh1[0], d2dt2_modelh1[0] = derivative_int_gauss_1d(ii, theta_h1[0], psf_sd, theta_h1[2], psf_x) 
+                ddt_modelh1[1], d2dt2_modelh1[1] = derivative_int_gauss_1d(jj, theta_h1[1], psf_sd, theta_h1[2], psf_y) 
+                ddt_modelh1[2] = psf_x * psf_y  # First derivative of model w.r.t. N
+                d2dt2_modelh1[2] = 0.0 # Second derivative of model w.r.t. N
+                ddt_modelh1[3] = 1.0  # First derivative of model w.r.t. bg
+                d2dt2_modelh1[3] = 0.0 # Second derivative of model w.r.t. bg
 
-                # Correction factor and derivative factor
+                # See https://doi.org/10.1364/OPEX.13.010503, Section 2.5 to better understand cf and df
                 cf = 0.0
                 df = 0.0
                 # if model > 10e-3:
                 if model > 0:
                     cf = pixel_val / model - 1
                     df = pixel_val / model**2
-                cf = min(cf, 10e4) # It's okay to rid this [5. 4:09pm 11/15/2023]
-                df = min(df, 10e4) # it's okay to rid [6.]
+                else:
+                    cf = 1e5
+                    df = 1e5
 
                 # Newton-Raphson update denominators and numerators
                 for ll in range(numvar_h1):
-                    nr_numerator[ll] += dmodel_dt[ll] * cf
-                    nr_denominator[ll] += d2model_dt2[ll] * cf - dmodel_dt[ll]**2 * df
+                    nr_numerator[ll] += ddt_modelh1[ll] * cf
+                    nr_denominator[ll] += d2dt2_modelh1[ll] * cf - ddt_modelh1[ll]**2 * df
 
-        # Parameter update, with gamma and maxjump to control the step size
-        if kk < 2:
-            for ll in range(numvar_h1):
-                theta_h1[ll] -= gamma[ll] * np.clip(nr_numerator[ll] / (nr_denominator[ll]), -maxjump[ll], maxjump[ll])
-        else:
-            for ll in range(numvar_h1):
-                theta_h1[ll] -= np.clip(nr_numerator[ll] / (nr_denominator[ll]), -maxjump[ll], maxjump[ll])
+        # Parameter update, with maxjump control 
+        for ll in range(numvar_h1):
+            theta_h1[ll] -= np.clip(nr_numerator[ll] / (nr_denominator[ll]), -maxjump[ll], maxjump[ll])
 
-        # if kk < 2:  
-        #     for ll in range(numvar_h1):
-        #         update_step = nr_numerator[ll] / (nr_denominator[ll] + 1e-6)  # add a small constant to prevent division by zero
-        #         theta_h1[ll] -= gamma[ll] * min(max(update_step, -maxjump[ll]), maxjump[ll])
-        # else:
-        #     for ll in range(numvar_h1):
-        #         update_step = nr_numerator[ll] / (nr_denominator[ll] + 1e-6)  # add a small constant to prevent division by zero
-        #         theta_h1[ll] -= min(max(update_step, -maxjump[ll]), maxjump[ll])
-           
         # Any other constraints
-        # theta_h1[2] = max(theta_h1[2], 0)
-        theta_h1[2] = max(theta_h1[2], 1.0) # It's okay to turn 1.0 to 0 [4.] - [a. No, it freqly creates singular fisher mat 10:28pm 11/17/2023]
-        theta_h1[3] = max(theta_h1[3], 0)
-        # theta_h1[3] = max(theta_h1[3], 0.01) - It's okay to turn 0.01 to 0. [3. 4:05pm 11/15/2023]
+        theta_h1[2] = max(theta_h1[2], 1e-5) 
+        theta_h1[3] = max(theta_h1[3], 1e-5)
 
     # Maximum likelihood estimate of background model
     theta_h0[0] = 0.0
@@ -334,31 +337,38 @@ def gaussian_mle_test_four_params(image, psf_sd, sz, iterations):
     t_g = 0.0
     for ii in range(sz):
         for jj in range(sz):
+            # Calculating the integral of the normalized 1D psf function for x ranging in the ii-th column.
             psf_x = integrate_gauss_1d(ii, theta_h1[0], psf_sd)
+            # Calculating the integral of the normalized 1D psf function for y ranging in the jj-th row.
             psf_y = integrate_gauss_1d(jj, theta_h1[1], psf_sd)
 
+            # Calculating the model value of the data at (ii, jj) under H1
             model = theta_h1[3] + theta_h1[2] * psf_x * psf_y
+            # Retrieving the "actual" pixel value of the image at (ii, jj)
             pixel_val = image[jj, ii]
 
-            dmodel_dt[0], _ = derivative_int_gauss_1d(ii, theta_h1[0], psf_sd, theta_h1[2], psf_x) 
-            dmodel_dt[1], _ = derivative_int_gauss_1d(jj, theta_h1[1], psf_sd, theta_h1[2], psf_y) 
-            dmodel_dt[2] = psf_x * psf_y  
-            dmodel_dt[3] = 1.0  
+            # First derivatives of the model w.r.t. x, y, N, and bg
+            ddt_modelh1[0], _ = derivative_int_gauss_1d(ii, theta_h1[0], psf_sd, theta_h1[2], psf_x) 
+            ddt_modelh1[1], _ = derivative_int_gauss_1d(jj, theta_h1[1], psf_sd, theta_h1[2], psf_y) 
+            ddt_modelh1[2] = psf_x * psf_y  
+            ddt_modelh1[3] = 1.0  
 
-            # Fisher Information Matrix calculation
+            # Fisher Information Matrix calculation regarding H1
             for kk in range(numvar_h1):
                 for ll in range(kk, numvar_h1):
-                    fisher_mat[kk, ll] += dmodel_dt[ll] * dmodel_dt[kk] / model
+                    # Using Poisson pdf for likelihood function, the following formula is derived.
+                    # Ref: Smith et al. 2010, nmeth, SI eq (9).
+                    fisher_mat[kk, ll] += ddt_modelh1[ll] * ddt_modelh1[kk] / model
+                    # The FIM is symmetric.
                     fisher_mat[ll, kk] = fisher_mat[kk, ll]
-                    # print(fisher_mat)
 
-            # LogLikelihood calculation
-            # log_model = np.log(model / (theta_h0[0] )) 
-            model = max(1e-5, model)
-            log_model = np.log(model / (theta_h0[0] + 1e-5)) # It's okay to remove 1e-5 [1. 401pm 11/15/2023]
+            # Estimated model value ratio
+            modelh0 = theta_h0[0] 
+            ratio = modelh1/ modelh0 
             if log_model > 0 and pixel_val > 0:
-                # t_g += 2 * (pixel_val * (log_model) - model + theta_h0[0])
-                t_g += 2 * (pixel_val * (log_model + 1e-5) - model + theta_h0[0]) # It's okay to remove 1e-5 [2. 4:03pm 11/15/2023]
+                # Because the likelihood function is Poisson pdf, the following formula can be derived.
+                # log likelihood ratio = pixel_val * ( log(model_h1/model_h0) - model_h1 + model_h0)
+                t_g += 2 * (pixel_val * np.log(max(ratio, 1e-2)) - modelh1 + modelh0) 
 
     # Compute the CRLB as the inverse of the Fisher Information Matrix
     inv_fisher_mat = np.linalg.inv(fisher_mat)

@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from image_generation import psfconvolution
 from process_algorithms import generalized_likelihood_ratio_test, fdr_bh 
+from mpl_toolkits.mplot3d import Axes3D
 
 def getbox(input_image, ii, sz, x_positions, y_positions):
     """ Copies the specified subregion in input_image to dataout.
@@ -108,7 +109,7 @@ def create_separable_filter(one_d_kernel, origin):
     return adjusted_kernel
 
 
-def image_process_control(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, split=True):
+def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, split=True):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
     Args:
         input_image: The image to process.
@@ -215,6 +216,19 @@ def image_process_control(input_image, psf_sd=1.39, significance=0.05, considera
     plt.imshow(pfa_array, cmap=custom_cmap, norm=norm)
     plt.colorbar(), plt.show(block=False)
 
+    # Plotting pfa array as an image with log scale colormap
+    plt.figure()
+    pfa_array_log = np.zeros((3,3))
+    min_z_idx = np.unravel_index(np.argmin(pfa_array), pfa_array.shape)
+    min_row, min_col = min_z_idx[0], min_z_idx[1]
+    for i in range(3):
+        for j in range(3):
+                pfa_array_log[i, j] = pfa_array[min_row+i-1,min_col+j-1]
+    plt.imshow(pfa_array_log, cmap='viridis', norm=mcolors.LogNorm())
+    plt.colorbar()
+    plt.title('PFA Image with Log Scale Colormap')
+    plt.show(block=False)
+
     _, _, pfa_adj = fdr_bh(pfa_array, significance, method='dep')
     pfa_adj = pfa_adj.flatten()
     pfa_adj_array = np.ones(inner_image.shape)    
@@ -235,8 +249,22 @@ def image_process_control(input_image, psf_sd=1.39, significance=0.05, considera
     plt.figure(), plt.title('pfa_adj')
     plt.imshow(pfa_adj_array, cmap=custom_cmap, norm=norm)
     plt.colorbar(), plt.show(block=False)
+
+    # Plotting pfa_adj array as an image with log scale colormap
+    plt.figure()
+    pfa_array_log = np.zeros((3,3))
+    min_z_idx = np.unravel_index(np.argmin(pfa_adj_array), pfa_adj_array.shape)
+    min_row, min_col = min_z_idx[0], min_z_idx[1]
+    for i in range(3):
+        for j in range(3):
+                pfa_array_log[i, j] = pfa_adj_array[min_row+i-1,min_col+j-1]
+    plt.imshow(pfa_array_log, cmap='viridis', norm=mcolors.LogNorm())
+    plt.colorbar()
+    plt.title('PFA adj Image with Log Scale Colormap')
+    plt.show(block=False)
     
     significance_mask[inner_image_pos_idx] = (pfa_adj <= significance).flatten()
+    
     show_significance_mask = True
     if show_significance_mask:
         plt.figure(), plt.imshow(significance_mask), plt.title('significance_mask'), plt.show(block=False)
@@ -261,6 +289,7 @@ def image_process_control(input_image, psf_sd=1.39, significance=0.05, considera
         #     D = -distance_transform_edt(h)
         #     D[~h] = np.inf
         #     # ll[:, :, i - 1], _ = label(~watershed(D, 1) * significance_mask[:, :, i])
+
         # else:
         #     # ll[:, :, i - 1], _ = label(significance_mask[:, :, i])
         # # msrResults = measure.regionprops(label(ll[:, :, i - 1]))
@@ -367,7 +396,7 @@ def main_test(readfname='image1.png'):
     plt.show(block=False)
     # sz = 34
     # image = psfconvolution(particle_x=14, particle_y=14, multiplying_constant=1000, particle_psf_r=1.39, imgwidth=sz)
-    image_process_control(image, consideration_limit_level=0, fittype=0)
+    main_image_analysis_controller(image, consideration_limit_level=0, fittype=0)
 
 # fname = '3particles_nonoise.tif'
 # main_test(fname)
@@ -453,7 +482,7 @@ def test1():
     plt.yticks([])
     plt.xticks([])
     plt.show(block=False)
-    image_process_control(image, consideration_limit_level=0, fittype=0)
+    main_image_analysis_controller(image, consideration_limit_level=0, fittype=0)
     pass
 
 test1()
