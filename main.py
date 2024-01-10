@@ -369,14 +369,14 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
 
 def save_an_image(fname='zzzz.png'):
     sz = 20
-    # image = makeimg(imgwidth=sz, pparticlepixel=8/6400, particle_multiplying_constant=10000, particle_psf_r=1.39, bgfreq=0.01, bgamp=0,
+    # image = makeimg(imgwidth=sz, pparticlepixel=8/6400, particle_multiplying_constant=10000, psf_sd=1.39, bgfreq=0.01, bgamp=0,
     #                 clusterp=0, avgclustersz=0, particledistancecluster=0, pdustpixel=0, dustpsfr=0, dust_multiplying_constant=0, vignettesd=0, ) 
     image = np.zeros((sz,sz))
     # for _ in range(3):
         # pass
-        # image += psfconvolution(particle_x=np.random.rand()*(sz-1), particle_y=np.random.rand()*(sz-1), multiplying_constant=1000, particle_psf_r=1.39, imgwidth=sz)
+        # image += psfconvolution(particle_x=np.random.rand()*(sz-1), particle_y=np.random.rand()*(sz-1), multiplying_constant=1000, psf_sd=1.39, imgwidth=sz)
         
-    image = psfconvolution(particle_x=sz/2-0.5, particle_y=sz/2-0.5, multiplying_constant=1000, particle_psf_r=1.39, imgwidth=sz)
+    image = psfconvolution(particle_x=sz/2-0.5, particle_y=sz/2-0.5, multiplying_constant=1000, psf_sd=1.39, imgwidth=sz)
     image += 500 * np.ones((sz, sz))
 
     image = np.random.poisson(image, size=(image.shape))
@@ -395,7 +395,7 @@ def main_test(readfname='image1.png'):
     plt.imshow(image)
     plt.show(block=False)
     # sz = 34
-    # image = psfconvolution(particle_x=14, particle_y=14, multiplying_constant=1000, particle_psf_r=1.39, imgwidth=sz)
+    # image = psfconvolution(particle_x=14, particle_y=14, multiplying_constant=1000, psf_sd=1.39, imgwidth=sz)
     main_image_analysis_controller(image, consideration_limit_level=0, fittype=0)
 
 # fname = '3particles_nonoise.tif'
@@ -407,7 +407,7 @@ def test_as_single_roi(readfname):
  
 def make_and_process_image(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1.39, show_fig=False, verbose=False):
 
-    image = psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, particle_psf_r=psf, imgwidth=sz)
+    image = psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf, imgwidth=sz)
     # Adding background
     image += np.ones(image.shape)*bg
     image = np.random.poisson(image, size=(image.shape))
@@ -485,4 +485,34 @@ def test1():
     main_image_analysis_controller(image, consideration_limit_level=0, fittype=0)
     pass
 
-test1()
+def test_glrt4_with_2_particles_image():
+    intensity = 2500
+    psf_sd = 1.39
+    sz = 20
+    bg = 500
+    show_fig = True
+    x = 8.35
+    y = 7.69
+    image = psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    x = 13.35
+    y = 11.69
+    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # Adding background
+    image += np.ones(image.shape)*bg
+    image = np.random.poisson(image, size=(image.shape))
+    if show_fig:    
+        plt.imshow(image)
+        plt.colorbar()
+
+    fittype = 1
+    params,crlb,statistics,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
+
+    for p in params:
+        print(f'{p=}')
+    print(f'{crlb=}')
+    print(f'{statistics=}')
+    print(f'{p_value=}')
+    
+    pass
+
+test_glrt4_with_2_particles_image()

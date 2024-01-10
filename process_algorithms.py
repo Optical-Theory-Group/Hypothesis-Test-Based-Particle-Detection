@@ -306,9 +306,9 @@ def glrt4(image, psf_sd, sz, iterations):
                 cf = 0.0
                 df = 0.0
                 # if model > 10e-3:
-                if model > 0:
-                    cf = pixel_val / model - 1
-                    df = pixel_val / model**2
+                if modelh1 > 0:
+                    cf = pixel_val / modelh1 - 1
+                    df = pixel_val / modelh1 ** 2
                 else:
                     cf = 1e5
                     df = 1e5
@@ -320,7 +320,8 @@ def glrt4(image, psf_sd, sz, iterations):
 
         # Parameter update, with maxjump control 
         for ll in range(numvar_h1):
-            theta_h1[ll] -= np.clip(nr_numerator[ll] / (nr_denominator[ll]), -maxjump[ll], maxjump[ll])
+            # theta_h1[ll] -= np.clip(nr_numerator[ll] / (nr_denominator[ll]), -maxjump[ll], maxjump[ll])
+            theta_h1[ll] -= nr_numerator[ll] / (nr_denominator[ll])
 
         # Any other constraints
         theta_h1[2] = max(theta_h1[2], 1e-5) 
@@ -343,7 +344,7 @@ def glrt4(image, psf_sd, sz, iterations):
             psf_y = integrate_gauss_1d(jj, theta_h1[1], psf_sd)
 
             # Calculating the model value of the data at (ii, jj) under H1
-            model = theta_h1[3] + theta_h1[2] * psf_x * psf_y
+            modelh1 = theta_h1[3] + theta_h1[2] * psf_x * psf_y
             # Retrieving the "actual" pixel value of the image at (ii, jj)
             pixel_val = image[jj, ii]
 
@@ -358,14 +359,15 @@ def glrt4(image, psf_sd, sz, iterations):
                 for ll in range(kk, numvar_h1):
                     # Using Poisson pdf for likelihood function, the following formula is derived.
                     # Ref: Smith et al. 2010, nmeth, SI eq (9).
-                    fisher_mat[kk, ll] += ddt_modelh1[ll] * ddt_modelh1[kk] / model
+                    fisher_mat[kk, ll] += ddt_modelh1[ll] * ddt_modelh1[kk] / modelh1
                     # The FIM is symmetric.
                     fisher_mat[ll, kk] = fisher_mat[kk, ll]
 
+            # model
             # Estimated model value ratio
             modelh0 = theta_h0[0] 
-            ratio = modelh1/ modelh0 
-            if log_model > 0 and pixel_val > 0:
+            ratio = modelh1 / modelh0 
+            if ratio > 0 and pixel_val > 0: 
                 # Because the likelihood function is Poisson pdf, the following formula can be derived.
                 # log likelihood ratio = pixel_val * ( log(model_h1/model_h0) - model_h1 + model_h0)
                 t_g += 2 * (pixel_val * np.log(max(ratio, 1e-2)) - modelh1 + modelh0) 
