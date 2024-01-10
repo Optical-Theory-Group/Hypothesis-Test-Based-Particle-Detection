@@ -111,7 +111,7 @@ def calculate_pfa(t_g):
 
     return pfa
 
-def gaussian_mle_test_two_params(image, psf_sd, sz, iterations):
+def glrt2(image, psf_sd, sz, iterations):
     """ Returns parameters, Cramer-Rao Lower Bounds (CRLBs), and statistics for the Gaussian Maximum Likelihood Estimation (MLE) test with two parameters of H1 (theta_h1[0] and theta_h1[1]).
     Args:
         image (ndarray): Input image.
@@ -239,7 +239,7 @@ def gaussian_mle_test_two_params(image, psf_sd, sz, iterations):
 
     return theta_h0, theta_h1, crlbs, pfa
 
-def gaussian_mle_test_four_params(image, psf_sd, sz, iterations):
+def glrt4(image, psf_sd, sz, iterations):
     """Returns parameters, Cramer-Rao Lower Bounds (CRLBs), and statistics for the Gaussian Maximum Likelihood Estimation (MLE) test with four parameters of H1 (theta_h1[0], theta_h1[1], theta_h1[2], theta_h1[3]).
     Args:
         image (ndarray): Input image.
@@ -467,11 +467,11 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
     if fittype == 0:
         # fittype == 0:  Fits (particle_intensity,background_intensity) under H1 and (Bg) under H0 given psf_sd. 
         # est_params: theta_h1[0], theta_h1[1], theta_h0[0]
-        h0_params, h1_params, crlbs, pfa = gaussian_mle_test_two_params(roi_image, psf_sd, sz, iterations) 
+        h0_params, h1_params, crlbs, pfa = glrt2(roi_image, psf_sd, sz, iterations) 
     elif fittype == 1:
         # fittype=1:  Fits (x,y,bg,Photons) under H1 and (Bg) under H0 given psf_sd. 
         # est_params: theta_h1[0], theta_h1[1], theta_h1[2], theta_h1[3], theta_h0[0]
-        h0_params, h1_params, crlbs, pfa = gaussian_mle_test_four_params(roi_image, psf_sd, sz, iterations) 
+        h0_params, h1_params, crlbs, pfa = glrt4(roi_image, psf_sd, sz, iterations) 
         pass
     else:   
         pass
