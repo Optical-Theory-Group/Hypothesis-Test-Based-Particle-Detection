@@ -478,4 +478,3 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
     else:   
         pass
     return h0_params, h1_params, crlbs, pfa
-    

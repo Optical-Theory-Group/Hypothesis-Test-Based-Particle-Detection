@@ -12,7 +12,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from image_generation import psfconvolution
-from process_algorithms import generalized_likelihood_ratio_test, fdr_bh 
+from process_algorithms import generalized_likelihood_ratio_test, fdr_bh
 from mpl_toolkits.mplot3d import Axes3D
 
 def getbox(input_image, ii, sz, x_positions, y_positions):
@@ -505,12 +505,12 @@ def test_glrt4_with_2_particles_image():
         plt.colorbar()
 
     fittype = 1
-    params,crlb,statistics,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
-
-    for p in params:
+    psf_sd = 1.39
+    params0,params1,crlbs1,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
+        
+    for p in params1:
         print(f'{p=}')
-    print(f'{crlb=}')
-    print(f'{statistics=}')
+    print(f'{crlbs1=}')
     print(f'{p_value=}')
     
     pass
