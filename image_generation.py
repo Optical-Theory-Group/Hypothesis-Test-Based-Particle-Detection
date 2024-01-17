@@ -308,4 +308,5 @@ def run1():
     plt.show(block=False)
     pass
 
-run1()
+if __name__ == "__main__":
+    run1()

@@ -12,7 +12,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from image_generation import psfconvolution
-from process_algorithms import generalized_likelihood_ratio_test, fdr_bh
+from process_algorithms import generalized_likelihood_ratio_test, fdr_bh, generalized_maximum_likelihood_rule
 from mpl_toolkits.mplot3d import Axes3D
 
 def getbox(input_image, ii, sz, x_positions, y_positions):
@@ -506,13 +506,41 @@ def test_glrt4_with_2_particles_image():
 
     fittype = 1
     psf_sd = 1.39
-    params0,params1,crlbs1,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
+    h0_params,h1_params,crlbs1,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
         
-    for p in params1:
+    for p in h1_params:
         print(f'{p=}')
     print(f'{crlbs1=}')
     print(f'{p_value=}')
     
     pass
 
-test_glrt4_with_2_particles_image()
+# test_glrt4_with_2_particles_image()
+def test_gmlr():
+    intensity = 2500
+    psf_sd = 1.39
+    sz = 22
+    bg = 500
+    show_fig = True
+    image = np.zeros((sz, sz))
+    # x =7.35
+    # y = 7.69
+    # image = +psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # x = 10.35
+    # y = 14.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # x = 15.35
+    # y = 6.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # Adding background
+    image += np.ones(image.shape)*bg
+    # image = np.random.poisson(image, size=(image.shape))
+    if show_fig:    
+        plt.imshow(image)
+        plt.colorbar()
+        plt.show(block=False)
+    generalized_maximum_likelihood_rule(roi_image=image, psf_sd=1.39, iterations=10)
+    
+
+test_gmlr()
+pass
