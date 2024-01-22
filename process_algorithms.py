@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.special import erf
 from scipy.stats import norm
+from scipy.special import gammaln
+from scipy.optimize import minimize
 
 def gaussianblur_max_min_2d(data, sigma):
     """ Returns the maximum and minimum values of the 2D Gaussian blurred image.
@@ -497,11 +499,13 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
     n_hk_params_per_particle = 3
     n_h0_params = 1
 
-    # Test up to H5 for now (1/14/2024 Mo, temporary)
+    # Test up to H4 for now (1/14/2024 Mo, temporary)
     max_particles = 5
     
     # Initialize xi, the criterion for H_k
     xi = np.zeros(max_particles) 
+    lli = np.zeros(max_particles) # log likelihood
+    penalty_i = np.zeros(max_particles) # penalty term
 
     # blurred_max and blurred_min will be used to set the starting points for background and particle intensities.
     blurred_max, blurred_min = gaussianblur_max_min_2d(roi_image, psf_sd)
@@ -537,9 +541,12 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
 
             particle_intensity = (blurred_max - blurred_min) * 2 * np.pi * psf_sd**2
 
+            TESTING = True
             for particle_index in range(1, hypothesis_index + 1): # Note that the particle index starts from 1, not 0. 
                 # Initialize estimated particle intensities to the maximum value of the Gaussian blurred image.
                 theta_hk[particle_index][0] = max(particle_intensity, blurred_min) + np.random.normal(0, 0.1 * max(particle_intensity, blurred_min))
+                if TESTING:
+                    theta_hk[particle_index][0] = 2500
             
             # Setting starting particle_coordinates
             com_x, com_y = center_of_mass_2d(roi_image)
@@ -547,32 +554,32 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
             for particle_index in range(1, hypothesis_index + 1):
                 theta_hk[particle_index][1] = np.clip(com_x + np.random.normal(0, szx / 4), 0, szx - 1)
                 theta_hk[particle_index][2] = np.clip(com_y + np.random.normal(0, szy / 4), 0, szy - 1)
-        
+                
+            if TESTING:
+                if particle_index >= 0:
+                    theta_hk[0][0] = 500
+                if particle_index >= 1:
+                    theta_hk[1][1] = 7.35
+                    theta_hk[1][2] = 7.69
+                if particle_index >= 2:
+                    theta_hk[2][1] = 10.35
+                    theta_hk[2][2] = 14.69
+                if particle_index >= 3:
+                    theta_hk[3][1] = 15.35
+                    theta_hk[3][2] = 6.69
         # Only do the MLE if k > 0
         if hypothesis_index == 0:
             assert n_hk_params == 1
         else:
             # Maximum Likelihood Estimation of Hk
-            for _ in range(iterations):
-
-                # nr stands for Newton-Raphson
-                nr_numerator = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))   
-                nr_denominator = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
-                # set the following as nan, as they are not used. (background does not have x and y coordinates)
-                nr_numerator[0][1] = nr_numerator[0][2] = np.nan
-                nr_denominator[0][1] = nr_denominator[0][2] = np.nan
-
+            def neg_loglikelihood_function(theta_hk):
+                # theta_hk is flattened when scipy.optimize.minimize is minimizing the function. Thus, reshape.
+                theta_hk = np.reshape(theta_hk, (-1, 3))
+                neg_loglikelihood = 0.0
                 for yy in range(szy):
                     for xx in range(szx):
                         # Let's get the actual pixel value
                         pixel_val = roi_image[yy, xx]
-
-                        # Initialize the first derivatives
-                        ddt_modelhk_at_xxyy = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
-                        # Initialize the second derivatives
-                        d2dt2_modelhk_at_xxyy = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
-
-                        # Now, let's calculate the modelhk_at_xxyy and its derivatives w.r.t. particle of indenx particle_index
 
                         # Initialize the psf_x and psf_y arrays
                         psf_xs = np.zeros(hypothesis_index + 1)
@@ -594,75 +601,38 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
                             # update the particles contributions to the modelhk_at_xxyy value
                             modelhk_at_xxyy += theta_hk[particle_index][0] * psf_xs[particle_index] * psf_ys[particle_index] # particle intensity contribution at (xx, yy)
                             
-                        # The modelhk_at_xxyy calculation with the current theta_hk values is finished. Now, calculate cf and df values. (See https://doi.org/10.1364/OPEX.13.010503, Section 2.5 to better understand cf and df)
-                        if modelhk_at_xxyy > 0:
-                            cf = pixel_val / modelhk_at_xxyy - 1
-                            df = pixel_val / modelhk_at_xxyy ** 2
-                        else:
-                            cf = 1e5
-                            df = 1e5
+                        neg_loglikelihood += modelhk_at_xxyy - pixel_val * np.log(modelhk_at_xxyy) 
+                return neg_loglikelihood
 
-                        # Now let's the first and second derivatives of the modelhk_at_xxyy w.r.t. parameters.
+            # Now, let's update the parameters using scipy.optimize.minimize
+            # Define the initial bounds for the first hypothesis
+            bounds = [(0, None), (None, None), (None, None)]
+            for particle_index in range(1, hypothesis_index + 1):
+                bounds += [(0, None), (0, szx - 1), (0, szy - 1)]
 
-                        # -- Below are special treatmenst for the [0]'s index (the background intensity)
-
-                        # Derivtives w.r.t background (the first index [0] refers to background, the last index [0] to intensity)
-                        ddt_modelhk_at_xxyy[0][0] = 1.0
-                        d2dt2_modelhk_at_xxyy[0][0] = 0.0
-                        # Below are set as nan, as they are not used. (background does not have x and y coordinates)
-                        ddt_modelhk_at_xxyy[0][1] = ddt_modelhk_at_xxyy[0][2] = np.nan
-                        d2dt2_modelhk_at_xxyy[0][1] = d2dt2_modelhk_at_xxyy[0][2] = np.nan
-
-                        # Update Newton-Raphson denominators and numerators
-                        nr_numerator[0][0] += ddt_modelhk_at_xxyy[0][0] * cf
-                        nr_denominator[0][0] += d2dt2_modelhk_at_xxyy[0][0] * cf - ddt_modelhk_at_xxyy[0][0] ** 2 * df
-
-                        # -- Below are special treatmenst for the [1]'s index and beyond (related to the particle intensities and coordinates)
-
-                        for particle_index in range(1, hypothesis_index + 1):
-
-                            # Calculate derivatives w.r.t particle[particle_index]'s intensity
-                            ddt_modelhk_at_xxyy[particle_index][0] = psf_xs[particle_index] * psf_ys[particle_index]
-                            d2dt2_modelhk_at_xxyy[particle_index][0] = 0.0
-
-                            # Calculate derivatives w.r.t particle[particle_index]'s x coordinate
-                            first, second = derivative_int_gauss_1d(xx, theta_hk[particle_index][1], psf_sd, theta_hk[particle_index][0], psf_xs[particle_index])
-                            ddt_modelhk_at_xxyy[particle_index][1] = first
-                            d2dt2_modelhk_at_xxyy[particle_index][1] = second
-
-                            # Calculate derivatives w.r.t particle[particle_index]'s y coordinate
-                            first, second = derivative_int_gauss_1d(yy, theta_hk[particle_index][2], psf_sd, theta_hk[particle_index][0], psf_ys[particle_index])
-                            ddt_modelhk_at_xxyy[particle_index][2] = first
-                            d2dt2_modelhk_at_xxyy[particle_index][2] = second
+            # Now, let's update the parameters using scipy.optimize.minimize
+            theta_hk = theta_hk.flatten()
+            result = minimize(neg_loglikelihood_function, theta_hk, method='L-BFGS-B', bounds=bounds)#, options={'maxiter': 8})
+            # result = minimize(neg_loglikelihood_function, theta_hk, method='Nelder-Mead')#, options={'maxiter': 8})
+            theta_hk = result.x
+            theta_hk = np.reshape(theta_hk, (-1, 3))
                             
-                            # Update Newton-Raphson denominators and numerators
-                            for param_type in range(n_hk_params_per_particle):
-                                nr_numerator[particle_index][param_type] += ddt_modelhk_at_xxyy[particle_index][param_type] * cf
-                                nr_denominator[particle_index][param_type] += d2dt2_modelhk_at_xxyy[particle_index][param_type] * cf - ddt_modelhk_at_xxyy[particle_index][param_type] ** 2 * df
-                            
-                # An iteration finished. Now, update the parameters
-
-                # For [0]'s index (background)
-                theta_hk[0][0] -= nr_numerator[0][0] / nr_denominator[0][0]
-                # For [1]'s index and byond (particle intensities and coordinates)
-                for particle_index in range(1, hypothesis_index + 1):
-                    for param_type in range(n_hk_params_per_particle):
-                        theta_hk[particle_index][param_type] -= nr_numerator[particle_index][param_type] / nr_denominator[particle_index][param_type]
-            
         # Print the estimated parameters
+        print(f'*** hypothesis_index: {hypothesis_index}')
         if hypothesis_index == 0 :
-            print("theta_hk: ", theta_hk)
+            print("theta_hk[ 0 ]: ", theta_hk)
         else:
-            for particle_index in range(hypothesis_index + 1):
-                print("theta_hk[", particle_index, "]: ", theta_hk[particle_index])
-            
-
-        # todo (1/14/2024 Mo) : Need to review from below.
+            print("theta_hk[ 0 ]: {:.3f}\tnan\tnan".format(theta_hk[particle_index][0]))
+            for particle_index in range(1, hypothesis_index + 1):
+                print(f"theta_hk[ {particle_index} ]: {theta_hk[particle_index][0]:.3f}\t{theta_hk[particle_index][1]:.3f}\t{theta_hk[particle_index][2]:.3f}")
 
         # Calcuate the Fisher Information Matrix (FIM)
         # All iterations finished. Now, let's calculate the Fisher Information Matrix (FIM) under Hk.
         if hypothesis_index == 0:
-            fisher_mat[0,0] = 1 / np.var(roi_image)
+            if np.var(roi_image) == 0:
+                fisher_mat[0,0] = 1 / 1e-5
+            else:
+                fisher_mat[0,0] = 1 / np.var(roi_image)
             assert fisher_mat.shape == (1,1)
         else:
             for yy in range(szy):
@@ -697,16 +667,14 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
                     # Now, let's calculate the derivatives 
 
                     # -- Below are special treatmenst for the [0]'s index (the background intensity)
-
                     # Derivtive w.r.t background (the first index [0] refers to background and the last index [0] the intensity)
                     ddt_modelhk_at_xxyy[0][0] = 1.0
                     # Below are set as nan, as they are not used. (background does not have x and y coordinates)
                     ddt_modelhk_at_xxyy[0][1] = ddt_modelhk_at_xxyy[0][2] = np.nan
 
                     # -- Below are special treatmenst for the [1]'s index and beyond (related to the particle intensities and coordinates)
-
                     for particle_index in range(1, hypothesis_index + 1):
-
+                        
                         # Calculate derivatives w.r.t particle[particle_index]'s intensity
                         ddt_modelhk_at_xxyy[particle_index][0] = psf_xs[particle_index] * psf_ys[particle_index]
 
@@ -722,7 +690,6 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
                     assert fisher_mat.shape == (n_hk_params, n_hk_params)
 
                     # Building the Fisher Information Matrix regarding Hk.
-
                     # - Calculation with regards to the background 
                     fisher_mat[0, 0] += ddt_modelhk_at_xxyy[0][0] ** 2 / modelhk_at_xxyy
                     for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
@@ -749,7 +716,6 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
         # Xi[k] = log(likelihood(data; MLE params under Hk)) - 1/2 * log(det(FIM under Hk))
 
         # -- Let's calculate the first term of the Xi_k (GMLR criterion)
-
         # sum_loglikelihood is the sum of loglikelihoods of all pixels
         sum_loglikelihood = 0.0 
         for yy in range(szy):
@@ -774,20 +740,34 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
 
                 # We not have the model value at (xx, yy) under Hk. Let's calculate the loglikelihood.
                 # likelihood = modelhk_at_xxyy**pixel_val * exp(-modelhk_at_xxyy) / factorial(pixel_val)
-                # loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - pixel_val * np.log(pixel_val)
-                loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - pixel_val * np.log(pixel_val)
+                # loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - pixel_val * np.log(pixel_val) + pixel_val
+                # modified_loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy # - pixel_val * np.log(pixel_val)
+                # loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - pixel_val * np.log(pixel_val) + pixel_val
+                loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - gammaln(pixel_val + 1)
+                # sum_loglikelihood += modified_loglikelihood
                 sum_loglikelihood += loglikelihood
         
         # Let's calculate the second term of the Xi_k (GMLR criterion), which is -1/2 * log(det(FIM under Hk))
         _, log_det_fisher_mat = np.linalg.slogdet(fisher_mat)
 
-        xi[hypothesis_index] = sum_loglikelihood - 0.5 * log_det_fisher_mat
+        # xi[hypothesis_index] = sum_loglikelihood - 0.5 * log_det_fisher_mat 
+        xi[hypothesis_index] = sum_loglikelihood - 0.5 * log_det_fisher_mat 
+        lli[hypothesis_index] = sum_loglikelihood
+        penalty_i[hypothesis_index] = 0.5 * log_det_fisher_mat
 
-    plt.figure()
-    plt.plot(range(max_particles), xi, 'o-')                    
+        print(f'{sum_loglikelihood=:.2f}, {log_det_fisher_mat=:.2f}')
+        # xi[hypothesis_index] = sum_loglikelihood + 0.5 * log_det_fisher_mat * 100
+
+    _, axs = plt.subplots(3,1)
+    ax = axs[0]
+    ax.plot(range(max_particles), xi, 'o-')                    
+    ax.set_ylabel('loglikelihood\n + penalty')
+    ax = axs[1]
+    ax.plot(range(max_particles), lli, 'o-')                    
+    ax.set_ylabel('loglikelihood')
+    ax = axs[2]
+    ax.plot(range(max_particles), penalty_i, 'o-')                    
+    ax.set_ylabel('penalty')
+    ax.set_xlabel('hypothesis_index')
     plt.show(block=False)
-    subtract = 1
-    plt.figure()
-    plt.plot(range(max_particles - subtract), xi[0:-subtract], 'o-')                    
-    plt.show(block=False)
-    pass
+    plt.tight_layout()

@@ -520,21 +520,23 @@ def test_gmlr():
     intensity = 2500
     psf_sd = 1.39
     sz = 22
+    # sz = 3
     bg = 500
+    # bg = 8
     show_fig = True
     image = np.zeros((sz, sz))
-    # x =7.35
-    # y = 7.69
-    # image = +psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
-    # x = 10.35
-    # y = 14.69
-    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    x =7.35
+    y = 7.69
+    image = +psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    x = 10.35
+    y = 14.69
+    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
     # x = 15.35
     # y = 6.69
     # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
     # Adding background
     image += np.ones(image.shape)*bg
-    # image = np.random.poisson(image, size=(image.shape))
+    image = np.random.poisson(image, size=(image.shape))
     if show_fig:    
         plt.imshow(image)
         plt.colorbar()
