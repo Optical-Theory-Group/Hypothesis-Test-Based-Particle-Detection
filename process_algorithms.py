@@ -541,7 +541,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
 
             particle_intensity = (blurred_max - blurred_min) * 2 * np.pi * psf_sd**2
 
-            TESTING = True
+            TESTING = False
             for particle_index in range(1, hypothesis_index + 1): # Note that the particle index starts from 1, not 0. 
                 # Initialize estimated particle intensities to the maximum value of the Gaussian blurred image.
                 theta_hk[particle_index][0] = max(particle_intensity, blurred_min) + np.random.normal(0, 0.1 * max(particle_intensity, blurred_min))
@@ -552,8 +552,10 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sd, iterations=8):
             com_x, com_y = center_of_mass_2d(roi_image)
             # Initialize all particle coordinates as the center of mass of the image.
             for particle_index in range(1, hypothesis_index + 1):
-                theta_hk[particle_index][1] = np.clip(com_x + np.random.normal(0, szx / 4), 0, szx - 1)
-                theta_hk[particle_index][2] = np.clip(com_y + np.random.normal(0, szy / 4), 0, szy - 1)
+                theta_hk[particle_index][1] = com_x
+                theta_hk[particle_index][2] = com_y
+                # theta_hk[particle_index][1] = np.clip(com_x + np.random.normal(0, szx / 4), 0, szx - 1)
+                # theta_hk[particle_index][2] = np.clip(com_y + np.random.normal(0, szy / 4), 0, szy - 1)
                 
             if TESTING:
                 if particle_index >= 0:

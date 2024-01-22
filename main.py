@@ -1,3 +1,5 @@
+from scipy.signal import convolve2d
+from scipy.ndimage import convolve1d
 import matplotlib.colors as mcolors
 import math
 import numpy as np
@@ -163,7 +165,7 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
         v0 = dip.Convolution(dip_image, adjusted_kernel_0, method="best")
         k1 = np.array(g[1])
         adjusted_kernel_1 = create_separable_filter(k1, 5)
-        v1 = dip.Convolution(dip_image, adjusted_kernel_1, method="best")
+        v1 = dip.Convolution(v0, adjusted_kernel_1, method="best")
 
         # Compute the difference between V1 and V2
         w = v0 -v1
@@ -171,7 +173,8 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
         # Visualize the difference between V1 and V2
         if check_w:
             _,ax=plt.subplots(1,3)
-            imw = ax[2].imshow(w), ax[2].set_title('w')
+            imw = ax[2].imshow(w)
+            ax[2].set_title('w')
             vmin, vmax = imw.get_clim()
             ax[0].imshow(v0, vmin=vmin, vmax=vmax), ax[0].set_title('v0')
             ax[1].imshow(v1, vmin=vmin, vmax=vmax), ax[1].set_title('v1')
@@ -519,7 +522,7 @@ def test_glrt4_with_2_particles_image():
 def test_gmlr():
     intensity = 2500
     psf_sd = 1.39
-    sz = 22
+    sz = 64
     # sz = 3
     bg = 500
     # bg = 8
@@ -541,8 +544,43 @@ def test_gmlr():
         plt.imshow(image)
         plt.colorbar()
         plt.show(block=False)
-    generalized_maximum_likelihood_rule(roi_image=image, psf_sd=1.39, iterations=10)
     
+    # Define filters
+    h2 = 1/16
+    h1 = 1/4
+    h0 = 3/8
+    g0 = np.array([h2, h1, h0, h1, h2])
+    g1 = np.array([h2, 0, h1, 0, h0, 0, h1, 0, h2])
+
+    # ROI location mask initialization. At first, all the inner_image is considered as ROI.
+    consideration_mask = np.ones(image.shape)
+
+    consideration_limit_level = 2
+    if consideration_limit_level:
+        k0 = create_separable_filter(g0, 3)
+        dip_image = dip.Image(image)
+        v0 = dip.Convolution(dip_image, k0, method="best")
+        k1 = create_separable_filter(g1, 5)
+        v1 = dip.Convolution(v0, k1, method="best")
+        w = v0 - v1
+        check_w = True
+        if check_w:
+            _,ax=plt.subplots(1,3, figsize=(15, 10))
+            ax[0].imshow(v0)
+            ax[0].set_title('v0')
+            ax[1].imshow(v1)
+            ax[1].set_title('v1')
+            ax[2].imshow(w)
+            ax[2].set_title('w')
+            plt.show()
+        consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
+        viz_consideration_mask = True
+        # Visualize the consideration mask
+        if viz_consideration_mask:
+           _,ax=plt.subplots()
+           ax.imshow(consideration_mask), ax.set_title('consideration_mask'), plt.show(block=False)
+           pass
+    generalized_maximum_likelihood_rule(roi_image=image, psf_sd=1.39, iterations=10)
 
 test_gmlr()
 pass
