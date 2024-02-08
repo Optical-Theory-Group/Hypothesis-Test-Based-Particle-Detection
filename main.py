@@ -1,3 +1,5 @@
+from scipy.special import erf
+from skimage.measure import label
 from scipy.signal import convolve2d
 from scipy.ndimage import convolve1d
 import matplotlib.colors as mcolors
@@ -489,10 +491,12 @@ def test1():
     pass
 
 def test_glrt4_with_2_particles_image():
-    intensity = 2500
+    # intensity = 2500
+    intensity = 11
     psf_sd = 1.39
     sz = 20
-    bg = 500
+    bg = 3.5
+    # bg = 500
     show_fig = True
     x = 8.35
     y = 7.69
@@ -520,12 +524,21 @@ def test_glrt4_with_2_particles_image():
 
 # test_glrt4_with_2_particles_image()
 def test_gmlr():
-    intensity = 2500
     psf_sd = 1.39
-    sz = 64
-    # sz = 3
+
+    intensity = 3000 
+    # the center pixel value of C * normalized 2D gaussian with sigma is (1/2*(erf(0.5/s/sqrt(2))-erf(-0.5/s/sqrt(2))))**2
+    # pixel_value = intensity * (0.5 * (np.erf(0.5 / (psf_sd * np.sqrt(2))) - np.erf(-0.5 / (psf_sd * np.sqrt(2)))))**2
+    center_pixel_value = intensity * (0.5 * (erf(0.5 / (psf_sd * np.sqrt(2))) - erf(-0.5 / (psf_sd * np.sqrt(2)))))**2
+    scaling_factor = (0.5 * (erf(0.5 / (psf_sd * np.sqrt(2))) - erf(-0.5 / (psf_sd * np.sqrt(2)))))**2 
+    # For sigma == 1.39, the above is about 0.08
+
+    # What goes in front of the normalized 2d gaussian is intensity (e.g., 3000)
+    # What gets recorded as theta_hk[particle_index][0] is the center pixel value, which is intensity * scaling_factor. (e.g., 240)
+
+    sz = 20
+    # bg = 4 
     bg = 500
-    # bg = 8
     show_fig = True
     image = np.zeros((sz, sz))
     x =7.35
@@ -540,6 +553,7 @@ def test_gmlr():
     # Adding background
     image += np.ones(image.shape)*bg
     image = np.random.poisson(image, size=(image.shape))
+    show_fig = True
     if show_fig:    
         plt.imshow(image)
         plt.colorbar()
@@ -551,11 +565,9 @@ def test_gmlr():
     h0 = 3/8
     g0 = np.array([h2, h1, h0, h1, h2])
     g1 = np.array([h2, 0, h1, 0, h0, 0, h1, 0, h2])
-
     # ROI location mask initialization. At first, all the inner_image is considered as ROI.
     consideration_mask = np.ones(image.shape)
-
-    consideration_limit_level = 2
+    consideration_limit_level = 0
     if consideration_limit_level:
         k0 = create_separable_filter(g0, 3)
         dip_image = dip.Image(image)
@@ -574,13 +586,26 @@ def test_gmlr():
             ax[2].set_title('w')
             plt.show()
         consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
+
+        def remove_isolated_pixels(consideration_mask):
+            labeled_mask, num_labels = label(consideration_mask)
+            for label_num in range(1, num_labels + 1):
+                label_indices = np.where(labeled_mask == label_num)
+                if len(label_indices[0]) == 1:
+                    consideration_mask[label_indices] = False
+            return consideration_mask
+
+        consideration_mask = remove_isolated_pixels(consideration_mask)
+
         viz_consideration_mask = True
         # Visualize the consideration mask
         if viz_consideration_mask:
-           _,ax=plt.subplots()
-           ax.imshow(consideration_mask), ax.set_title('consideration_mask'), plt.show(block=False)
-           pass
-    generalized_maximum_likelihood_rule(roi_image=image, psf_sd=1.39, iterations=10)
+            _, ax = plt.subplots()
+            ax.imshow(consideration_mask)
+            ax.set_title('consideration_mask')
+            plt.show(block=False)
+
+    generalized_maximum_likelihood_rule(roi_image=image, mask=consideration_mask, psf_sd=1.39)
 
 test_gmlr()
 pass
