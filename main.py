@@ -525,40 +525,28 @@ def test_glrt4_with_2_particles_image():
 # test_glrt4_with_2_particles_image()
 def test_gmlr():
     psf_sd = 1.39
-
-    intensity = 3000 
-    # the center pixel value of C * normalized 2D gaussian with sigma is (1/2*(erf(0.5/s/sqrt(2))-erf(-0.5/s/sqrt(2))))**2
-    # pixel_value = intensity * (0.5 * (np.erf(0.5 / (psf_sd * np.sqrt(2))) - np.erf(-0.5 / (psf_sd * np.sqrt(2)))))**2
-    center_pixel_value = intensity * (0.5 * (erf(0.5 / (psf_sd * np.sqrt(2))) - erf(-0.5 / (psf_sd * np.sqrt(2)))))**2
-    scaling_factor = (0.5 * (erf(0.5 / (psf_sd * np.sqrt(2))) - erf(-0.5 / (psf_sd * np.sqrt(2)))))**2 
-    # For sigma == 1.39, the above is about 0.08
-
-    # What goes in front of the normalized 2d gaussian is intensity (e.g., 3000)
-    # What gets recorded as theta_hk[particle_index][0] is the center pixel value, which is intensity * scaling_factor. (e.g., 240)
-
-    sz = 20
-    # bg = 4 
+    sz = 20 # Size of the width and height of the input image to be generated
+    scaling = 3000  # As in the point spread function := scaling * normalized 2D gaussian
     bg = 500
-    show_fig = True
+    show_generated_input_image = True
     image = np.zeros((sz, sz))
-    x =7.35
-    y = 7.69
-    image = +psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
-    x = 10.35
-    y = 14.69
-    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # x =7.35
+    # y = 7.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    # x = 10.35
+    # y = 14.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
     # x = 15.35
     # y = 6.69
-    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
     # Adding background
     image += np.ones(image.shape)*bg
     image = np.random.poisson(image, size=(image.shape))
-    show_fig = True
-    if show_fig:    
+    show_generated_input_image = True
+    if show_generated_input_image:    
         plt.imshow(image)
         plt.colorbar()
         plt.show(block=False)
-    
     # Define filters
     h2 = 1/16
     h1 = 1/4
