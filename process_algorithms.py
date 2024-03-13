@@ -8,6 +8,22 @@ from scipy.special import erf, gammaln
 from scipy.stats import norm
 
 
+def psfconvolution(particle_x, particle_y, multiplying_constant, psf_sd, imgwidth):
+    """returns the pixel values to be added to the image based on psf convolution."""
+    output = np.zeros((imgwidth, imgwidth))
+
+    for x in range(imgwidth):
+        for y in range(imgwidth):
+            # integrate the psf over the pixel area for both dimensions
+            integral_x = integrate_gauss_1d(x, particle_x, psf_sd)
+            integral_y = integrate_gauss_1d(y, particle_y, psf_sd)
+            
+            # calculate the pixel value as the product of the 1d integrals in x and y, scaled by the multiplying constant
+            pixel_value = multiplying_constant * integral_x * integral_y
+            output[y, x] = pixel_value  # note: [y, x] for row, column indexing
+
+    return output  
+
 def gaussianblur_max_min_2d(data, sigma):
     """ Returns the maximum and minimum values of the 2D Gaussian blurred image.
     Args:
@@ -21,30 +37,42 @@ def gaussianblur_max_min_2d(data, sigma):
     assert data.shape[0] == data.shape[1]
     sz = data.shape[0]
         
-    filteredpixel = 0 
-    sum_val = 0  # renamed to avoid shadowing built-in sum function
     max_i = 0
     min_bg = 10e10
     norm = 1/2/sigma**2
 
-    # The following two for loops are used to calculate the Gaussian blur of the image.
+    filtered_img = np.zeros((sz, sz))
+
+    # Calculate the Gaussian blur of the image.
     for filter_center_x in range(sz):
         for filter_center_y in range(sz):
-            filteredpixel = 0
+            # Initialize filtered_pixel and sum_val to zero.
+            filtered_pixel  = 0
             sum_val = 0
             for contributing_pos1 in range(sz):
                 for contributing_pos2 in range(sz):
                     weight_contributing_pos1 = np.exp(-((contributing_pos1 - filter_center_x) ** 2) * norm)
                     weight_contributing_pos2 = np.exp(-((contributing_pos2 - filter_center_y) ** 2) * norm)
-                    filteredpixel += weight_contributing_pos1 * weight_contributing_pos2 * data[contributing_pos1, contributing_pos2]
+                    filtered_pixel  += weight_contributing_pos1 * weight_contributing_pos2 * data[contributing_pos1, contributing_pos2]
                     sum_val += weight_contributing_pos1 * weight_contributing_pos2
 
-            filteredpixel /= sum_val
+            filtered_pixel  /= sum_val
+            filtered_img[filter_center_x, filter_center_y] = filtered_pixel
             
             # max_i is the maximum value of the Gaussian blurred image.
-            max_i = max(max_i, filteredpixel)
+            max_i = max(max_i, filtered_pixel )
             # min_bg is the minimum value of the Gaussian blurred image.
-            min_bg = min(min_bg, filteredpixel)
+            min_bg = min(min_bg, filtered_pixel )
+
+    # fig, ax = plt.subplots(1,2, figsize=(10,5))
+    # im1 = ax[0].imshow(data)
+    # im2 = ax[1].imshow(filtered_img)
+    # ax[0].set_title('Original Image')
+    # ax[1].set_title('Gaussian Blurred Image')
+    # fig.colorbar(im1, ax=ax[0], orientation='vertical')
+    # fig.colorbar(im2, ax=ax[1], orientation='vertical')
+    # plt.show(block=False)
+    # pass
 
     return max_i, min_bg
 
@@ -61,25 +89,15 @@ def integrate_gauss_1d(i, x, sigma):
     # Below is the same as integral(from i-0.5 to i+0.5) [1/2sqrt(pi)*exp(-norm*(t-x)**2) dt]
     return 0.5*(erf((i-x+0.5)*np.sqrt(norm))-erf((i-x-0.5)*np.sqrt(norm)))
 
-def derivative_int_gauss_1d(i, x, sigma, N, PSFy):
-    """ Compute the derivative of the 1D Gaussian.
-    Args:
-        i (int): Pixel index.
-        x (float): Mean value of the Gaussian.
-        sigma (float): Standard deviation of the Gaussian.
-        N (float): Amplitude of the Gaussian.
-        PSFy (float): Scaling factor along y.
-    Returns:
-        float: Derivative of the Gaussian with respect to x at i.
-        float: Second derivative of the Gaussian with respect to x at i (optional).
-    """
-    a = np.exp(-0.5 * ((i + 0.5 - x) / sigma)**2)
-    b = np.exp(-0.5 * ((i - 0.5 - x) / sigma)**2)
+def ddt_integrated_psf_1d(i, t, sigma):
+    a = np.exp(-0.5 * ((i + 0.5 - t) / sigma)**2)
+    b = np.exp(-0.5 * ((i - 0.5 - t) / sigma)**2)
+    return -1 / np.sqrt(2 * np.pi) / sigma * (a - b)
 
-    dmodel_dt = -N / np.sqrt(2 * np.pi) / sigma * (a - b) * PSFy
-    d2model_dt2 = -N / np.sqrt(2 * np.pi) / sigma**3 * ((i + 0.5 - x) * a - (i - 0.5 - x) * b) * PSFy
-
-    return dmodel_dt, d2model_dt2
+def d2dt2_integrated_psf_1d(i, t, sigma):
+    a = np.exp(-0.5 * ((i + 0.5 - t) / sigma)**2)
+    b = np.exp(-0.5 * ((i - 0.5 - t) / sigma)**2)
+    return -1 / np.sqrt(2 * np.pi) / sigma**3 * ((i + 0.5 - t) * a - (i - 0.5 - t) * b)
 
 def center_of_mass_2d(data):
     """ Compute the 2D center of mass of a subregion.
@@ -91,8 +109,8 @@ def center_of_mass_2d(data):
     """
     # The following two lines are used to calculate the center of mass of the image.
     i, j = np.indices(data.shape)
-    tmpx = np.sum((data) * i)
-    tmpy = np.sum((data) * j)
+    tmpy = np.sum((data) * i)
+    tmpx = np.sum((data) * j)
     tmpsum = np.sum(data)
     
     # Avoid division by zero
@@ -369,8 +387,8 @@ def glrt4(image, psf_sd, sz, iterations):
                 d2dt2_modelh1 = np.zeros(n_h1_params)
 
                 # First and second derivatives of the model w.r.t. x, y, N, and bg
-                ddt_modelh1[0], d2dt2_modelh1[0] = derivative_int_gauss_1d(ii, theta_h1[0], psf_sd, theta_h1[2], psf_y) 
-                ddt_modelh1[1], d2dt2_modelh1[1] = derivative_int_gauss_1d(jj, theta_h1[1], psf_sd, theta_h1[2], psf_x) 
+                ddt_modelh1[0], d2dt2_modelh1[0] = ddt_integrated_psf_1d(ii, theta_h1[0], psf_sd) * theta_h1[2] * psf_y, d2dt2_integrated_psf_1d(ii, theta_h1[0], psf_sd) * theta_h1[2] * psf_y
+                ddt_modelh1[1], d2dt2_modelh1[1] = ddt_integrated_psf_1d(jj, theta_h1[1], psf_sd) * theta_h1[2] * psf_x, d2dt2_integrated_psf_1d(jj, theta_h1[1], psf_sd) * theta_h1[2] * psf_x
                 ddt_modelh1[2] = psf_x * psf_y  # First derivative of model w.r.t. N
                 d2dt2_modelh1[2] = 0.0 # Second derivative of model w.r.t. N
                 ddt_modelh1[3] = 1.0  # First derivative of model w.r.t. bg
@@ -423,8 +441,8 @@ def glrt4(image, psf_sd, sz, iterations):
             pixel_val = image[jj, ii]
 
             # First derivatives of the model w.r.t. x, y, N, and bg
-            ddt_modelh1[0], _ = derivative_int_gauss_1d(ii, theta_h1[0], psf_sd, theta_h1[2], psf_y) 
-            ddt_modelh1[1], _ = derivative_int_gauss_1d(jj, theta_h1[1], psf_sd, theta_h1[2], psf_x) 
+            ddt_modelh1[0] = ddt_integrated_psf_1d(ii, theta_h1[0], psf_sd) * theta_h1[2] * psf_y
+            ddt_modelh1[1] = ddt_integrated_psf_1d(jj, theta_h1[1], psf_sd) * theta_h1[2] * psf_x
             ddt_modelh1[2] = psf_x * psf_y  
             ddt_modelh1[3] = 1.0  
 
@@ -486,6 +504,8 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
 
 
 def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
+
+    np.set_printoptions(precision=3, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
     assert roi_image.ndim == 2
     szy, szx = roi_image.shape 
@@ -551,17 +571,23 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
 
             for particle_index in range(1, hypothesis_index + 1): # Note that the particle index starts from 1, not 0. 
                 # Initialize estimated particle intensities to the maximum value of the Gaussian roi image.
-                theta_hk[particle_index][0] = roi_min
+                # theta_hk[particle_index][0] = roi_sum - roi_min * szx * szy
+                theta_hk[particle_index][0] = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
             
-            com_x, com_y = center_of_mass_2d(roi_image)
+            _, blurred_min = gaussianblur_max_min_2d(roi_image, psf_sd)
+
+            com_x, com_y = center_of_mass_2d(roi_image - blurred_min * np.ones((szx, szy)))
             # Initialize all particle coordinates as the center of mass of the image.
             for particle_index in range(1, hypothesis_index + 1):
-                theta_hk[particle_index][1] = np.clip(com_x + np.random.normal(0, szx / 5), 0, szx - 1)
-                theta_hk[particle_index][2] = np.clip(com_y + np.random.normal(0, szy / 5), 0, szy - 1)
+                random_sd = 0
+                theta_hk[particle_index][1] = np.clip(com_x + np.random.normal(0, random_sd), 0, szx - 1)
+                theta_hk[particle_index][2] = np.clip(com_y + np.random.normal(0, random_sd), 0, szy - 1)
+                # theta_hk[particle_index][1] = szx / 2
+                # theta_hk[particle_index][2] = szy / 2
 
-        # TEST_MODE = True
-        TEST_MODE = False
-        if TEST_MODE:
+        # TEST_IDEAL_FITTING = True
+        TEST_IDEAL_FITTING = False
+        if TEST_IDEAL_FITTING:
             if hypothesis_index == 0:
                 theta_hk = 500
             else:
@@ -577,23 +603,45 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
                 if particle_index == 3:
                     theta_hk[3][1] = 15.35
                     theta_hk[3][2] = 6.69
+            # theta_hk *= 1.01
+            pass
                 
         # Only do the MLE if k > 0
         if hypothesis_index == 0:
             assert n_hk_params == 1
         else:
+            def normalize(th):
+                nt_th = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
+                nt_th[0][0] = th[0][0] / roi_max
+                nt_th[0][1] = np.nan
+                nt_th[0][2] = np.nan
+                for particle_index in range(1, hypothesis_index + 1):
+                    nt_th[particle_index][0] = th[particle_index][0] / (roi_max - roi_min) / 2 / np.pi / psf_sd**2
+                    nt_th[particle_index][1] = th[particle_index][1] / szx
+                    nt_th[particle_index][2] = th[particle_index][2] / szy
+                    
+                # Manipulate theta to use with scipy.optimize.minimize
+                nf_th = nt_th.flatten()
+                nft_th = nf_th[~np.isnan(nf_th)]
+
+                return nft_th
+
+            def denormalize(nft_th):
+                fn_th = np.insert(nft_th, [1,1], np.nan)
+                n_th = np.reshape(fn_th, (-1, 3))
+                th = np.zeros((hypothesis_index + 1, 3))
+                th[0][0] = n_th[0][0] * roi_max
+                th[0][1] = th[0][2] = np.nan
+                for particle_index in range(1, hypothesis_index + 1):
+                    th[particle_index][0] = n_th[particle_index][0] * (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+                    th[particle_index][1] = n_th[particle_index][1] * szx
+                    th[particle_index][2] = n_th[particle_index][2] * szy
+                return th
+
             # Maximum Likelihood Estimation of Hk
             def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta):
-                # Put nan back in
-                normalized_theta_hk = np.insert(norm_flat_trimmed_theta, [1,1], np.nan)
-                normalized_theta_hk = np.reshape(normalized_theta_hk, (-1, 3))
-                theta_hk = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
-                theta_hk[0][0] = normalized_theta_hk[0][0] * (roi_max - roi_min) + roi_min
-                theta_hk[0][1] = theta_hk[0][2] = np.nan
-                for particle_index in range(1, hypothesis_index + 1):
-                    theta_hk[particle_index][0] = normalized_theta_hk[particle_index][0] * (roi_max - roi_min) + roi_min
-                    theta_hk[particle_index][1] = normalized_theta_hk[particle_index][1] * szx
-                    theta_hk[particle_index][2] = normalized_theta_hk[particle_index][2] * szy
+                theta_hk = denormalize(norm_flat_trimmed_theta)
+
                 modified_neg_loglikelihood = 0.0
                 for yy in range(szy):
                     for xx in range(szx):
@@ -610,7 +658,8 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
                             integrated_psf_x[particle_index] = integrate_gauss_1d(yy, theta_hk[particle_index][2], psf_sd)
                             # update the particles contributions to the model_xy value
                             model_xy += theta_hk[particle_index][0] * integrated_psf_x[particle_index] * integrated_psf_x[particle_index] 
-                        modified_neg_loglikelihood += model_xy - roi_image[yy,xx] * np.log(model_xy) # modified: omit log(roi_image[yy,xx]!)
+                        # modified_neg_loglikelihood += model_xy - roi_image[yy,xx] * np.log(model_xy) # modified: omit log(roi_image[yy,xx]!)
+                        modified_neg_loglikelihood += model_xy - roi_image[yy,xx] * np.log(model_xy) + gammaln(roi_image[yy,xx] + 1) # modified: omit log(roi_image[yy,xx]!)
                 return modified_neg_loglikelihood
 
             # Now, let's update the parameters using scipy.optimize.minimize
@@ -618,43 +667,22 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
             if set_bounds:
                 bounds = [(0, None)]
                 for particle_index in range(1, hypothesis_index + 1):
-                    bounds += [(0.0, None), (0, (szx-1)/szx), (0, (szy-1)/szy)]
+                    bounds += [(0, None), (0, (szx-1)/szx), (0, (szy-1)/szy)]
                     
             # Normazlize the parameters before passing on to neg_loglikelihood_function
-            norm_theta_hk = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
-            for particle_index in range(0, hypothesis_index + 1):
-                norm_theta_hk[particle_index][0] = (theta_hk[particle_index][0] - roi_min) / (roi_max - roi_min)
-                if particle_index != 0:
-                    norm_theta_hk[particle_index][1] = theta_hk[particle_index][1] / szx
-                    norm_theta_hk[particle_index][2] = theta_hk[particle_index][2] / szy
-                else:
-                    norm_theta_hk[particle_index][1] = np.nan
-                    norm_theta_hk[particle_index][2] = np.nan
+            norm_flat_trimmed_theta = normalize(theta_hk)
                 
-            # Manipulate theta to use with scipy.optimize.minimize
-            norm_flat_theta = norm_theta_hk.flatten()
-            norm_flat_trimmed_theta = norm_flat_theta[~np.isnan(norm_flat_theta)]
-
             def jacobian_fn(norm_flat_trimmed_theta):
                 """ """
-                # The function to minimize is modified_neg_loglikelihood.
-                # Thus the jacobian is the derivatives of modified_neg_loglikelihood.
-                # modified_neg_loglikelihood = (sum over xx and yy) [ model - pixel_val * log(model) ]
-                #                   where model == theta_hk[0][0] + theta_hk[1][0] / scaling * integrated_psf_x[1] * integrated_psf_x[1] + ...
-                # ddt(negloglikelihood) [when t == norm_theta[0][0]] = d(nll)/d(t00) * d(t00) / d(norm_t00)
-                #                            = (sum over xx and yy) [ (1 - pixel_val / model) * (roi_max - roi_min) ]       # (because, t00 = norm_t00 * (roi_max - roi_min) + roi_min)
-                # ddt(negloglikelihood) [when t == norm_t10] = (sum over xx and yy) {1/scaling * psf_x[1] * psf_y[1] * (1 - pixel_val / model} * (roi_max - roi_min)
-                # ddt(negloglikelihood) [when t == norm_t11] = (sum over xx and yy) [ derivative_int_gauss_1d(xx, theta_hk[1][1], psf_sd, theta_hk[1][0] / scaling, integrated_psf_y[1])[0] \
-                    # * (1 - pixel_val / model) * szx          # ( Because, d(t11) / d(norm_t11) == szx )
-                # ddt(negloglikelihood) [when t == norm_t12] = (sum over xx and yy) [ derivative_int_gauss_1d(yy, theta_hk[1][2], psf_sd, theta_hk[1][0] / scaling, integrated_psf_x[1])[0] \
-                    # * (1 - pixel_val / model) * szy          # ( Because, d(t12) / d(norm_t12) == szy )
-                flat_norm_theta_hk = np.insert(norm_flat_trimmed_theta, [1,1], np.nan)
-                norm_theta_hk = np.reshape(flat_norm_theta_hk, (-1, 3))
-                for particle_index in range(0, hypothesis_index + 1):
-                    theta_hk[particle_index][0] = norm_theta_hk[particle_index][0] * (roi_max - roi_min) + roi_min
-                    if particle_index != 0:
-                        theta_hk[particle_index][1] = norm_theta_hk[particle_index][1] * szx
-                        theta_hk[particle_index][2] = norm_theta_hk[particle_index][2] * szy
+                # Jacobian needed is the derivatives of modified_neg_loglikelihood function.
+                # modified_neg_loglikelihood = (sum over xx and yy) [ model - pixel_val * log(model) ], where model == theta_hk[0][0] + (sum over i) theta_hk[i][0] * integrated_psf_x[i] * integrated_psf_x[i] d
+                # ddt(negloglikelihood) [t == norm_theta[0][0]] = d(nll)/d(norm_t00) = d(nll)/d(model) * d(model)/d(t00) * d(norm_t00)/d(t00)
+                #                            = (sum over xx and yy) [ (1 - pixel_val / model) * 1 * max 
+                # ddt(negloglikelihood) [t == norm_ti0] = (sum over xx and yy) (1 - pixel_val / model) * (Ix[i] * Iy[i]) * ((max - min) * 2 * np.pi * psf_sd**2)
+                # ddt(negloglikelihood) [t == norm_ti1] = (sum over xx and yy) (1 - pixel_val / model) * (ti0 * d(Ix)/d(ti1) * Iy[i]) * szx
+                #                                       = (sum over xx and yy) (1 - pixel_val / model) * (ddt_integrated_psf_x(xx, theta_hk[i][1], psf_sd) * theta_hk[i][0] * Iy[i]) * szx
+                # ddt(negloglikelihood) [t == norm_t12] = (sum over xx and yy) (1 - pixel_val / model) * (ddt_integrated_psf_x(yy, theta_hk[i][2], psf_sd) * theta_hk[i][0] * Ix[i]) * szy
+                theta_hk = denormalize(norm_flat_trimmed_theta)
                 # nll: negloglikelihood
                 ddt_nll = np.zeros((hypothesis_index + 1, 3)) # 3 --> 1 for intensity, 2 for coordinates
                 for yy in range(szy):
@@ -664,43 +692,38 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
                         model_xy += theta_hk[0][0] 
                         integrated_psf_x = np.zeros(hypothesis_index + 1)
                         integrated_psf_y = np.zeros(hypothesis_index + 1)
-                        # integrated_psf_x[0] and integrated_psf_y[0] are nan as they are not used. 
+                        # Set integrated_psf_x[0] and integrated_psf_y[0] as nan's as they are not used. 
                         integrated_psf_x[0] = np.nan
                         integrated_psf_y[0] = np.nan
                         for particle_index in range(1, hypothesis_index + 1):
                             # Calculate the integral of the normalized 1D psf function for x and y, for the xx-th column and the yy-th row.
                             integrated_psf_x[particle_index] = integrate_gauss_1d(xx, theta_hk[particle_index][1], psf_sd)
                             integrated_psf_y[particle_index] = integrate_gauss_1d(yy, theta_hk[particle_index][2], psf_sd)
-                            # update the particles contributions to the model_xy value
+                            # Add the particle's contributions to the model_xy 
                             model_xy += theta_hk[particle_index][0] * integrated_psf_x[particle_index] * integrated_psf_y[particle_index] # particle intensity contribution at (xx, yy)
                         # Calculate the first derivatives of the negloglikelihood
-                        ddt_nll[0][0] += (1 - pixel_val / model_xy) # * (roi_max - roi_min)
+                        ddt_nll[0][0] += (1 - pixel_val / model_xy) * roi_max 
                         ddt_nll[0][1] = ddt_nll[0][2] = np.nan
                         for p_idx in range(1, hypothesis_index + 1):
-                            ddt_nll[p_idx][0] += (1 - pixel_val / model_xy) * (integrated_psf_x[p_idx] * integrated_psf_y[p_idx]) * (roi_max - roi_min)
-                            ddt_nll[p_idx][1] += (1 - pixel_val / model_xy) * derivative_int_gauss_1d(xx, theta_hk[p_idx][1], psf_sd, theta_hk[p_idx][0], integrated_psf_y[p_idx])[0] * szx
-                            ddt_nll[p_idx][2] += (1 - pixel_val / model_xy) * derivative_int_gauss_1d(yy, theta_hk[p_idx][2], psf_sd, theta_hk[p_idx][0], integrated_psf_x[p_idx])[0] * szy
+                            ddt_nll[p_idx][0] += (1 - pixel_val / model_xy) * (integrated_psf_x[p_idx] * integrated_psf_y[p_idx]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+                            ddt_nll[p_idx][1] += (1 - pixel_val / model_xy) * ddt_integrated_psf_1d(xx, theta_hk[p_idx][1], psf_sd) * theta_hk[p_idx][0] * integrated_psf_y[p_idx] * szx
+                            ddt_nll[p_idx][2] += (1 - pixel_val / model_xy) * ddt_integrated_psf_1d(yy, theta_hk[p_idx][2], psf_sd) * theta_hk[p_idx][0] * integrated_psf_x[p_idx] * szy
                 jacobian = ddt_nll.flatten()
                 jacobian = jacobian[~np.isnan(jacobian)]
                 # Check the shape of the gradient
                 if jacobian.shape != norm_flat_trimmed_theta.shape:
+                    print("Warning: the shape of the jacobian is not the same as the shape of the parameters. Check required")
                     # Reshape the gradient to have the same shape as norm_flat_trimmed_theta
                     jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
                 return jacobian
 
-            def hessian_fn(flat_norm_trimmed_theta):
+            def hessian_fn(norm_flat_trimmed_theta):
                 """"""
-                theta_hk = np.zeros((hypothesis_index + 1, 3))
-                flat_norm_trimmed_theta = np.insert(flat_norm_trimmed_theta, [1,1], np.nan)
-                norm_theta_hk = np.reshape(flat_norm_trimmed_theta, (-1, 3))
-                for particle_index in range(0, hypothesis_index + 1):
-                    theta_hk[particle_index][0] = norm_theta_hk[particle_index][0] * (roi_max - roi_min) + roi_min
-                    if particle_index != 0:
-                        theta_hk[particle_index][1] = norm_theta_hk[particle_index][1] * szx
-                        theta_hk[particle_index][2] = norm_theta_hk[particle_index][2] * szy
+                theta_hk = denormalize(norm_flat_trimmed_theta)
                 # nll: negloglikelihood
                 d2dt2_nll_2d = np.zeros((hypothesis_index * 3 + 1, hypothesis_index * 3 + 1))
 
+                # Among 00, i0, i1, i2, selecting unordered pairs give 10 combinations. (4C2 + 4 = 10)
                 d2dt2_nll_00_00 = 0
                 d2dt2_nll_i0_00 = 0
                 d2dt2_nll_i1_00 = 0
@@ -731,85 +754,113 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
 
                         # Calculate the double derivatives of the negloglikelihood
                         # 1. 00,00 ##
-                        d2dt2_nll_00_00 += pixel_val / model_xy**2 * (roi_max - roi_min)**2
+                        if model_xy == 0:
+                            print("Warning: model_xy is zero. Check required. ", f"{yy=}, {xx=}")
+                            model_xy = 1e-5
+                        pixelval_over_model_squared = pixel_val / model_xy**2
+                        d2dt2_nll_00_00 += pixelval_over_model_squared * (roi_max)**2
                         d2dt2_nll_2d[0][0] = d2dt2_nll_00_00
                         for pidx in range(1, hypothesis_index + 1):
                             # 2. i0, 00
-                            d2dt2_nll_i0_00 += pixel_val / model_xy**2 * integrated_psf_x[pidx] * integrated_psf_y[pidx] * (roi_max - roi_min)**2
+                            d2dt2_nll_i0_00 += pixelval_over_model_squared * integrated_psf_x[pidx] * integrated_psf_y[pidx] * (roi_max - roi_min) * (2 * np.pi * psf_sd**2) * (roi_max)
                             d2dt2_nll_2d[0][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_00
                             d2dt2_nll_2d[(pidx - 1) * 3 + 1][0] = d2dt2_nll_i0_00
                             # 3. i1, 00
-                            d2dt2_nll_i1_00 += pixel_val / model_xy**2 * derivative_int_gauss_1d(xx, theta_hk[pidx][1], psf_sd, theta_hk[pidx][0], integrated_psf_y[pidx])[0] * szx * (roi_max - roi_min)
+                            d2dt2_nll_i1_00 += pixelval_over_model_squared * ddt_integrated_psf_1d(xx, theta_hk[pidx][1], psf_sd) * theta_hk[pidx][0] * integrated_psf_y[pidx] * (szx) * (roi_max)
                             d2dt2_nll_2d[0][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_00
                             d2dt2_nll_2d[(pidx - 1) * 3 + 2][0] = d2dt2_nll_i1_00
                             # 4. i2, 00
-                            d2dt2_nll_i2_00 += pixel_val / model_xy**2 * derivative_int_gauss_1d(yy, theta_hk[pidx][2], psf_sd, theta_hk[pidx][0], integrated_psf_x[pidx])[0] * szy * (roi_max - roi_min)
+                            d2dt2_nll_i2_00 += pixelval_over_model_squared * ddt_integrated_psf_1d(yy, theta_hk[pidx][2], psf_sd) * theta_hk[pidx][0] * integrated_psf_x[pidx] * (szy) * (roi_max)
                             d2dt2_nll_2d[0][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_00
                             d2dt2_nll_2d[(pidx - 1) * 3 + 3][0] = d2dt2_nll_i2_00
                             # 5. i0, i0 ##
-                            d2dt2_nll_i0_i0 += pixel_val / model_xy**2 * (integrated_psf_x[pidx] * integrated_psf_y[pidx])**2 * (roi_max - roi_min)**2
+                            d2dt2_nll_i0_i0 += pixelval_over_model_squared * (integrated_psf_x[pidx] * integrated_psf_y[pidx])**2 * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2
                             d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_i0
                             # 6. i1, i0
-                            d2dt2_nll_i1_i0 += (pixel_val / model_xy**2 * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val / model_xy) / theta_hk[pidx][0]) * derivative_int_gauss_1d(xx, theta_hk[pidx][1], psf_sd, theta_hk[pidx][0], integrated_psf_y[pidx])[0] * szx * (roi_max - roi_min)
+                            d2dt2_nll_i1_i0 += (pixelval_over_model_squared * theta_hk[pidx][0] * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val / model_xy)) \
+                                                * ddt_integrated_psf_1d(xx, theta_hk[pidx][1], psf_sd) * integrated_psf_y[pidx] * szx * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2) 
                             d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2_nll_i1_i0
                             d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i0
                             # 7. i2, i0
-                            d2dt2_nll_i2_i0 += (pixel_val / model_xy**2 * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val / model_xy) / theta_hk[pidx][0]) * derivative_int_gauss_1d(yy, theta_hk[pidx][2], psf_sd, theta_hk[pidx][0], integrated_psf_x[pidx])[0] * szy * (roi_max - roi_min)
+                            d2dt2_nll_i2_i0 += (pixelval_over_model_squared * theta_hk[pidx][0] * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val / model_xy)) \
+                                                * ddt_integrated_psf_1d(yy, theta_hk[pidx][2], psf_sd) * integrated_psf_x[pidx] * szy * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)
                             d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2_nll_i2_i0
                             d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i0
-                            # 8. i1, i1 ##
-                            d2dt2_nll_i1_i1 += (1 - pixel_val / model_xy) * derivative_int_gauss_1d(xx, theta_hk[pidx][1], psf_sd, theta_hk[pidx][0], integrated_psf_y[pidx])[1] * szx**2 # [1] is for the second derivative
+                            # 8. i1, i1 
+                            d2dt2_nll_i1_i1 += (pixelval_over_model_squared * ddt_integrated_psf_1d(xx, theta_hk[pidx][1], psf_sd) * theta_hk[pidx][0] * integrated_psf_y[pidx] \
+                                            + (1 - pixel_val / model_xy) * d2dt2_integrated_psf_1d(xx, theta_hk[pidx][1], psf_sd)) * theta_hk[pidx][0] * integrated_psf_y[pidx] * szx**2 
                             d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i1
-                            # 9. i2, i1 - This is the problematic one. - divide by zero error, invalid value encountered in double_scalars
-                            if integrated_psf_x[pidx] * integrated_psf_y[pidx] > 0: # When you work out the math, you'll find that if either of the integrated_psf_x or integrated_psf_y is zero, then the derivative is zero, thus nothing to add.
-                                d2dt2_nll_i2_i1 += (pixel_val / model_xy**2 + (1 - pixel_val / model_xy) / theta_hk[pidx][0] / integrated_psf_x[pidx] / integrated_psf_y[pidx]) * derivative_int_gauss_1d(xx, theta_hk[pidx][1], psf_sd, theta_hk[pidx][0], integrated_psf_y[pidx])[0] * derivative_int_gauss_1d(yy, theta_hk[pidx][2], psf_sd, theta_hk[pidx][0], integrated_psf_x[pidx])[0] * szx * szy
+                            # 9. i2, i1 
+                            d2dt2_nll_i2_i1 += (pixelval_over_model_squared * theta_hk[pidx][0] * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val / model_xy)) * theta_hk[pidx][0] \
+                                                    * ddt_integrated_psf_1d(xx, theta_hk[pidx][1], psf_sd) * theta_hk[pidx][0] * integrated_psf_y[pidx] \
+                                                    * ddt_integrated_psf_1d(yy, theta_hk[pidx][2], psf_sd) * theta_hk[pidx][0] * integrated_psf_x[pidx] \
+                                                    * szx * szy
                             d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = d2dt2_nll_i2_i1
                             d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i1
                             # 10. i2, i2 ##
-                            d2dt2_nll_i2_i2 += (1 - pixel_val / model_xy) * derivative_int_gauss_1d(yy, theta_hk[pidx][2], psf_sd, theta_hk[pidx][0], integrated_psf_x[pidx])[1] * szy**2 # [1] is for the second derivative
+                            d2dt2_nll_i2_i2 += (pixelval_over_model_squared * ddt_integrated_psf_1d(yy, theta_hk[pidx][2], psf_sd) * theta_hk[pidx][0] * integrated_psf_x[pidx] \
+                                            + (1 - pixel_val / model_xy) * d2dt2_integrated_psf_1d(yy, theta_hk[pidx][2], psf_sd)) * theta_hk[pidx][0] * integrated_psf_x[pidx] * szy**2 
                             d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2
                 return d2dt2_nll_2d
 
+            # Initialize storage for the jacobian and hessian snapshots
+            jac_snapshots = []
+            gradientnorm_snapshots = []
+            hess_snapshots = []
+            fn_snapshots = []
+            theta_snapshots = []
+            denormflat_theta_snapshots = []
+
+            # Define the callback function as a nested function
+            def callback_fn(xk, *args):
+                jac = jacobian_fn(xk)
+                gradientnorm = np.linalg.norm(jac)
+                hess = hessian_fn(xk)
+                fn = modified_neg_loglikelihood_fn(xk)
+                jac_snapshots.append(jac)
+                gradientnorm_snapshots.append(gradientnorm)
+                hess_snapshots.append(hess)
+                fn_snapshots.append(fn)                
+                theta_snapshots.append(xk)
+                denormflat_theta_snapshots.append(denormalize(xk).flatten())
+
             # Now, let's update the parameters using scipy.optimize.minimize
             if set_bounds:
-                if np.isnan(norm_flat_trimmed_theta[1]):
-                    break
                 if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
                     print("norm_flat_trimmed_theta contains NaN or inf values.")
-                    break
-                result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method='trust-exact', bounds=bounds, jac=jacobian_fn, hess=hessian_fn, options={'gtol': 1, 'maxiter': 100, 'disp': True}) 
-                # result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method='trust-exact', bounds=bounds, jac=jacobian_fn, hess=hessian_fn, options={'maxiter': 100}) 
-                # result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method=method, bounds=bounds, jac=jacobian_fn, hess=hessian_fn,) 
+                    pass
+                # result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method='trust-krylov', bounds=bounds, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100, 'maxiter':100})#, 'disp': True}) 
+                result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method='trust-exact', bounds=bounds, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100, 'maxiter':1000})#, 'disp': True}) 
             else: 
                 result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method='L-BFGS-B')#, options={'disp':True})
             print(f'H{hypothesis_index} converged?: {result.success}')
+            print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
+            _, ax_temp = plt.subplots(2,1, figsize=(4, 8))
+            length = len(fn_snapshots)
+            ax_temp[0].plot(np.arange(length), fn_snapshots, '-o')
+            ax_temp[1].plot(np.arange(length), gradientnorm_snapshots, '-o')
+            ax_temp[0].set_title('Function value')
+            ax_temp[1].set_title('Gradient norm')
+            plt.show(block=False)
+            plt.tight_layout()
             convergence[hypothesis_index] = result.success
             norm_theta_hk = result.x
-            # Put back the np.nan's
-            norm_theta_hk = np.insert(norm_theta_hk, [1,1], np.nan)
-            norm_theta_hk = np.reshape(norm_theta_hk, (-1, 3))
-
-            # Now, let's denormalize the parameters
-            for particle_index in range(0, hypothesis_index + 1):
-                theta_hk[particle_index][0] = norm_theta_hk[particle_index][0] * (roi_max - roi_min) + roi_min
-                if particle_index != 0:
-                    theta_hk[particle_index][1] = norm_theta_hk[particle_index][1] * szx
-                    theta_hk[particle_index][2] = norm_theta_hk[particle_index][2] * szy
+            theta_hk = denormalize(norm_theta_hk)
                             
         # Print the estimated parameters
         print(f'*** hypothesis_index: {hypothesis_index}')
         if hypothesis_index == 0 :
-            print("theta_hk[ 0 ]: ", theta_hk)
+            print(f"theta_hk[ 0 ]: {theta_hk:.3f}")
             ax[0].imshow(roi_image)
             ax[0].set_title("H0\nbg: {:.1f}".format(theta_hk))
             plt.show(block=False)
         else:
-            print("theta_hk[ 0 ]: {:.3f}\tnan\tnan".format(theta_hk[0][0]))
+            print("theta_hk[ 0 i: {:.3f}\tnan\tnan".format(theta_hk[0][0]))
             # Marking each particle with a red cross
             for particle_index in range(1, hypothesis_index + 1):
                 print(f"theta_hk[ {particle_index} ]: {theta_hk[particle_index][0]:.3f}\t{theta_hk[particle_index][1]:.3f}\t{theta_hk[particle_index][2]:.3f}")
                 ax[hypothesis_index].imshow(roi_image)
-                ax[hypothesis_index].set_title(f"H{hypothesis_index} - convgd: {convergence[hypothesis_index]}\nbg: {theta_hk[0][0]:.1f}")
+                ax[hypothesis_index].set_title(f"H{hypothesis_index} - convgd: {convergence[hypothesis_index]}\nbg: {theta_hk[0][0]:.1f}\nLast grad norm: {gradientnorm_snapshots[-1]:.1f}", fontsize=8)
                 red = random.randint(200, 255)
                 green = random.randint(0, 100)
                 blue = random.randint(0, 50)
@@ -820,7 +871,8 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
                 plt.tight_layout()
                 plt.pause(0.1)
                 pass
-        plt.show(block=False)
+            plt.show(block=False)
+            pass
 
         # Calcuate the Fisher Information Matrix (FIM)
         # All iterations finished. Now, let's calculate the Fisher Information Matrix (FIM) under Hk.
@@ -875,11 +927,11 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
                         ddt_modelhk_at_xxyy[particle_index][0] = integrated_psf_x[particle_index] * integrated_psf_y[particle_index]
 
                         # Calculate derivatives w.r.t particle[particle_index]'s x coordinate
-                        first, _ = derivative_int_gauss_1d(xx, theta_hk[particle_index][1], psf_sd, theta_hk[particle_index][0], integrated_psf_x[particle_index])
+                        first = ddt_integrated_psf_1d(xx, theta_hk[particle_index][1], psf_sd) * theta_hk[particle_index][0] * integrated_psf_x[particle_index]
                         ddt_modelhk_at_xxyy[particle_index][1] = first
 
                         # Calculate derivatives w.r.t particle[particle_index]'s y coordinate
-                        first, _ = derivative_int_gauss_1d(yy, theta_hk[particle_index][2], psf_sd, theta_hk[particle_index][0], integrated_psf_y[particle_index])
+                        first = ddt_integrated_psf_1d(yy, theta_hk[particle_index][2], psf_sd) * theta_hk[particle_index][0] * integrated_psf_y[particle_index]
                         ddt_modelhk_at_xxyy[particle_index][2] = first
                         
                     # Calculate the Fisher Information Matrix (FIM) under Hk.
@@ -921,7 +973,12 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
                 
                 # modelhk_at_xxyy = background + (i_0 * psf_x_0 * psf_y_0) + (i_1 * psf_x_1 * psf_y_1) + ...
                 modelhk_at_xxyy = 0.0
-                modelhk_at_xxyy += roi_min
+                if hypothesis_index == 0:
+                    # modelhk_at_xxyy += theta_hk
+                    modelhk_at_xxyy += roi_min
+
+                else:
+                    modelhk_at_xxyy += theta_hk[0][0]
 
                 for particle_index in range(1, hypothesis_index + 1):
                     # Calculate the integral of the normalized 1D psf function for x and y, for the xx-th column and the yy-th row.
@@ -966,3 +1023,26 @@ def generalized_maximum_likelihood_rule(roi_image, mask, psf_sd):
     plt.show(block=False)
     plt.tight_layout()
     pass
+
+
+def test_blurring():
+    psf_sd = 1.39
+    sz = 20# Size of the width and height of the input image to be generated
+    scaling = 1000  # As in the point spread function := scaling * normalized 2D gaussian
+    bg = 500
+    image = np.zeros((sz, sz))
+    x =7.35
+    y = 7.69
+    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    # x = 10.35
+    # y = 14.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    # x = 15.35
+    # y = 6.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    # Adding background
+    image += np.ones(image.shape)*bg
+    image = np.random.poisson(image, size=(image.shape))
+    gaussianblur_max_min_2d(image, psf_sd)
+
+# test_blurring()

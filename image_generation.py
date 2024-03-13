@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as R
 import random
 import nmmn.plots
+from process_algorithms import integrate_gauss_1d
 
 parula = nmmn.plots.parulacmap()
 
@@ -30,28 +31,42 @@ class Dust:
 # I'm trying to decide whether to make the psfconvolimg generation process per particle object to be the objects method or not.
         
 def psfconvolution(particle_x, particle_y, multiplying_constant, psf_sd, imgwidth):
-    """Returns the pixel values to be added to the image
-
-    Args:
-        particle_x (float): x coordinate of particle
-        particle_y (float): y coordinate of particle
-        multiplying_constant (float): constant to multiply the normalized 2D gaussian with
-        psf_sd (float): standard deviation of the psf (radially symmetrical)
-        imgwidth (int): width of the image (in pixels)
-
-    Returns:
-        numpy.array(dtype=int): imgwidth x imgwidth array of the psf_convoluted image
-    """
+    """returns the pixel values to be added to the image based on psf convolution."""
     output = np.zeros((imgwidth, imgwidth))
-    psfsd_squared = psf_sd ** 2
 
     for x in range(imgwidth):
         for y in range(imgwidth):
-            distance_squared = (x - particle_x) ** 2 + (y - particle_y) ** 2
-            pixel_value = multiplying_constant / (4*np.pi) * np.exp(-(distance_squared / (2.0 * psfsd_squared)))
-            output[y, x] = pixel_value # Personal note: remember the indexing here is [y,x]
+            # integrate the psf over the pixel area for both dimensions
+            integral_x = integrate_gauss_1d(x, particle_x, psf_sd)
+            integral_y = integrate_gauss_1d(y, particle_y, psf_sd)
+            
+            # calculate the pixel value as the product of the 1d integrals in x and y, scaled by the multiplying constant
+            pixel_value = multiplying_constant * integral_x * integral_y
+            output[y, x] = pixel_value  # note: [y, x] for row, column indexing
 
-    return output
+    return output  
+    # """Returns the pixel values to be added to the image
+
+    # Args:
+    #     particle_x (float): x coordinate of particle
+    #     particle_y (float): y coordinate of particle
+    #     multiplying_constant (float): constant to multiply the normalized 2D gaussian with
+    #     psf_sd (float): standard deviation of the psf (radially symmetrical)
+    #     imgwidth (int): width of the image (in pixels)
+
+    # Returns:
+    #     numpy.array(dtype=int): imgwidth x imgwidth array of the psf_convoluted image
+    # """
+    # output = np.zeros((imgwidth, imgwidth))
+    # psfsd_squared = psf_sd ** 2
+
+    # for x in range(imgwidth):
+    #     for y in range(imgwidth):
+    #         distance_squared = (x - particle_x) ** 2 + (y - particle_y) ** 2
+    #         pixel_value = multiplying_constant / (4*np.pi) * np.exp(-(distance_squared / (2.0 * psfsd_squared)))
+    #         output[y, x] = pixel_value # Personal note: remember the indexing here is [y,x]
+
+    # return output
 
 def create_hex_positions(n, particledistancecluster):
     """ Creates a list of positions in a hexagonal arrangement

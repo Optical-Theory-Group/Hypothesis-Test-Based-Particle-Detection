@@ -174,13 +174,17 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
         check_w = True
         # Visualize the difference between V1 and V2
         if check_w:
-            _,ax=plt.subplots(1,3)
-            imw = ax[2].imshow(w)
-            ax[2].set_title('w')
-            vmin, vmax = imw.get_clim()
-            ax[0].imshow(v0, vmin=vmin, vmax=vmax), ax[0].set_title('v0')
-            ax[1].imshow(v1, vmin=vmin, vmax=vmax), ax[1].set_title('v1')
-            plt.colorbar(imw, ax=ax.ravel().tolist(), orientation='vertical')
+            # _,ax=plt.subplots(1,3)
+            # imw = ax[2].imshow(w)
+            # ax[2].set_title('w')
+            # vmin, vmax = imw.get_clim()
+            # ax[0].imshow(v0, vmin=vmin, vmax=vmax), ax[0].set_title('v0')
+            # ax[1].imshow(v1, vmin=vmin, vmax=vmax), ax[1].set_title('v1')
+            # plt.colorbar(imw, ax=ax.ravel().tolist(), orientation='vertical')
+            plt.figure()
+            plt.imshow(w)
+            plt.colorbar()
+            plt.show(block=False)
 
         consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
 
@@ -205,6 +209,8 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
     significance_mask = np.zeros(inner_image.shape, dtype=bool)
     # Perform the generalized likelihood ratio test on each subregion
     for i in range(len(roi_infos)):
+        if i % 10 == 0:
+            print(f'Processing subregion {i / len(roi_infos) * 100:.3f}%')
         _, _, _, pfa = generalized_likelihood_ratio_test(roi_image=roi_infos[i][0], psf_sd=psf_sd, iterations=10, fittype=fittype)
         pfa_array[inner_image_pos_idx[0][i], inner_image_pos_idx[1][i]] = pfa
 
@@ -222,17 +228,17 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
     plt.colorbar(), plt.show(block=False)
 
     # Plotting pfa array as an image with log scale colormap
-    plt.figure()
-    pfa_array_log = np.zeros((3,3))
-    min_z_idx = np.unravel_index(np.argmin(pfa_array), pfa_array.shape)
-    min_row, min_col = min_z_idx[0], min_z_idx[1]
-    for i in range(3):
-        for j in range(3):
-                pfa_array_log[i, j] = pfa_array[min_row+i-1,min_col+j-1]
-    plt.imshow(pfa_array_log, cmap='viridis', norm=mcolors.LogNorm())
-    plt.colorbar()
-    plt.title('PFA Image with Log Scale Colormap')
-    plt.show(block=False)
+    # plt.figure()
+    # pfa_array_log = np.zeros((3,3))
+    # min_z_idx = np.unravel_index(np.argmin(pfa_array), pfa_array.shape)
+    # min_row, min_col = min_z_idx[0], min_z_idx[1]
+    # for i in range(3):
+    #     for j in range(3):
+    #             pfa_array_log[i, j] = pfa_array[min_row+i-1,min_col+j-1]
+    # plt.imshow(pfa_array_log, cmap='viridis', norm=mcolors.LogNorm())
+    # plt.colorbar()
+    # plt.title('PFA Image with Log Scale Colormap')
+    # plt.show(block=False)
 
     _, _, pfa_adj = fdr_bh(pfa_array, significance, method='dep')
     pfa_adj = pfa_adj.flatten()
@@ -256,17 +262,17 @@ def main_image_analysis_controller(input_image, psf_sd=1.39, significance=0.05, 
     plt.colorbar(), plt.show(block=False)
 
     # Plotting pfa_adj array as an image with log scale colormap
-    plt.figure()
-    pfa_array_log = np.zeros((3,3))
-    min_z_idx = np.unravel_index(np.argmin(pfa_adj_array), pfa_adj_array.shape)
-    min_row, min_col = min_z_idx[0], min_z_idx[1]
-    for i in range(3):
-        for j in range(3):
-                pfa_array_log[i, j] = pfa_adj_array[min_row+i-1,min_col+j-1]
-    plt.imshow(pfa_array_log, cmap='viridis', norm=mcolors.LogNorm())
-    plt.colorbar()
-    plt.title('PFA adj Image with Log Scale Colormap')
-    plt.show(block=False)
+    # plt.figure()
+    # pfa_array_log = np.zeros((3,3))
+    # min_z_idx = np.unravel_index(np.argmin(pfa_adj_array), pfa_adj_array.shape)
+    # min_row, min_col = min_z_idx[0], min_z_idx[1]
+    # for i in range(3):
+    #     for j in range(3):
+    #             pfa_array_log[i, j] = pfa_adj_array[min_row+i-1,min_col+j-1]
+    # plt.imshow(pfa_array_log, cmap='viridis', norm=mcolors.LogNorm())
+    # plt.colorbar()
+    # plt.title('PFA adj Image with Log Scale Colormap')
+    # plt.show(block=False)
     
     significance_mask[inner_image_pos_idx] = (pfa_adj <= significance).flatten()
     
@@ -394,17 +400,20 @@ fname = 'presentation1.png'
 
 # save_an_image(fname)
 
-def main_test(readfname='image1.png'):
+def main_test(readfname='image1.png', reduce_level=0, psf_sd=4):
     image = im.open(readfname)
     image = np.array(image)
+    image = np.invert(image)
     plt.imshow(image)
+    plt.title('Input Image')
+    plt.colorbar()
     plt.show(block=False)
     # sz = 34
     # image = psfconvolution(particle_x=14, particle_y=14, multiplying_constant=1000, psf_sd=1.39, imgwidth=sz)
-    main_image_analysis_controller(image, consideration_limit_level=0, fittype=0)
+    main_image_analysis_controller(image, psf_sd=psf_sd, consideration_limit_level=reduce_level, fittype=0)
 
 # fname = '3particles_nonoise.tif'
-# main_test(fname)
+
 def test_as_single_roi(readfname):
     image = im.open(readfname)
     image = np.array(image)
@@ -501,9 +510,9 @@ def test_glrt4_with_2_particles_image():
     x = 8.35
     y = 7.69
     image = psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
-    x = 13.35
-    y = 11.69
-    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
+    # x = 13.35
+    # y = 11.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf_sd, imgwidth=sz)
     # Adding background
     image += np.ones(image.shape)*bg
     image = np.random.poisson(image, size=(image.shape))
@@ -524,9 +533,10 @@ def test_glrt4_with_2_particles_image():
 
 # test_glrt4_with_2_particles_image()
 def test_gmlr():
+
     psf_sd = 1.39
-    sz = 20 # Size of the width and height of the input image to be generated
-    scaling = 3000  # As in the point spread function := scaling * normalized 2D gaussian
+    sz = 20# Size of the width and height of the input image to be generated
+    scaling = 30000  # As in the point spread function := scaling * normalized 2D gaussian
     bg = 500
     show_generated_input_image = True
     image = np.zeros((sz, sz))
@@ -536,11 +546,13 @@ def test_gmlr():
     # x = 10.35
     # y = 14.69
     # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
-    # x = 15.35
-    # y = 6.69
-    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    x = 15.35
+    y = 6.69
+    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
     # Adding background
     image += np.ones(image.shape)*bg
+
+    # np.random.seed(42)
     image = np.random.poisson(image, size=(image.shape))
     show_generated_input_image = True
     if show_generated_input_image:    
@@ -596,4 +608,7 @@ def test_gmlr():
     generalized_maximum_likelihood_rule(roi_image=image, mask=consideration_mask, psf_sd=1.39)
 
 test_gmlr()
-pass
+# pass
+# fname = '98x98.tiff'
+# main_test(fname, reduce_level=2, psf_sd=1)
+# pass
