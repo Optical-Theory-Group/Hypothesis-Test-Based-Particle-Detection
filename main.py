@@ -540,70 +540,73 @@ def test_gmlr():
     bg = 500
     show_generated_input_image = True
     image = np.zeros((sz, sz))
-    # x =7.35
-    # y = 7.69
-    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
-    # x = 10.35
-    # y = 14.69
-    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
-    x = 15.35
-    y = 6.69
+    x =7.35
+    y = 7.69
     image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    x = 10.35
+    y = 14.69
+    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    # x = 15.35
+    # y = 6.69
+    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
     # Adding background
     image += np.ones(image.shape)*bg
 
-    # np.random.seed(42)
+    np.random.seed(42)
     image = np.random.poisson(image, size=(image.shape))
-    show_generated_input_image = True
-    if show_generated_input_image:    
-        plt.imshow(image)
-        plt.colorbar()
-        plt.show(block=False)
-    # Define filters
-    h2 = 1/16
-    h1 = 1/4
-    h0 = 3/8
-    g0 = np.array([h2, h1, h0, h1, h2])
-    g1 = np.array([h2, 0, h1, 0, h0, 0, h1, 0, h2])
-    # ROI location mask initialization. At first, all the inner_image is considered as ROI.
+
+    # show_generated_input_image = True
+    # if show_generated_input_image:    
+    #     plt.imshow(image)
+    #     plt.colorbar()
+    #     plt.show(block=False)
+    # # Define filters
+    # h2 = 1/16
+    # h1 = 1/4
+    # h0 = 3/8
+    # g0 = np.array([h2, h1, h0, h1, h2])
+    # g1 = np.array([h2, 0, h1, 0, h0, 0, h1, 0, h2])
+    # # ROI location mask initialization. At first, all the inner_image is considered as ROI.
     consideration_mask = np.ones(image.shape)
-    consideration_limit_level = 0
-    if consideration_limit_level:
-        k0 = create_separable_filter(g0, 3)
-        dip_image = dip.Image(image)
-        v0 = dip.Convolution(dip_image, k0, method="best")
-        k1 = create_separable_filter(g1, 5)
-        v1 = dip.Convolution(v0, k1, method="best")
-        w = v0 - v1
-        check_w = True
-        if check_w:
-            _,ax=plt.subplots(1,3, figsize=(15, 10))
-            ax[0].imshow(v0)
-            ax[0].set_title('v0')
-            ax[1].imshow(v1)
-            ax[1].set_title('v1')
-            ax[2].imshow(w)
-            ax[2].set_title('w')
-            plt.show()
-        consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
+    # consideration_limit_level = 1
+    # if consideration_limit_level:
+    #     k0 = create_separable_filter(g0, 3)
+    #     dip_image = dip.Image(image)
+    #     v0 = dip.Convolution(dip_image, k0, method="best")
+    #     k1 = create_separable_filter(g1, 5)
+    #     v1 = dip.Convolution(v0, k1, method="best")
+    #     w = v0 - v1
+    #     check_w = False
+    #     if check_w:
+    #         _,ax=plt.subplots(1,3, figsize=(15, 10))
+    #         ax[0].imshow(v0)
+    #         ax[0].set_title('v0')
+    #         ax[1].imshow(v1)
+    #         ax[1].set_title('v1')
+    #         ax[2].imshow(w)
+    #         ax[2].set_title('w')
+    #         plt.show()
+    #     consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
 
-        def remove_isolated_pixels(consideration_mask):
-            labeled_mask, num_labels = label(consideration_mask)
-            for label_num in range(1, num_labels + 1):
-                label_indices = np.where(labeled_mask == label_num)
-                if len(label_indices[0]) == 1:
-                    consideration_mask[label_indices] = False
-            return consideration_mask
+    # # def remove_isolated_pixels(consideration_mask):
+    # #     labeled_mask, num_labels = label(consideration_mask), np.max(label(consideration_mask))
+    # #     for label_num in range(1, num_labels + 1):?bounds
+    
+    # #         label_indices = np.where(labeled_mask == label_num)
+    # #         if len(label_indices[0]) == 1:
+    # #             consideration_mask[label_indices] = False
+    # #     return consideration_mask
 
-        consideration_mask = remove_isolated_pixels(consideration_mask)
+    # # consideration_mask = remove_isolated_pixels(consideration_mask)
 
-        viz_consideration_mask = True
-        # Visualize the consideration mask
-        if viz_consideration_mask:
-            _, ax = plt.subplots()
-            ax.imshow(consideration_mask)
-            ax.set_title('consideration_mask')
-            plt.show(block=False)
+    # viz_consideration_mask = True
+    # # Visualize the consideration mask
+    # if viz_consideration_mask:
+    #     fig, ax = plt.subplots()
+    #     im = ax.imshow(consideration_mask)
+    #     ax.set_title('consideration_mask')
+    #     fig.colorbar(im)
+    #     plt.show(block=False)
 
     generalized_maximum_likelihood_rule(roi_image=image, mask=consideration_mask, psf_sd=1.39)
 
