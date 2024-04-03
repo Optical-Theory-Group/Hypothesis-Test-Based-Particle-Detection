@@ -533,35 +533,31 @@ def test_glrt4_with_2_particles_image():
 
 # test_glrt4_with_2_particles_image()
 def test_gmlr():
+    np.random.seed(6)
 
     psf_sd = 1.39
-    sz = 20# Size of the width and height of the input image to be generated
-    scaling = 9000  # As in the point spread function := scaling * normalized 2D gaussian
+    sz = 30# Size of the width and height of the input image to be generated
+    scaling = 3000  # As in the point spread function := scaling * normalized 2D gaussian
     bg = 500
     image = np.zeros((sz, sz))
-    x = 7.5
-    y = 7.5
-    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
-    x = 10.35
-    y = 14.69
-    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
-    x = 15.35
-    y = 6.69
-    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
-    # x = 23.56
-    # y=21.12
-    # image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    num_particles = 2
+    for _ in range(num_particles):
+        x = np.random.rand()*(sz-2.2) + 1.1
+        y = np.random.rand()*(sz-2.2) + 1.1
+        amplitude = scaling * np.random.normal(1,.3)
+        image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=amplitude, psf_sd=psf_sd, imgwidth=sz) 
+
     # Adding background
     image += np.ones(image.shape)*bg
 
-    np.random.seed(42)
     image = np.random.poisson(image, size=(image.shape))
 
-    show_generated_input_image = False
+    show_generated_input_image = True
     if show_generated_input_image:    
         plt.imshow(image)
         plt.colorbar()
         plt.show(block=False)
+        pass
     # Define filters
     h2 = 1/16
     h1 = 1/4
@@ -575,7 +571,7 @@ def test_gmlr():
     v1 = dip.Convolution(v0, k1, method="best")
     filtered_image = np.asarray(v0 - v1)
     filtered_image = filtered_image - np.min(filtered_image)
-    tentative_peak_coordinates = peak_local_max(filtered_image, min_distance=2, threshold_abs=filtered_image.mean()*1)
+    tentative_peak_coordinates = peak_local_max(filtered_image, min_distance=1)
     tentative_peak_coordinates[:, [1, 0]] = tentative_peak_coordinates[:, [0, 1]]
     pass
 
