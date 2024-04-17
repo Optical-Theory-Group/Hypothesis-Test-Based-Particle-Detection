@@ -1,12 +1,9 @@
 import random
-
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.optimize import minimize, Bounds
+from scipy.optimize import minimize
 from scipy.special import erf, gammaln
 from scipy.stats import norm
-
 
 def psfconvolution(particle_x, particle_y, multiplying_constant, psf_sd, imgwidth):
     """returns the pixel values to be added to the image based on psf convolution."""
@@ -504,10 +501,7 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
         pass
     return h0_params, h1_params, crlbs, pfa
 
-
-
-
-def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, psf_sd):
+def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, display_fit_results=False, display_xi_graph=False):
 
     np.set_printoptions(precision=3, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
@@ -545,48 +539,31 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
 
     # Figure showing parameter estimation results for each hypothesis.
     # fig, ax_main = plt.subplots(2, last_h_index + 1, figsize=(2 * (last_h_index + 1), 5))
-    fig, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
-    # Display the positions of the tentative peak coordinates on the dimensions of roi_image
+    if display_fit_results:
+        _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
+        # Create a colormap instance
+        cmap = plt.get_cmap('turbo')# Create a colormap instance
+        
+        for i, coord in enumerate(rough_peaks_xy):
+            x, y = coord # Check whether this is correct.
+            color = cmap(i / len(rough_peaks_xy))  # Use turbo colormap
+            # ax_main[1][0].plot(x, y, 'x', color=color)
+            ax_main[1].text(x, y, f'{i}', fontsize=6, color=color) 
 
-    from matplotlib.cm import ScalarMappable
-
-    # Create a colormap instance
-    cmap = plt.get_cmap('turbo')
-
-    for i, coord in enumerate(tentative_peak_coordinates):
-        x, y = coord
-        color = cmap(i / len(tentative_peak_coordinates))  # Use turbo colormap
-        # ax_main[1][0].plot(x, y, 'x', color=color)
-        ax_main[1].plot(x, y, 'x', color=color)
-
-    # ax_main[1][0].set_xlim(0, szx)
-    # ax_main[1][0].set_ylim(szy, 0) 
-    ax_main[1].set_xlim(0-.5, szx-.5)
-    ax_main[1].set_ylim(szy-.5, 0-.5) 
-    ax_main[1].set_aspect('equal')
-    
-    # Add horizontal colorbar
-    norm = plt.Normalize(vmin=0, vmax=len(tentative_peak_coordinates)-1)
-    sm = ScalarMappable(norm=norm, cmap=cmap)
-    cbar = plt.colorbar(sm, ax=ax_main[1], orientation='horizontal')
-    cbar.set_ticks(range(len(tentative_peak_coordinates)))
-    cbar.set_ticklabels(range(1, len(tentative_peak_coordinates)+1))
-    cbar.set_label('Peak Index')
-    # ax_main[1][0].set_title('Tentative Peak Coordinates', fontsize=8)
-    ax_main[1].set_title('Tentative Peak Coordinates', fontsize=8)
-
-    ax_main[0].imshow(roi_image)
-
-    plt.show(block=False)
-    pass
-    # fig.suptitle('Method: ' + method)
+        ax_main[1].set_xlim(0-.5, szx-.5)
+        ax_main[1].set_ylim(szy-.5, 0-.5) 
+        ax_main[1].set_aspect('equal')
+        ax_main[1].set_title('Tentative Peak Coordinates', fontsize=8)
+        ax_main[0].imshow(roi_image)
+        plt.show(block=False)
+        pass
     
     # variable to check whether the parameter estimation converged
     convergence = np.zeros(last_h_index + 1, dtype=bool)
     xi_drop_count = 0
     
     for hypothesis_index in range(last_h_index + 1): # hypothesis_index is also the number of particles. 
-        if hypothesis_index > len(tentative_peak_coordinates):
+        if hypothesis_index > len(rough_peaks_xy):
             break
         # Initialization
         n_hk_params = n_h0_params + hypothesis_index * (n_hk_params_per_particle) #H0: 1, H1: 5, H2: 8, ...
@@ -621,17 +598,15 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
 
             # Initialize all particle coordinates as the center of mass of the image.
             for particle_index in range(1, hypothesis_index + 1):
-                if len(tentative_peak_coordinates) <= 0:
+                if len(rough_peaks_xy) <= 0:
                     break
-                if particle_index <= len(tentative_peak_coordinates):
-                    theta[particle_index][1] = tentative_peak_coordinates[particle_index-1][0]
-                    theta[particle_index][2] = tentative_peak_coordinates[particle_index-1][1]
+                if particle_index <= len(rough_peaks_xy):
+                    theta[particle_index][1] = rough_peaks_xy[particle_index-1][0]
+                    theta[particle_index][2] = rough_peaks_xy[particle_index-1][1]
                 else:
-                    # randomly pick from tentative peak coordinates and assign
-                    particle_x, particle_y = random.choice(tentative_peak_coordinates)
-                    theta[particle_index][1] = particle_x
-                    theta[particle_index][2] = particle_y
-                    particle_x, particle_y = random.choice(tentative_peak_coordinates)
+                    # assign random positions. 
+                    theta[particle_index][1] = random.random() * (szx - 1)
+                    theta[particle_index][2] = random.random() * (szy - 1)
 
         def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy):
             if hypothesis_index == 0:
@@ -694,17 +669,17 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
                     th[particle_index][2] = n_th[particle_index][2] * szy
                 return th
 
-            def denorm_jacobian(nft_jac):
-                fn_jac = np.insert(nft_jac, [1,1], np.nan)
-                n_jac = np.reshape(fn_jac, (-1, 3))
-                jac = np.zeros((hypothesis_index + 1, 3))
-                jac[0][0] = n_jac[0][0] * roi_max
-                jac[0][1] = jac[0][2] = np.nan
-                for particle_index in range(1, hypothesis_index + 1):
-                    jac[particle_index][0] = n_jac[particle_index][0] / (roi_max - roi_min) / 2 / np.pi / psf_sd**2
-                    jac[particle_index][1] = n_jac[particle_index][1] / szx
-                    jac[particle_index][2] = n_jac[particle_index][2] / szy
-                return jac
+            # def denorm_jacobian(nft_jac):
+            #     fn_jac = np.insert(nft_jac, [1,1], np.nan)
+            #     n_jac = np.reshape(fn_jac, (-1, 3))
+            #     jac = np.zeros((hypothesis_index + 1, 3))
+            #     jac[0][0] = n_jac[0][0] * roi_max
+            #     jac[0][1] = jac[0][2] = np.nan
+            #     for particle_index in range(1, hypothesis_index + 1):
+            #         jac[particle_index][0] = n_jac[particle_index][0] / (roi_max - roi_min) / 2 / np.pi / psf_sd**2
+            #         jac[particle_index][1] = n_jac[particle_index][1] / szx
+            #         jac[particle_index][2] = n_jac[particle_index][2] / szy
+            #     return jac
 
             # Maximum Likelihood Estimation of Hk
             def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta):
@@ -850,11 +825,11 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
                 if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
                     print("norm_flat_trimmed_theta contains NaN or inf values.")
                     pass
-                print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
+                # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
                 result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method=method, bounds=bounds, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             else: 
                 result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
-            print(f'H{hypothesis_index} converged?: {result.success}')
+            # print(f'H{hypothesis_index} converged?: {result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
             length = len(fn_snapshots)
             convergence[hypothesis_index] = result.success
@@ -865,54 +840,27 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
                             
         # Print the estimated parameters
         print(f'*** hypothesis_index: {hypothesis_index}')
-        # if hypothesis_index == 0 :
-        #     print(f"theta[ 0 ]: {theta:.3f}")
-        #     ax_main[0][0].imshow(roi_image)
-        #     ax_main[0][0].set_title("H0\nbg: {:.1f}".format(theta), fontsize=8)
-        #     # ax_main[1][0].text(0.5, 0.5, 'N/A', horizontalalignment='center', verticalalignment='center', transform=ax_main[1][0].transAxes, fontsize=8)
-        #     plt.show(block=False)
-        # else:
-        #     print("theta[ 0 i: {:.3f}\tnan\tnan".format(theta[0][0]))
-        #     # Marking each particle with a red cross
-        #     for particle_index in range(1, hypothesis_index + 1):
-        #         print(f"theta[ {particle_index} ]: {theta[particle_index][0]:.3f}\t{theta[particle_index][1]:.3f}\t{theta[particle_index][2]:.3f}")
-        #         ax_main[0][hypothesis_index].imshow(roi_image)
-        #         ax_main[0][hypothesis_index].set_title(f"H{hypothesis_index} - convgd: {convergence[hypothesis_index]}\nbg: {theta[0][0]:.1f}", fontsize=8)
-        #         red = random.randint(200, 255)
-        #         green = random.randint(0, 100)
-        #         blue = random.randint(0, 50)
-        #         color_code = '#%02X%02X%02X' % (red, green, blue)
-        #         ax_main[0][hypothesis_index].scatter(theta[particle_index][1], theta[particle_index][2], s=100, color=color_code, marker='x')
-        #         ax_main[0][hypothesis_index].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
-        #                                     f'  {theta[particle_index][0]:.1f}', color=color_code, fontsize=10,) 
 
-        #         ax_main[1][hypothesis_index].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
-        #         ax_main[1][hypothesis_index].plot(np.arange(length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
-        #         ax_main[1][hypothesis_index].set_ylim(bottom=0)
-
-        #         plt.tight_layout()
-        #         plt.pause(0.1)
-        #         plt.show(block=False)
-
-        # Marking each particle with a red cross
-        ax_main[0].cla()
-        for particle_index in range(1, hypothesis_index + 1):
-            print(f"theta[ {particle_index} ]: {theta[particle_index][0]:.3f}\t{theta[particle_index][1]:.3f}\t{theta[particle_index][2]:.3f}")
-            ax_main[0].imshow(roi_image)
+        if display_fit_results and hypothesis_index > 0:
+            # ax_main[0].cla()
+            _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
             ax_main[0].set_title(f"H{hypothesis_index} - convgd: {convergence[hypothesis_index]}\nbg: {theta[0][0]:.1f}", fontsize=8)
-            red = random.randint(200, 255)
-            green = random.randint(0, 100)
-            blue = random.randint(0, 50)
-            color_code = '#%02X%02X%02X' % (red, green, blue)
-            ax_main[0].scatter(theta[particle_index][1], theta[particle_index][2], s=10, color=color_code, marker='x')
-            ax_main[0].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
-                                        f'  {theta[particle_index][0]:.1f}', color=color_code, fontsize=10,) 
-            # ax_main[1].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
-            # ax_main[1].plot(np.arange(length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
-            # ax_main[1].set_ylim(bottom=0)
+            for particle_index in range(1, hypothesis_index + 1):
+                # print(f"theta[ {particle_index} ]: {theta[particle_index][0]:.3f}\t{theta[particle_index][1]:.3f}\t{theta[particle_index][2]:.3f}")
+                ax_main[0].imshow(roi_image)
+                red = random.randint(200, 255)
+                green = random.randint(0, 100)
+                blue = random.randint(0, 50)
+                color_code = '#%02X%02X%02X' % (red, green, blue)
+                ax_main[0].scatter(theta[particle_index][1], theta[particle_index][2], s=10, color=color_code, marker='x')
+                ax_main[0].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
+                                            f'  {theta[particle_index][0]:.1f}', color=color_code, fontsize=10,) 
+            ax_main[1].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
+            ax_main[1].plot(np.arange(length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
+            ax_main[1].set_ylim(bottom=0)
             plt.tight_layout()
-            plt.pause(0.1)
             plt.show(block=False)
+            pass
 
         # Calcuate the Fisher Information Matrix (FIM)
         # All iterations finished. Now, let's calculate the Fisher Information Matrix (FIM) under Hk.
@@ -1039,7 +987,7 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
         # else:
         #     xi[hypothesis_index] = lli[hypothesis_index] 
 
-        print(f'{sum_loglikelihood=:.2f}, {log_det_fisher_mat=:.2f}')
+        # print(f'{sum_loglikelihood=:.2f}, {log_det_fisher_mat=:.2f}')
         prev_xi_assigned = False
         if len(xi) > 0:
             prev_xi = xi[-1]
@@ -1055,33 +1003,40 @@ def generalized_maximum_likelihood_rule(roi_image, tentative_peak_coordinates, p
             xi += [lli[-1] - penalty_i[-1]]
         else:
             xi += [lli[-1]]
-            break
+            print(f'penalty_i < 0. {hypothesis_index=} xi is set to lli.')
+            # break
 
         if prev_xi_assigned and prev_xi > xi[-1]:
             xi_drop_count += 1
             print(f'xi_drop_count: {xi_drop_count}')
          
         
-        if xi_drop_count >= 2:
+        if xi_drop_count >= 1:
+            print('drop count >= 1. Breaking loop.')
             break
 
+    if display_xi_graph:
+        max_xi_index = np.nanargmax(xi)
+        _, axs = plt.subplots(3,1, figsize=(4.2,3.9))
+        ax = axs[0]
+        length = len(xi)
+        ax.plot(range(length), xi, 'o-', color='purple')              
+        ax.set_ylabel('xi\n(logL- penalty)')
+        ax.axvline(x=max_xi_index, color='gray', linestyle='--')
+        ax = axs[1]
+        ax.plot(range(length), lli, 'o-', color='navy')
+        ax.set_ylabel('loglikelihood')
+        ax = axs[2]
+        ax.axhline(y=0, color='black', linestyle='--')
+        # ax.plot(range(last_h_index + 1), np.exp(penalty_i * 2), 'o-', color='crimson') 
+        ax.plot(range(length), penalty_i, 'o-', color='crimson') 
+        ax.set_ylabel('penalty')
+        ax.set_xlabel('hypothesis_index')
+        plt.tight_layout()
+        plt.show(block=False)
+        pass
 
-    max_xi_index = np.nanargmax(xi)
-    _, axs = plt.subplots(3,1, figsize=(4.2,3.9))
-    ax = axs[0]
-    length = len(xi)
-    ax.plot(range(length), xi, 'o-', color='purple')              
-    ax.set_ylabel('xi\n(logL- penalty)')
-    ax.axvline(x=max_xi_index, color='gray', linestyle='--')
-    ax = axs[1]
-    ax.plot(range(length), lli, 'o-', color='navy')
-    ax.set_ylabel('loglikelihood')
-    ax = axs[2]
-    ax.axhline(y=0, color='black', linestyle='--')
-    # ax.plot(range(last_h_index + 1), np.exp(penalty_i * 2), 'o-', color='crimson') 
-    ax.plot(range(length), penalty_i, 'o-', color='crimson') 
-    ax.set_ylabel('penalty')
-    ax.set_xlabel('hypothesis_index')
-    plt.tight_layout()
-    plt.show(block=False)
-     pass
+    # Determine the most likely hypothesis
+    estimated_particle_number = np.argmax(xi)
+    return estimated_particle_number
+

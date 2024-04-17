@@ -1,6 +1,3 @@
-# from scipy.ndimage import binary_closing, label
-# from scipy.signal import convolve
-# import matplotlib.colors as colors
 import numpy as np
 from numpy.linalg import matrix_power
 import matplotlib.pyplot as plt
