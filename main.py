@@ -1,4 +1,5 @@
 from skimage.feature import peak_local_max
+import diplib as dip
 import numpy as np
 
 def getbox(input_image, ii, sz, x_positions, y_positions):

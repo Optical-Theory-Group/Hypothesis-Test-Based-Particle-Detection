@@ -5,22 +5,6 @@ from scipy.optimize import minimize
 from scipy.special import erf, gammaln
 from scipy.stats import norm
 
-def psfconvolution(particle_x, particle_y, multiplying_constant, psf_sd, imgwidth):
-    """returns the pixel values to be added to the image based on psf convolution."""
-    output = np.zeros((imgwidth, imgwidth))
-
-    for x in range(imgwidth):
-        for y in range(imgwidth):
-            # integrate the psf over the pixel area for both dimensions
-            integral_x = integrate_gauss_1d(x, particle_x, psf_sd)
-            integral_y = integrate_gauss_1d(y, particle_y, psf_sd)
-            
-            # calculate the pixel value as the product of the 1d integrals in x and y, scaled by the multiplying constant
-            pixel_value = multiplying_constant * integral_x * integral_y
-            output[y, x] = pixel_value  # note: [y, x] for row, column indexing
-
-    return output  
-
 def gaussianblur_max_min_2d(data, sigma):
     """ Returns the maximum and minimum values of the 2D Gaussian blurred image.
     Args:
