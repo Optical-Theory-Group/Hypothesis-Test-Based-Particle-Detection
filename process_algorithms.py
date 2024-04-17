@@ -787,9 +787,9 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
                 return d2dt2_nll_2d
 
             # Initialize storage for the jacobian and hessian snapshots
-            jac_snapshots = []
+            # jac_snapshots = []
             gradientnorm_snapshots = []
-            hess_snapshots = []
+            # hess_snapshots = []
             fn_snapshots = []
             theta_snapshots = []
             denormflat_theta_snapshots = []
@@ -934,8 +934,6 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
                             fisher_mat[kk, ll] += ddt_modelhk_at_xxyy[particle_index_kk][param_type_kk] * ddt_modelhk_at_xxyy[particle_index_ll][param_type_ll] / modelhk_at_xxyy * scaling1 * scaling2
                             fisher_mat[ll, kk] = fisher_mat[kk, ll] # The FIM is symmetric.
         
-                    
-
         # Now I got the FIM under Hk. Let's use this to calculate the Xi_k (GMLR criterion)
         # Xi[k] = log(likelihood(data; MLE params under Hk)) - 1/2 * log(det(FIM under Hk))
 
@@ -947,31 +945,13 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
                 # Let's get the actual pixel value
                 pixel_val = roi_image[yy, xx]
                 modelhk_at_xxyy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, xx, yy)
-                # We not have the model value at (xx, yy) under Hk. Let's calculate the loglikelihood.
-                # likelihood = modelhk_at_xxyy**pixel_val * exp(-modelhk_at_xxyy) / factorial(pixel_val)
-                # loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - pixel_val * np.log(pixel_val) + pixel_val
-                # modified_loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy # - pixel_val * np.log(pixel_val)
-                # loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - pixel_val * np.log(pixel_val) + pixel_val
+                # We now have the model value at (xx, yy) under Hk. Let's calculate the loglikelihood.
                 loglikelihood = pixel_val * np.log(max(modelhk_at_xxyy, 1e-2)) - modelhk_at_xxyy - gammaln(pixel_val + 1) 
-                # sum_loglikelihood += modified_loglikelihood
                 sum_loglikelihood += loglikelihood
         
         # Let's calculate the second term of the Xi_k (GMLR criterion), which is -1/2 * log(det(FIM under Hk))
         _, log_det_fisher_mat = np.linalg.slogdet(fisher_mat)
 
-        # xi[hypothesis_index] = sum_loglikelihood - 0.5 * log_det_fisher_mat 
-        # penalty_i[hypothesis_index] = 0.5 * log_det_fisher_mat
-        # if np.isinf(penalty_i[hypothesis_index]):
-        #     penalty_i[hypothesis_index] = np.nan
-        # lli[hypothesis_index] = sum_loglikelihood
-        # if np.isinf(lli[hypothesis_index]):
-        #     lli[hypothesis_index] = np.nan
-        # if penalty_i[hypothesis_index] > 0:
-        #     xi[hypothesis_index] = lli[hypothesis_index] - penalty_i[hypothesis_index]
-        # else:
-        #     xi[hypothesis_index] = lli[hypothesis_index] 
-
-        # print(f'{sum_loglikelihood=:.2f}, {log_det_fisher_mat=:.2f}')
         prev_xi_assigned = False
         if len(xi) > 0:
             prev_xi = xi[-1]

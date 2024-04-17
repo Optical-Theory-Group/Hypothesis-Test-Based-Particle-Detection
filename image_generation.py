@@ -1,7 +1,6 @@
 import numpy as np
-from numpy.linalg import matrix_power
 import matplotlib.pyplot as plt
-from scipy.spatial.transform import Rotation as R
+import cv2
 import random
 import nmmn.plots
 from process_algorithms import integrate_gauss_1d
