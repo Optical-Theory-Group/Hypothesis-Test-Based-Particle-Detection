@@ -4,6 +4,10 @@ import numpy as np
 from scipy.optimize import minimize
 from scipy.special import erf, gammaln
 from scipy.stats import norm
+import csv
+import os
+import csv
+from datetime import date
 
 def gaussianblur_max_min_2d(data, sigma):
     """ Returns the maximum and minimum values of the 2D Gaussian blurred image.
@@ -485,7 +489,9 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
         pass
     return h0_params, h1_params, crlbs, pfa
 
-def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, display_fit_results=False, display_xi_graph=False):
+def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_h_index=7, random_seed=0, display_fit_results=False, display_xi_graph=False):
+
+    np.random.seed(0)
 
     np.set_printoptions(precision=3, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
@@ -508,7 +514,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
     n_h0_params = 1
 
     # Test up to H4 for now (1/14/2024 Mo, temporary)
-    last_h_index = 40
+    last_h_index = last_h_index
     
     # Initialize xi, the criterion for H_k
     # xi = np.zeros(last_h_index + 1) 
@@ -543,9 +549,10 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
         pass
     
     # variable to check whether the parameter estimation converged
-    convergence = np.zeros(last_h_index + 1, dtype=bool)
     xi_drop_count = 0
     
+    fit_results = [] 
+
     for hypothesis_index in range(last_h_index + 1): # hypothesis_index is also the number of particles. 
         if hypothesis_index > len(rough_peaks_xy):
             break
@@ -816,14 +823,27 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
             # print(f'H{hypothesis_index} converged?: {result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
             length = len(fn_snapshots)
-            convergence[hypothesis_index] = result.success
+            convergence = result.success
             norm_theta = result.x
 
             # Retrieve the estimated parameters.
             theta = denormalize(norm_theta)           
                             
-        # Print the estimated parameters
-        print(f'*** hypothesis_index: {hypothesis_index}')
+        # Store fit results
+        if hypothesis_index == 0:
+            current_hypothesis_fit_result = {
+                'hypothesis_index': hypothesis_index,
+                'theta': theta,
+                'convergence': True,
+            }
+        else:
+            current_hypothesis_fit_result = {
+                'hypothesis_index': hypothesis_index,
+                'theta': theta,
+                'convergence': convergence,
+            }
+        # Append the fit result to fit_results
+        fit_results.append(current_hypothesis_fit_result)
 
         if display_fit_results and hypothesis_index > 0:
             # ax_main[0].cla()
@@ -845,6 +865,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
             plt.tight_layout()
             plt.show(block=False)
             pass
+
 
         # Calcuate the Fisher Information Matrix (FIM)
         # All iterations finished. Now, let's calculate the Fisher Information Matrix (FIM) under Hk.
@@ -975,9 +996,16 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
             print(f'xi_drop_count: {xi_drop_count}')
          
         
-        if xi_drop_count >= 1:
-            print('drop count >= 1. Breaking loop.')
-            break
+        if xi_drop_count >= 2:
+            print('drop count >= 2. Breaking loop.')
+            # break
+
+    # Store xi, lli and penalty_i to test_metric
+    test_metrics = {
+        'xi': xi,
+        'lli': lli,
+        'penalty_i': penalty_i,
+    }
 
     if display_xi_graph:
         max_xi_index = np.nanargmax(xi)
@@ -1001,6 +1029,8 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, displ
         pass
 
     # Determine the most likely hypothesis
-    estimated_particle_number = np.argmax(xi)
-    return estimated_particle_number
+    estimated_num_particles = np.argmax(xi)
+
+    return estimated_num_particles, fit_results, test_metrics 
+
 

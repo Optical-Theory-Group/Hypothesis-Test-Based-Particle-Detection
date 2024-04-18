@@ -1,8 +1,9 @@
+import argparse
 from image_generation import psfconvolution
+from datetime import date
+import csv
 from PIL import Image as im
 import os
-import datetime
-from matplotlib.cm import ScalarMappable
 import pandas as pd
 import seaborn as sns
 from process_algorithms import generalized_likelihood_ratio_test, fdr_bh, generalized_maximum_likelihood_rule
@@ -13,6 +14,8 @@ import math
 import numpy as np
 from main import make_subregions, create_separable_filter, get_tentative_peaks
 import diplib as dip
+import glob
+import shutil
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -137,9 +140,10 @@ def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_
 
     # Examination of the significance mask might be implemented here. 
  
-def make_and_process_image(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1.39, show_fig=False, verbose=False):
+def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1.39, show_fig=False, verbose=False):
 
-    image = psfconvolution(particle_x=x, particle_y=y, multiplying_constant=intensity, psf_sd=psf, imgwidth=sz)
+    peaks_info = [{'x': x, 'y': y, 'prefactor': intensity, 'psf_sd': psf}]
+    image = psfconvolution(peaks_info, sz)
     # Adding background
     image += np.ones(image.shape)*bg
     image = np.random.poisson(image, size=(image.shape))
@@ -184,7 +188,7 @@ def make_and_process_image(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1.39, 
 
 # make_and_process_image()
 
-def vary_particle_width():
+def test_glrt_on_varying_psf():
     bg = 0
     intensity = 1000 
     psfs = np.array([.25, .5, 1, 1.5, 2, 4])*1.39
@@ -195,7 +199,7 @@ def vary_particle_width():
         for _ in range(30):
             x = np.random.rand() + 5.5 
             y = np.random.rand() + 5.5
-            p = make_and_process_image(x=x, y=y, intensity=intensity, bg=bg, psf=psf, sz=20, show_fig=False)
+            p = make_and_process_image_glrt(x=x, y=y, intensity=intensity, bg=bg, psf=psf, sz=20, show_fig=False)
             p_per_psf.append(p)
             df = pd.concat([df, pd.DataFrame.from_records([{'psf':psf, 'p':p}])], ignore_index=True)
     plt.figure()
@@ -213,7 +217,8 @@ def test_glrt4_with_2_particles_image():
     image = np.zeros((sz, sz))
     x = 5
     y = 5
-    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=scaling, psf_sd=psf_sd, imgwidth=sz)
+    peaks_info = [{'x': x, 'y': y, 'prefactor': scaling, 'psf_sd': psf_sd}]
+    image += psfconvolution(peaks_info, sz)
     show_fig = True
     image += np.ones(image.shape)*bg
     np.random.seed(42)
@@ -233,75 +238,77 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def test_gmlr():
-    np.random.seed(42)
-    psf_sd = 1.39
-    sz = 30# Size of the width and height of the input image to be generated
-    amplitude = 1000 #* np.random.rand() # As in the point spread function := amplitude * normalized 2D gaussian
-    # amplitude = 1000 #* np.random.rand() # As in the point spread function := amplitude * normalized 2D gaussian
-    bg = 500
-    image = np.zeros((sz, sz))
+# def test_gmlr_with_image_generation():
+#     np.random.seed(42)
+#     psf_sd = 1.39
+#     sz = 30# Size of the width and height of the input image to be generated
+#     amplitude = 1000 #* np.random.rand() # As in the point spread function := amplitude * normalized 2D gaussian
+#     # amplitude = 1000 #* np.random.rand() # As in the point spread function := amplitude * normalized 2D gaussian
+#     bg = 500
+#     image = np.zeros((sz, sz))
 
-    show_generated_input_image = True
-    weak_peak_test = True
-    if show_generated_input_image:    
-        _, ax = plt.subplots(1,2, figsize=(10,5))
-        ax[0].set_xlim(0-.5, sz-.5)
-        ax[0].set_ylim(sz-.5, 0-.5) 
-        ax[1].set_xlim(0-.5, sz-.5)
-        ax[1].set_ylim(sz-.5, 0-.5) 
-    if weak_peak_test:
-        for j in range(3):
-            y = 9 * (j + 0.2)
-            for i in range(3):
-                x = 8 * (i + 0.9)
-                image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=amplitude, psf_sd=psf_sd, imgwidth=sz)
-                amplitude -= 100
-                # ax[0].plot(x, y, 'ro', markersize=15)
-                if show_generated_input_image:    
-                    ax[0].imshow(image)
-                    ax[0].text(x-.5, y+.5, 'x', fontsize=9, color='red') 
-                    ax[0].text(x-.5, y+.5, f'  {amplitude:.1e}', fontsize=9, color='red') 
-                    ax[1].text(x-.5, y+.5, 'o', fontsize=20, color='gray')
-        plt.show(block=False)
-    else:
-        num_particles = np.random.randint(0, 8)
-        for _ in range(num_particles):
-            x = np.random.rand()*(sz-3) + 1.1
-            y = np.random.rand()*(sz-3) + 1.1
-            amplitude = max(np.random.normal(1,.3), 0.1) * amplitude
-            image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=amplitude, psf_sd=psf_sd, imgwidth=sz) 
-    # Adding background
-    image += np.ones(image.shape)*bg
-    image = np.random.poisson(image, size=(image.shape))
-    tentative_peak_coordinates = get_tentative_peaks(image, min_distance=1)
+#     show_generated_input_image = True
+#     weak_peak_test = True
+#     if show_generated_input_image:    
+#         _, ax = plt.subplots(1,2, figsize=(10,5))
+#         ax[0].set_xlim(0-.5, sz-.5)
+#         ax[0].set_ylim(sz-.5, 0-.5) 
+#         ax[1].set_xlim(0-.5, sz-.5)
+#         ax[1].set_ylim(sz-.5, 0-.5) 
+#     if weak_peak_test:
+#         for j in range(3):
+#             y = 9 * (j + 0.2)
+#             for i in range(3):
+#                 x = 8 * (i + 0.9)
+#                 peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+#                 image += psfconvolution(peaks_info, sz)
+#                 amplitude -= 100
+#                 # ax[0].plot(x, y, 'ro', markersize=15)
+#                 if show_generated_input_image:    
+#                     ax[0].imshow(image)
+#                     ax[0].text(x-.5, y+.5, 'x', fontsize=9, color='red') 
+#                     ax[0].text(x-.5, y+.5, f'  {amplitude:.1e}', fontsize=9, color='red') 
+#                     ax[1].text(x-.5, y+.5, 'o', fontsize=20, color='gray')
+#         plt.show(block=False)
+#     else:
+#         num_particles = np.random.randint(0, 8)
+#         for _ in range(num_particles):
+#             x = np.random.rand()*(sz-3) + 1.1
+#             y = np.random.rand()*(sz-3) + 1.1
+#             amplitude = max(np.random.normal(1,.3), 0.1) * amplitude
+#             peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+#             image += psfconvolution(peaks_info, sz)
+#     # Adding background
+#     image += np.ones(image.shape)*bg
+#     image = np.random.poisson(image, size=(image.shape))
+#     tentative_peak_coordinates = get_tentative_peaks(image, min_distance=1)
 
-    show_generated_input_image = True
-    if show_generated_input_image:    
-        im = ax[0].imshow(image)
-        plt.colorbar(im, ax=ax[0])  # Add colorbar to ax[0]
-        cmap = plt.get_cmap('plasma')
-        ax[1].set_xlim(0-.5, sz-.5)
-        ax[1].set_ylim(sz-.5, 0-.5) 
-        ax[1].set_aspect('equal')
-        for i, coord in enumerate(tentative_peak_coordinates):
-            x, y = coord
-            color = cmap(i / len(tentative_peak_coordinates))
-            ax[1].text(y-.5, x+.5, f'x', fontsize=20, color=color) 
-            plt.pause(0.1)
-        # Add horizontal colorbar
-        norm = plt.Normalize(vmin=0, vmax=len(tentative_peak_coordinates)-1)
-        sm = ScalarMappable(norm=norm, cmap=cmap)
-        plt.show(block=False)
-        cbar = plt.colorbar(sm, ax=ax[1])
-        cbar.ax.invert_yaxis()
-        cbar.set_ticks(range(len(tentative_peak_coordinates)))
-        cbar.set_ticklabels(range(1, len(tentative_peak_coordinates)+1))
-        cbar.set_label('Peak Index')
-        plt.tight_layout()
-        plt.pause(0.1)
+#     show_generated_input_image = True
+#     if show_generated_input_image:    
+#         im = ax[0].imshow(image)
+#         plt.colorbar(im, ax=ax[0])  # Add colorbar to ax[0]
+#         cmap = plt.get_cmap('plasma')
+#         ax[1].set_xlim(0-.5, sz-.5)
+#         ax[1].set_ylim(sz-.5, 0-.5) 
+#         ax[1].set_aspect('equal')
+#         for i, coord in enumerate(tentative_peak_coordinates):
+#             x, y = coord
+#             color = cmap(i / len(tentative_peak_coordinates))
+#             ax[1].text(y-.5, x+.5, f'x', fontsize=20, color=color) 
+#             plt.pause(0.1)
+#         # Add horizontal colorbar
+#         norm = plt.Normalize(vmin=0, vmax=len(tentative_peak_coordinates)-1)
+#         sm = ScalarMappable(norm=norm, cmap=cmap)
+#         plt.show(block=False)
+#         cbar = plt.colorbar(sm, ax=ax[1])
+#         cbar.ax.invert_yaxis()
+#         cbar.set_ticks(range(len(tentative_peak_coordinates)))
+#         cbar.set_ticklabels(range(1, len(tentative_peak_coordinates)+1))
+#         cbar.set_label('Peak Index')
+#         plt.tight_layout()
+#         plt.pause(0.1)
 
-    generalized_maximum_likelihood_rule(roi_image=image, tentative_peak_coordinates=tentative_peak_coordinates, psf_sd=1.39)
+#     generalized_maximum_likelihood_rule(roi_image=image, tentative_peak_coordinates=tentative_peak_coordinates, psf_sd=1.39)
 
 def make_images(n_img=100, psf_sd=1.39, sz=50, bg=500, brightness=9000):
     for img_idx in range(n_img):
@@ -313,23 +320,23 @@ def make_images(n_img=100, psf_sd=1.39, sz=50, bg=500, brightness=9000):
             amplitude = np.random.normal(1,.2) * brightness
             if 1/np.pi/psf_sd**2 * amplitude < 0.1 * bg:
                 amplitude = 0.1 * bg * np.pi * psf_sd**2
-            image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=amplitude, psf_sd=psf_sd, imgwidth=sz) 
+            peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+            image += psfconvolution(peaks_info, sz)
             # Create the directory if it doesn't exist
         image = np.random.poisson(image, size=(image.shape))
         os.makedirs('./test_images', exist_ok=True)
         fname = f'{img_idx}_{num_particles}particles.png'
         plt.imsave(arr=image, fname=f'./test_images/{fname}')
 
-def generate_test_images(amp_to_bgs=[20, 3], amp_sds=[0, .3], n_per_condition=10, psf_sd=1.39, sz=20, bg=500, ):
-    print(f'Generating test images with {n_per_condition} images per condition')
+def generate_test_images(folder_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
+    np.random.seed(random_seed)
+    print(f'Generating test images with {n_images} images per condition')
     n_particle_min = 0
     n_particle_max = sz // 5
-    idstring = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     for amp_to_bg in amp_to_bgs:
         for amp_sd in amp_sds:
-            folder_name = f"amp_to_bg_{amp_to_bg}_amp_sd_{amp_sd}-{idstring}"
             os.makedirs(folder_name, exist_ok=True)
-            for img_idx in range(n_per_condition):
+            for img_idx in range(n_images):
                 image = np.ones((sz, sz), dtype=float) * bg
                 num_particles = np.random.randint(n_particle_min, n_particle_max+1)
                 # num_particles = 1
@@ -339,124 +346,85 @@ def generate_test_images(amp_to_bgs=[20, 3], amp_sds=[0, .3], n_per_condition=10
                     amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
                     if amplitude <= 0: 
                         print('Warning: Amplitude is less than or equal to 0')
-                    image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=amplitude, psf_sd=psf_sd, imgwidth=sz)
+                        peaks_info = []
+                    else:
+                        peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+                    image += psfconvolution(peaks_info, sz)
                 # Add Poisson noise
                 image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
                 img_filename = f"img{img_idx}_{num_particles}particles.tiff"
                 plt.imshow(image, cmap='gray')
-                plt.savefig(os.path.join(folder_name, img_filename), format='tiff')
+                pil_image = im.fromarray(image.astype(np.uint16))
+                pil_image.save(os.path.join(folder_name, img_filename))
                 plt.close()
-
-def test_separation():
-    pass
-
-def test_model(specific_test_data_foldername, psf_sd=1.39):
-    # List up all png files.
-    tiff_files = []
-    for file in os.listdir(specific_test_data_foldername):
-        if file.endswith(".tiff"):
-            tiff_files.append(os.path.join(specific_test_data_foldername, file))
-
-    # Define load_tiff_file function
-    def load_tiff_file(file_path):
-        
-        image = np.array(im.open(file_path))
-        image = np.array(image)
-        return image
-
-    confusion_table = np.zeros((21,21))
-    for file in tiff_files:
-        image = load_tiff_file(file)
-        # Extract the true number of particles from the filename
-        basename = os.path.basename(file)
-        # Extract the true number of particles from the filename
-        parts = basename.split('_')
-        num_particles_part = parts[1]
-        # Split this part on 'particles' to get the number
-        actual_num_particles = int(num_particles_part.split('particles')[0])
-
-        # Find tentative peaks
-        tentative_peaks = get_tentative_peaks(image, min_distance=1)
-        rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
-        estimated_num_particles = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd,) 
-        print(f'============ Test result: {basename=} num_particles={actual_num_particles}, estimated_num_particles={estimated_num_particles}')                                                            
-        confusion_table[actual_num_particles, estimated_num_particles] += 1
-        
-    # Save the confusion table
-    result_foldername = specific_test_data_foldername + "-test_result"
-    os.makedirs(result_foldername, exist_ok=True)
-    df = pd.DataFrame(confusion_table)
-    csv_path = os.path.join(result_foldername, f'row-actual_col-est.csv')
-    df.to_csv(csv_path, index=False)
-
     
-test_model('amp_to_bg_20_amp_sd_0-20240410_172153')
-pass
 
 
-def snr_test(amp_sd=0, psf_sd=1.39, sz=40, bg=500, n_particle_min=0, n_particle_max=4, n_per_condition=100):
-    # Build confusion table
-    for amp_to_bg in [20, 2]:
-        confusion_table = np.zeros((n_particle_max+1, n_particle_max+1))
-        idstring = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        for i in range(n_per_condition):
-            # Image Generation
-            image = np.ones((sz, sz), dtype=float) * bg
-            num_particles = np.random.randint(n_particle_min, n_particle_max+1)
-            # num_particles = 1
-            for _ in range(num_particles):
-                x = np.random.rand() * (sz - 3.1) + 2.1
-                y = np.random.rand() * (sz - 3.1) + 2.1
-                amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
-                if amplitude <= 0: 
-                    print('Warning: Amplitude is less than or equal to 0')
-                image += psfconvolution(particle_x=x, particle_y=y, multiplying_constant=amplitude, psf_sd=psf_sd, imgwidth=sz)
-            # Add Poisson noise
-            image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-            # plt.imshow(image)
-            # plt.show(block=False)
-            tentative_peaks = get_tentative_peaks(image, min_distance=1)
-            rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
-            estimated_num_particles = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd,) 
-                                                                        #   display_xi_graph=True,
-                                                                        #   display_fit_results=True)
+
+# def snr_test(amp_sd=0, psf_sd=1.39, sz=40, bg=500, n_particle_min=0, n_particle_max=4, n_per_condition=100):
+#     # Build confusion table
+#     for amp_to_bg in [20, 2]:
+#         confusion_table = np.zeros((n_particle_max+1, n_particle_max+1))
+#         idstring = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+#         for i in range(n_per_condition):
+#             # Image Generation
+#             image = np.ones((sz, sz), dtype=float) * bg
+#             num_particles = np.random.randint(n_particle_min, n_particle_max+1)
+#             # num_particles = 1
+#             for _ in range(num_particles):
+#                 x = np.random.rand() * (sz - 3.1) + 2.1
+#                 y = np.random.rand() * (sz - 3.1) + 2.1
+#                 amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
+#                 if amplitude <= 0: 
+#                     print('Warning: Amplitude is less than or equal to 0')
+#                 peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+#                 image += psfconvolution(peaks_info, sz)
+#             # Add Poisson noise
+#             image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
+#             # plt.imshow(image)
+#             # plt.show(block=False)
+#             tentative_peaks = get_tentative_peaks(image, min_distance=1)
+#             rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+#             estimated_num_particles = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd,) 
+#                                                                         #   display_xi_graph=True,
+#                                                                         #   display_fit_results=True)
                                     
-            print(f'============ Test result: {i=} num_particles={num_particles}, estimated_num_particles={estimated_num_particles}')                                                            
+#             print(f'============ Test result: {i=} num_particles={num_particles}, estimated_num_particles={estimated_num_particles}')                                                            
 
-            confusion_table[num_particles, estimated_num_particles] += 1
+#             confusion_table[num_particles, estimated_num_particles] += 1
 
-            # Save the image for later access to the data used for this test.
-            # Create the folder path
-            folder_name = f'snr_test/test_images/{idstring}'
-            os.makedirs(folder_name, exist_ok=True)
-            image_path = os.path.join(folder_name, f'img{i}_{num_particles}particles.png')
-            # image_path = os.path.join(folder_name, f'amp-to-bg{amp_to_bg}_bg{bg}_{i}.png')
-            plt.imsave(image_path, image, cmap='gray')
-        # Save the confusion table
-        folder_name = f'snr_test/test_results/'
-        os.makedirs(folder_name, exist_ok=True)
-        df = pd.DataFrame(confusion_table)
-        csv_path = os.path.join(folder_name, f'row-actual_col-est_{idstring}.csv')
-        df.to_csv(csv_path, index=False)
-        pass
+#             # Save the image for later access to the data used for this test.
+#             # Create the folder path
+#             folder_name = f'snr_test/test_images/{idstring}'
+#             os.makedirs(folder_name, exist_ok=True)
+#             image_path = os.path.join(folder_name, f'img{i}_{num_particles}particles.png')
+#             # image_path = os.path.join(folder_name, f'amp-to-bg{amp_to_bg}_bg{bg}_{i}.png')
+#             plt.imsave(image_path, image, cmap='gray')
+#         # Save the confusion table
+#         folder_name = f'snr_test/test_results/'
+#         os.makedirs(folder_name, exist_ok=True)
+#         df = pd.DataFrame(confusion_table)
+#         csv_path = os.path.join(folder_name, f'row-actual_col-est_{idstring}.csv')
+#         df.to_csv(csv_path, index=False)
+#         pass
     
-# snr_test()
-pass
+# # snr_test()
+# pass
 
-def n_particles_test():
-    pass
+# def n_particles_test():
+#     pass
 
-def separation_test():
-    pass
+# def separation_test():
+#     pass
 
-def intensity_spread_test():
-    pass
+# def intensity_spread_test():
+#     pass
 
-def psf_sd_test():
-    pass
+# def psf_sd_test():
+#     pass
 
-def imagewidth_test():
-    pass
+# def imagewidth_test():
+#     pass
 
 def visualize_ctable(fname):
     df = pd.read_csv(fname)
@@ -471,4 +439,106 @@ def visualize_ctable(fname):
     
 # visualize_ctable("./snr_test/test_results/row-actual_col-est_20240410_132353.csv")
 # test_model(specific_test_data_foldername='test_images')
-test_model('amp_to_bg_3_amp_sd_0-20240410_170325')
+# test_model('amp_to_bg_3_amp_sd_0-20240410_170325')
+def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
+    # Get a list of image files in the folder
+    image_files = glob.glob(os.path.join(folder_name, '*.png')) + glob.glob(os.path.join(folder_name, '*.tiff'))
+
+    for filename in image_files:
+        # Load image
+        image = np.array(im.open(filename))
+        image = np.array(image)
+
+        # Extract the number of particles from filename
+        basename = os.path.basename(filename)
+        parts = basename.split('_')
+        num_particles_part = parts[1]
+        # Split this part on 'particles' to get the number
+        actual_num_particles = int(num_particles_part.split('particles')[0])
+
+        # Find tentative peaks
+        tentative_peaks = get_tentative_peaks(image, min_distance=1)
+        rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+
+        # Run GMRL
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed) 
+
+        # Create the "runs" folder if it doesn't exist
+        runs_folder = './runs'
+        if not os.path.exists(runs_folder):
+            os.makedirs(runs_folder)
+
+        # Get the current date
+        current_date = date.today().strftime("%Y-%m-%d")
+
+        # Find the next available run number
+        run_number = 1
+        while os.path.exists(f"{runs_folder}/{os.path.splitext(os.path.basename(filename))[0]}-{current_date}-run{run_number}-randseed{rand_seed}_test_metrics.csv"):
+            run_number += 1
+
+        # Get the input image file name
+        input_image_file = os.path.splitext(os.path.basename(filename))[0]
+        # Check if there is a corresponding test_metrics file
+        test_metrics_file = f"{runs_folder}/{input_image_file}-{current_date}-run{run_number}_test_metrics.csv"
+        while os.path.exists(test_metrics_file):
+            run_number += 1
+            test_metrics_file = f"{runs_folder}/{input_image_file}-{current_date}-run{run_number}_test_metrics.csv"
+        csv_file1 = f"{runs_folder}/{os.path.splitext(os.path.basename(filename))[0]}-{current_date}-run{run_number}-randseed{rand_seed}_test_metrics.csv"
+        csv_file2 = f"{runs_folder}/{os.path.splitext(os.path.basename(filename))[0]}-{current_date}-run{run_number}-randseed{rand_seed}_fittings.csv"
+
+        # Extract xi, lli, and penalty from test_metrics
+        xi = test_metrics['xi']
+        lli = test_metrics['lli']
+        penalty_i = test_metrics['penalty_i']
+
+        fitted_theta  = fit_results[estimated_num_particles]['theta']
+
+        # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
+        data1 = list(zip(range(len(xi)), xi, lli, penalty_i))
+
+        # Create a list of tuples containing fit_results_for_max_xi
+        data2 = [[fitted_theta]]  # Convert fitted_theta to a list
+
+        # Write the data to the CSV files
+        with open(csv_file1, 'w', newline='') as file1:
+            writer1 = csv.writer(file1)
+            writer1.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
+            writer1.writerows(data1)
+
+        with open(csv_file2, 'w', newline='') as file2:
+            writer2 = csv.writer(file2)
+            writer2.writerow(['theta'])
+            writer2.writerows(data2)
+
+        # Print a message indicating that the data has been saved
+        print(f"Data saved to {csv_file1} and {csv_file2}")
+        print(f'=== Test result: {filename=} num_particles={actual_num_particles}, estimated_num_particles={estimated_num_particles}')       
+        if actual_num_particles == estimated_num_particles:
+            print('Test passed: Accurate particle count')
+        elif actual_num_particles > estimated_num_particles:
+            print('Test failed: Particle count - underestimation')
+        else:
+            print('Test failed: Particle count - overestimation')
+
+# Create the parser
+parser = argparse.ArgumentParser(description="Run tests")
+
+# Add the arguments
+parser.add_argument('--foldername', type=str, required=True, help='The name of the folder for the test images to be created and used')
+parser.add_argument('--last_h_index', type=int, default=3, help='The last h index to be tested')
+parser.add_argument('--rand_seed', type=int, default=0, help='The random seed for image analysis')
+parser.add_argument('--delete_images_folder', type=bool, default=True, help='The random seed')
+parser.add_argument('--num_images', type=int, default=2, help='The number of images to be generated')
+parser.add_argument('--amp_to_bgs', type=float, default=20, help='The amplitude to background ratio')
+parser.add_argument('--normalized_amp_sd', type=float, default=0.1, help='The normalized amplitude standard deviation (between 0 and 0.25)')
+parser.add_argument('--image_size', type=int, default=20, help='The size of the generated images')
+parser.add_argument('--background_level', type=int, default=500, help='The background level of the generated images')
+parser.add_argument('--psf_sd', type=float, default=1.39, help='The standard deviation of the point spread function')
+
+# Parse the arguments
+args = parser.parse_args()
+
+generate_test_images(folder_name=args.foldername, amp_to_bgs=[args.amp_to_bgs], amp_sds=[args.normalized_amp_sd], n_images=args.num_images, psf_sd=args.psf_sd, sz=args.image_size, bg=args.background_level, random_seed=args.rand_seed)
+simple_run_test(folder_name=args.foldername, last_h_index=args.last_h_index, rand_seed=args.rand_seed)
+if args.delete_images_folder:
+    shutil.rmtree(args.foldername)
