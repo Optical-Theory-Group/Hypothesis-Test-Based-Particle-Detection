@@ -30,6 +30,8 @@ To run the script with these options, use the following format:
 
 ```bash
 python tests.py --foldername test_images --last_h_index 3 --rand_seed 0 --delete_images_folder True --num_images 2 --amp_to_bgs 20 --normalized_amp_sd 0.1 --image_size 20 --background_level 500 --psf_sd 1.39
+```
+
 
 ## Outputs
 
