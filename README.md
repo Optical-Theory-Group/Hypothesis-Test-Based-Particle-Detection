@@ -44,3 +44,22 @@ The script generates two types of CSV files in the `runs` folder:
 Both files are saved in the `runs` folder in the same directory as the script. If the `runs` folder does not exist, the script will create it.
 
 Please note that the `run_number` is automatically incremented for each run to avoid overwriting previous results. The `rand_seed` is a parameter that you can set when running the script.
+
+
+In addition to the Test Metrics and Fittings CSV files, the script also generates a log file named `_actual_vs_counted.csv` in the `runs/{folder_name}` directory. This file logs the actual number of particles in each image and the number of particles estimated by the script.
+
+The `_actual_vs_counted.csv` file has the following columns:
+
+- `Actual Particle Number`: The actual number of particles in the image. This is extracted from the filename of the image.
+
+- `Estimated Particle Number`: The number of particles estimated by the script. This is calculated by the script based on the image analysis.
+
+This log file is useful for comparing the performance of the script in estimating the number of particles in different images. It can help you understand how accurate the script is and identify any images where the script's estimates are significantly different from the actual number of particles.
+
+Here's an example of how the log file might look:
+
+| Actual Particle Number | Estimated Particle Number |
+|------------------------|---------------------------|
+| 4                      | 3                         |
+| 1                      | 1                         |
+....
