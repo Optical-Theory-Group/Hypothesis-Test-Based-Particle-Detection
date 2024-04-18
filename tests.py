@@ -524,16 +524,16 @@ def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
 parser = argparse.ArgumentParser(description="Run tests")
 
 # Add the arguments
-parser.add_argument('--foldername', type=str, required=True, help='The name of the folder for the test images to be created and used')
-parser.add_argument('--last_h_index', type=int, default=3, help='The last h index to be tested')
-parser.add_argument('--rand_seed', type=int, default=0, help='The random seed for image analysis')
-parser.add_argument('--delete_images_folder', type=bool, default=True, help='The random seed')
-parser.add_argument('--num_images', type=int, default=2, help='The number of images to be generated')
-parser.add_argument('--amp_to_bgs', type=float, default=20, help='The amplitude to background ratio')
-parser.add_argument('--normalized_amp_sd', type=float, default=0.1, help='The normalized amplitude standard deviation (between 0 and 0.25)')
-parser.add_argument('--image_size', type=int, default=20, help='The size of the generated images')
-parser.add_argument('--background_level', type=int, default=500, help='The background level of the generated images')
-parser.add_argument('--psf_sd', type=float, default=1.39, help='The standard deviation of the point spread function')
+parser.add_argument('--foldername', type=str, required=True, help='The name of the folder for the test images to be created and used (default: None)')
+parser.add_argument('--last_h_index', type=int, default=3, help='The last h index to be tested (default: 3)')
+parser.add_argument('--rand_seed', type=int, default=0, help='The random seed for image analysis (default: 0)')
+parser.add_argument('--delete_images_folder', type=bool, default=True, help='Option to delete the folder containing the test images after the test is run (default: True)')
+parser.add_argument('--num_images', type=int, default=2, help='The number of images to be generated (default: 2)')
+parser.add_argument('--amp_to_bgs', type=float, default=20, help='The amplitude to background ratio (default: 20)')
+parser.add_argument('--normalized_amp_sd', type=float, default=0.1, help='The normalized amplitude standard deviation (between 0 and 0.25) (default: 0.1)')
+parser.add_argument('--image_size', type=int, default=20, help='The size of the generated images (default: 20)')
+parser.add_argument('--background_level', type=int, default=500, help='The background level of the generated images (default: 500)')
+parser.add_argument('--psf_sd', type=float, default=1.39, help='The standard deviation of the point spread function (default: 1.39)')
 
 # Parse the arguments
 args = parser.parse_args()
