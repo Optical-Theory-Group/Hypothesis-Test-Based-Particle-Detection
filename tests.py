@@ -16,6 +16,7 @@ from main import make_subregions, create_separable_filter, get_tentative_peaks
 import diplib as dip
 import glob
 import shutil
+import os
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -444,6 +445,13 @@ def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
     # Get a list of image files in the folder
     image_files = glob.glob(os.path.join(folder_name, '*.png')) + glob.glob(os.path.join(folder_name, '*.tiff'))
 
+    log_folder = os.path.join('./runs', folder_name)
+    os.makedirs(log_folder, exist_ok=True)
+    log_file_path = os.path.join(log_folder, '_actual_vs_counted.csv')
+    with open(log_file_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Input Image File', 'Actual Particle Number', 'Estimated Particle Number'])
+
     for filename in image_files:
         # Load image
         image = np.array(im.open(filename))
@@ -519,6 +527,12 @@ def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
             print('Test failed: Particle count - underestimation')
         else:
             print('Test failed: Particle count - overestimation')
+
+        with open(log_file_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([input_image_file, actual_num_particles, estimated_num_particles])
+
+ 
 
 # Create the parser
 parser = argparse.ArgumentParser(description="Run tests")
