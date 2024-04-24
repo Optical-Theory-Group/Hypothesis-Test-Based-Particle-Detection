@@ -1,13 +1,18 @@
 {
-    "dataset_name": "dataset3",
-    "run_name": "run1",
+    "dataset_name": "example_dataset",
     "generate_dataset": true,
-    "n_img_to_generate": 3,
-    "psf_sd": 1.39,
-    "img_width": 20,
-    "bg_level": 500,
-    "particle_int_to_bg_level_list": [20],
-    "particle_int_sd_to_mean_int_list": [0.1],
-    "randseed": 0,
-    "remove_imgs_and_folder_after_test": false
+    "gen_randseed": 0,
+    "gen_n_img": 3,
+    "gen_psf_sd": 1.5,
+    "gen_img_width": 100,
+    "gen_bg_level": 500,
+    "gen_particle_int_to_bg_level_list": [10],
+    "gen_particle_int_sd_to_mean_int_list": [0.1],
+    "generated_img_folder_removal_after_counting": false,
+    "analyze_dataset": true,
+    "analysis_name": "example_run",
+    "analysis_randseed": 0,
+    "analysis_psf_sd": 1.5,
+    "use_exit_condition": true,
+    "max_hypothesis_index": 5
 }

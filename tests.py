@@ -318,18 +318,29 @@ def visualize_ctable(fname):
     plt.show(block=False)
     plt.tight_layout()
 
-def analyze_whole_folder(dataset_name, run_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
+def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0):
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', dataset_name)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
-    log_folder = os.path.join('./runs', dataset_name + '_' + run_name)
+    log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
     os.makedirs(log_folder, exist_ok=True)
     log_file_path = os.path.join(log_folder, '_actual_vs_counted.csv')
     with open(log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Number', 'Estimated Particle Number'])
 
+    # Read the content of the config file
+    config_file_path = os.path.join(config_files_dir, config_file)
+    with open(config_file_path, 'r') as f:
+        config_content = f.read()
+
+    # Save the content of the config file
+    config_file_save_path = os.path.join(log_folder, config_file)
+    with open(config_file_save_path, 'w') as f:
+        f.write(config_content)
+
+    # For each image file, 
     for filename in image_files:
         # Load image
         image = np.array(im.open(filename))
@@ -347,7 +358,7 @@ def analyze_whole_folder(dataset_name, run_name, last_h_index=7, psf_sd=1.39, ra
         rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
 
         # Run GMRL
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed) 
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
 
         # Create the "runs" folder if it doesn't exist
         runs_folder = './runs'
@@ -408,9 +419,10 @@ for config_file in config_files:
         with open(os.path.join(config_files_dir, config_file), 'r') as f:
             config = json.load(f)
             # Check if the required fields are present in the config file
-            required_fields = ['dataset_name', 'run_name', 'generate_dataset', 'n_img_to_generate', 'psf_sd', 'img_width', 'bg_level', \
-                               'particle_int_to_bg_level_list', 'particle_int_sd_to_mean_int_list', \
-                                'randseed', 'remove_imgs_and_folder_after_test']
+            required_fields = ['dataset_name', \
+                                'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_bg_level', \
+                                'gen_particle_int_to_bg_level_list', 'gen_particle_int_sd_to_mean_int_list', 'generated_img_folder_removal_after_counting',\
+                                'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'use_exit_condition', 'max_hypothesis_index',]
             for field in required_fields:
                 if field not in config:
                     print(f"Error: '{field}' is missing in the config file")
@@ -420,9 +432,12 @@ for config_file in config_files:
         continue
 
     if config['generate_dataset']:
-        generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['particle_int_to_bg_level_list'], amp_sds=config['particle_int_sd_to_mean_int_list'], n_images=config['n_img_to_generate'], 
-                            psf_sd=config['psf_sd'], sz=config['img_width'], bg=config['bg_level'], random_seed=config['randseed'])
+        generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['gen_particle_int_to_bg_level_list'], amp_sds=config['gen_particle_int_sd_to_mean_int_list'], \
+                            n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'])
 
-    analyze_whole_folder(dataset_name=config['dataset_name'], run_name=config['run_name'], last_h_index=config['n_img_to_generate'], rand_seed=config['randseed'])
+    if config['analyze_dataset']:
+        analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['use_exit_condition'], last_h_index=config['max_hypothesis_index'], \
+                            rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'])
+
     if config['remove_imgs_and_folder_after_test']:
         shutil.rmtree(config['dataset_name'])
