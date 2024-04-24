@@ -403,8 +403,13 @@ def main():
     config_files_dir = args.config_file_folder
     config_files = os.listdir(config_files_dir)
 
+    print(f"Config files loaded (total of {len(config_files)}):")
     for config_file in config_files:
-        config = {}
+        print(config_file)
+
+    for i, config_file in enumerate(config_files):
+        print(f"Processing {config_file}, {i+1}/{len(config_files)}")
+        print(config_file)
         try:
             with open(os.path.join(config_files_dir, config_file), 'r') as f:
                 config = json.load(f)
