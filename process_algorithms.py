@@ -504,10 +504,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
     """ 
     min_model_xy = 1e-10
-    # method = 'TNC'
     method = 'trust-exact'
-    # method = 'trust-constr'
-    # method = 'SLSQP'
     
     # MLE estimation of H1, H2, ... (where should it end?) 
     n_hk_params_per_particle = 3
@@ -516,28 +513,23 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     # Test up to H4 for now (1/14/2024 Mo, temporary)
     last_h_index = last_h_index
     
-    # Initialize xi, the criterion for H_k
-    # xi = np.zeros(last_h_index + 1) 
-    # lli = np.zeros(last_h_index + 1) # log likelihood
-    # penalty_i = np.zeros(last_h_index + 1) # penalty term
-    xi = []
-    lli = []
-    penalty_i = []
+    # Initialize test scores
+    xi = [] # Which will be lli - penalty
+    lli = [] # log likelihood
+    penalty = [] # penalty term
 
-    # roi_max and roi_min will be used to set the starting points for background and particle intensities.
-    roi_max, roi_min = np.max(roi_image), np.min(roi_image) # let's forget about blurring and work with simple max and min for now.
+    # roi_max and roi_min will be used to initialize background and particle intensities estimations.
+    roi_max, roi_min = np.max(roi_image), np.min(roi_image) 
 
-    # Figure showing parameter estimation results for each hypothesis.
-    # fig, ax_main = plt.subplots(2, last_h_index + 1, figsize=(2 * (last_h_index + 1), 5))
+    # Figure showing parameter estimation results for all tested hypotheses.
     if display_fit_results:
         _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
         # Create a colormap instance
-        cmap = plt.get_cmap('turbo')# Create a colormap instance
+        cmap = plt.get_cmap('turbo')# Create a colormap instance for tentative peak coordinates presentation.
         
         for i, coord in enumerate(rough_peaks_xy):
             x, y = coord # Check whether this is correct.
             color = cmap(i / len(rough_peaks_xy))  # Use turbo colormap
-            # ax_main[1][0].plot(x, y, 'x', color=color)
             ax_main[1].text(x, y, f'{i}', fontsize=6, color=color) 
 
         ax_main[1].set_xlim(0-.5, szx-.5)
@@ -546,16 +538,14 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         ax_main[1].set_title('Tentative Peak Coordinates', fontsize=8)
         ax_main[0].imshow(roi_image)
         plt.show(block=False)
-        pass
     
-    # variable to check whether the parameter estimation converged
+    # xi_drop_count is used for exit condition of the loop.
     xi_drop_count = 0
     
+    # Initialize the fit results
     fit_results = [] 
 
     for hypothesis_index in range(last_h_index + 1): # hypothesis_index is also the number of particles. 
-        if hypothesis_index > len(rough_peaks_xy):
-            break
         # Initialization
         n_hk_params = n_h0_params + hypothesis_index * (n_hk_params_per_particle) #H0: 1, H1: 5, H2: 8, ...
         fisher_mat = np.zeros((n_hk_params, n_hk_params)) # Fisher Information Matrix
@@ -660,18 +650,6 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                     th[particle_index][2] = n_th[particle_index][2] * szy
                 return th
 
-            # def denorm_jacobian(nft_jac):
-            #     fn_jac = np.insert(nft_jac, [1,1], np.nan)
-            #     n_jac = np.reshape(fn_jac, (-1, 3))
-            #     jac = np.zeros((hypothesis_index + 1, 3))
-            #     jac[0][0] = n_jac[0][0] * roi_max
-            #     jac[0][1] = jac[0][2] = np.nan
-            #     for particle_index in range(1, hypothesis_index + 1):
-            #         jac[particle_index][0] = n_jac[particle_index][0] / (roi_max - roi_min) / 2 / np.pi / psf_sd**2
-            #         jac[particle_index][1] = n_jac[particle_index][1] / szx
-            #         jac[particle_index][2] = n_jac[particle_index][2] / szy
-            #     return jac
-
             # Maximum Likelihood Estimation of Hk
             def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta):
                 theta = denormalize(norm_flat_trimmed_theta)
@@ -680,15 +658,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                     for xx in range(szx):
                         model_xy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, xx, yy)
                         modified_neg_loglikelihood += model_xy - roi_image[yy,xx] * np.log(model_xy) # modified: omit log(roi_image[yy,xx]!)
-                        # modified_neg_loglikelihood += model_xy - roi_image[yy,xx] * np.log(model_xy) + gammaln(roi_image[yy,xx] + 1) # modified: omit log(roi_image[yy,xx]!)
                 return modified_neg_loglikelihood
-
-            # Now, let's update the parameters using scipy.optimize.minimize
-            set_bounds = True
-            if set_bounds:
-                bounds = [(0, None)]
-                for particle_index in range(1, hypothesis_index + 1):
-                    bounds += [(0, None), (0, (szx-1)/szx), (0, (szy-1)/szy)]
                     
             # Normazlize the parameters before passing on to neg_loglikelihood_function
             norm_flat_trimmed_theta = normalize(theta)
@@ -812,14 +782,11 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                 denormflat_theta_snapshots.append(denormalize(xk).flatten())
 
             # Now, let's update the parameters using scipy.optimize.minimize
-            if set_bounds:
-                if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
-                    print("norm_flat_trimmed_theta contains NaN or inf values.")
-                    pass
-                # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
-                result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method=method, bounds=bounds, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
-            else: 
-                result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+            if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
+                print("norm_flat_trimmed_theta contains NaN or inf values.")
+                pass
+            # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
+            result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             # print(f'H{hypothesis_index} converged?: {result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
             length = len(fn_snapshots)
@@ -866,8 +833,6 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             plt.show(block=False)
             pass
 
-
-        # Calcuate the Fisher Information Matrix (FIM)
         # All iterations finished. Now, let's calculate the Fisher Information Matrix (FIM) under Hk.
         if hypothesis_index == 0:
             model_h0 = theta # model_h0 is the constant background across the image (thus independent of x and y coordinates)
@@ -978,33 +943,33 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             prev_xi = xi[-1]
             prev_xi_assigned = True
 
-        penalty_i += [0.5 * log_det_fisher_mat]
-        if np.isinf(penalty_i[-1]):
-            penalty_i[-1] = np.nan
+        penalty += [0.5 * log_det_fisher_mat]
+        if np.isinf(penalty[-1]):
+            penalty[-1] = np.nan
         lli += [sum_loglikelihood]
         if np.isinf(lli[-1]):
             lli[-1] = np.nan
-        if penalty_i[hypothesis_index] > 0 or hypothesis_index == 0:
-            xi += [lli[-1] - penalty_i[-1]]
+        if penalty[hypothesis_index] > 0 or hypothesis_index == 0:
+            xi += [lli[-1] - penalty[-1]]
         else:
             xi += [lli[-1]]
-            print(f'penalty_i < 0. {hypothesis_index=} xi is set to lli.')
+            print(f'penalty < 0. {hypothesis_index=} xi is set to lli.')
             # break
 
         if prev_xi_assigned and prev_xi > xi[-1]:
             xi_drop_count += 1
             print(f'xi_drop_count: {xi_drop_count}')
          
-        
         if xi_drop_count >= 2:
-            print('drop count >= 2. Breaking loop.')
+            print('drop count >= 2.')
+            # Let's not apply the exit condition for now.
             # break
 
-    # Store xi, lli and penalty_i to test_metric
+    # Store xi, lli and penalty to test_metric
     test_metrics = {
         'xi': xi,
         'lli': lli,
-        'penalty_i': penalty_i,
+        'penalty': penalty,
     }
 
     if display_xi_graph:
@@ -1020,8 +985,8 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         ax.set_ylabel('loglikelihood')
         ax = axs[2]
         ax.axhline(y=0, color='black', linestyle='--')
-        # ax.plot(range(last_h_index + 1), np.exp(penalty_i * 2), 'o-', color='crimson') 
-        ax.plot(range(length), penalty_i, 'o-', color='crimson') 
+        # ax.plot(range(last_h_index + 1), np.exp(penalty * 2), 'o-', color='crimson') 
+        ax.plot(range(length), penalty, 'o-', color='crimson') 
         ax.set_ylabel('penalty')
         ax.set_xlabel('hypothesis_index')
         plt.tight_layout()
