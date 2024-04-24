@@ -10,9 +10,9 @@ from process_algorithms import generalized_likelihood_ratio_test, fdr_bh, genera
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from process_algorithms import generalized_likelihood_ratio_test, generalized_maximum_likelihood_rule
+from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks
 import math
 import numpy as np
-from main import make_subregions, create_separable_filter, get_tentative_peaks
 import diplib as dip
 import glob
 import shutil
@@ -189,28 +189,6 @@ def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1
 
     return t_g, p_value
 
-# make_and_process_image()
-
-def test_glrt_on_varying_psf():
-    bg = 0
-    intensity = 1000 
-    psfs = np.array([.25, .5, 1, 1.5, 2, 4])*1.39
-
-    df = pd.DataFrame(columns = ['bg', 'p'])
-    p_per_psf = []
-    for _, psf in enumerate(psfs):
-        for _ in range(30):
-            x = np.random.rand() + 5.5 
-            y = np.random.rand() + 5.5
-            p = make_and_process_image_glrt(x=x, y=y, intensity=intensity, bg=bg, psf=psf, sz=20, show_fig=False)
-            p_per_psf.append(p)
-            df = pd.concat([df, pd.DataFrame.from_records([{'psf':psf, 'p':p}])], ignore_index=True)
-    plt.figure()
-    plt.title("p-values for different psfs")
-    sns.swarmplot(data=df, x='psf', y='p', zorder=.5)
-    plt.show(block=False)
-    pass
-
 def test_glrt4_with_2_particles_image():
     # intensity = 2500
     psf_sd = 1.39
@@ -240,24 +218,6 @@ def test_glrt4_with_2_particles_image():
     print(f'{p_value=}')
     
     pass
-
-def make_images(n_img_to_generate=100, psf_sd=1.39, sz=50, bg=500, brightness=9000):
-    for img_idx in range(n_img_to_generate):
-        image = np.ones((sz, sz), dtype=float) * bg
-        num_particles = np.random.randint(0, 6)
-        for _ in range(num_particles):
-            x = np.random.rand()*(sz-3.1) + 2.1
-            y = np.random.rand()*(sz-3.1) + 2.1
-            amplitude = np.random.normal(1,.2) * brightness
-            if 1/np.pi/psf_sd**2 * amplitude < 0.1 * bg:
-                amplitude = 0.1 * bg * np.pi * psf_sd**2
-            peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
-            image += psfconvolution(peaks_info, sz)
-            # Create the directory if it doesn't exist
-        image = np.random.poisson(image, size=(image.shape))
-        os.makedirs('./test_images', exist_ok=True)
-        fname = f'{img_idx}_{num_particles}particles.png'
-        plt.imsave(arr=image, fname=f'./test_images/{fname}')
 
 def generate_test_images(dataset_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
     np.random.seed(random_seed)
