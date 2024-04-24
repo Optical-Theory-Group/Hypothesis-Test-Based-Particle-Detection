@@ -289,9 +289,9 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
-    config_file_save_path = os.path.join(log_folder, 'config_used.txt')
+    config_file_save_path = os.path.join(log_folder, 'config_used.json')
     with open(config_file_save_path, 'w') as f:
-        f.write(config_content)
+        json.dump(json.loads(config_content), f, indent=4)
 
     # Create a folder to store the logs for each image
     main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
