@@ -223,10 +223,10 @@ def generate_test_images(dataset_name, amp_to_bg=20, amp_sd=0.1, n_images=10, ps
     np.random.seed(random_seed)
     n_particle_min = 0
     n_particle_max = sz // 5
-    print(f'Generating {n_images} images in folder .image_dataset/{dataset_name}')
+    print(f'Generating {n_images} images in folder image_dataset/{dataset_name}')
 
     # Create the folder to store the images
-    os.makedirs(os.path.join(".image_dataset", dataset_name), exist_ok=True)
+    os.makedirs(os.path.join("image_dataset", dataset_name), exist_ok=True)
     for img_idx in range(n_images):
         image = np.ones((sz, sz), dtype=float) * bg
         num_particles = np.random.randint(n_particle_min, n_particle_max+1)
@@ -246,7 +246,7 @@ def generate_test_images(dataset_name, amp_to_bg=20, amp_sd=0.1, n_images=10, ps
         img_filename = f"img{img_idx}_{num_particles}particles.tiff"
         # plt.imshow(image, cmap='gray')
         pil_image = im.fromarray(image.astype(np.uint16))
-        pil_image.save(os.path.join(".image_dataset", dataset_name, img_filename))
+        pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
         # plt.close()
 
     
@@ -281,11 +281,11 @@ def visualize_ctable(fname):
 
 def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0, config_content=''):
     # Get a list of image files in the folder
-    images_folder = os.path.join('./.image_dataset', dataset_name)
+    images_folder = os.path.join('./image_dataset', dataset_name)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
     # Create a folder to store the logs
-    log_folder = os.path.join('./.runs', dataset_name + '_' + analysis_name)
+    log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
@@ -321,7 +321,7 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
                                                             psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
 
         # Create the "runs" folder if it doesn't exist
-        runs_folder = './.runs'
+        runs_folder = './runs'
         if not os.path.exists(runs_folder):
             os.makedirs(runs_folder)
 
@@ -354,10 +354,10 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
             writer2 = csv.writer(file2)
             writer2.writerow(['theta'])
             writer2.writerows(data2)
+        print(f"Data saved to \n\t{csv_file1} and \n\t{csv_file2}")
 
-        # Print a message indicating that the data has been saved
-        print(f"Data saved to {csv_file1} and {csv_file2}")
-        print(f'=== Test result: {filename=} num_particles={actual_num_particles}, estimated_num_particles={estimated_num_particles}')       
+        # Print the test results
+        print(f'======   Test result: num_particles={actual_num_particles}, estimated_num_particles={estimated_num_particles}   ======')
         if actual_num_particles == estimated_num_particles:
             print('Test passed: Accurate particle count')
         elif actual_num_particles > estimated_num_particles:
@@ -368,6 +368,7 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         with open(main_log_file_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+        print(f'Test results saved to to \t\n{filename=} ')
         
     return log_folder
 
