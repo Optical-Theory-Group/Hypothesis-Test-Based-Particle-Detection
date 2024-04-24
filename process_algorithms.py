@@ -490,7 +490,7 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
     return h0_params, h1_params, crlbs, pfa
 
 def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_h_index=7, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
-
+    print('Analyzing image using the Generalized Maximum Likelihood Rule.')
     np.random.seed(random_seed)
 
     np.set_printoptions(precision=3, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
@@ -546,6 +546,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     fit_results = [] 
 
     for hypothesis_index in range(last_h_index + 1): # hypothesis_index is also the number of particles. 
+        print('Testing: Hypothesis Index ', hypothesis_index)
         # Initialization
         n_hk_params = n_h0_params + hypothesis_index * (n_hk_params_per_particle) #H0: 1, H1: 5, H2: 8, ...
         fisher_mat = np.zeros((n_hk_params, n_hk_params)) # Fisher Information Matrix
@@ -958,7 +959,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
 
         if prev_xi_assigned and prev_xi > xi[-1]:
             xi_drop_count += 1
-            print(f'xi_drop_count: {xi_drop_count}')
+            # print(f'xi_drop_count: {xi_drop_count}')
          
         if use_exit_condi and xi_drop_count >= 2:
             print('drop count >= 2. No higher order hypothesis will be tested for this image.')

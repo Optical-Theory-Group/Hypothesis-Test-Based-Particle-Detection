@@ -4,7 +4,7 @@
     "gen_randseed": 0,
     "gen_n_img": 3,
     "gen_psf_sd": 1.5,
-    "gen_img_width": 100,
+    "gen_img_width": 10,
     "gen_bg_level": 500,
     "gen_particle_int_to_bg_level_list": [10],
     "gen_particle_int_sd_to_mean_int_list": [0.1],
@@ -13,6 +13,6 @@
     "analysis_name": "example_run",
     "analysis_randseed": 0,
     "analysis_psf_sd": 1.5,
-    "use_exit_condition": true,
+    "use_exit_condition": false,
     "max_hypothesis_index": 5
 }

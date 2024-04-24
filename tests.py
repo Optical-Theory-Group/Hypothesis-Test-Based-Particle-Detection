@@ -18,6 +18,7 @@ import diplib as dip
 import glob
 import shutil
 import os
+import sys
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -260,9 +261,9 @@ def make_images(n_img_to_generate=100, psf_sd=1.39, sz=50, bg=500, brightness=90
 
 def generate_test_images(dataset_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
     np.random.seed(random_seed)
-    print(f'Generating test images with {n_images} images per condition')
     n_particle_min = 0
     n_particle_max = sz // 5
+    print(f'Generating {n_images * len(amp_to_bgs) * len(amp_sds)} images in folder image_dataset/{dataset_name}')
     for amp_to_bg in amp_to_bgs:
         for amp_sd in amp_sds:
             os.makedirs(os.path.join("image_dataset", dataset_name), exist_ok=True)
@@ -318,27 +319,25 @@ def visualize_ctable(fname):
     plt.show(block=False)
     plt.tight_layout()
 
-def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0):
+def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0, config_content=''):
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', dataset_name)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
+    # Create a folder to store the logs
     log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
     os.makedirs(log_folder, exist_ok=True)
-    log_file_path = os.path.join(log_folder, '_actual_vs_counted.csv')
+
+    # Save the content of the config file
+    config_file_save_path = os.path.join(log_folder, 'config_used.txt')
+    with open(config_file_save_path, 'w') as f:
+        f.write(config_content)
+
+    # Create a folder to store the logs for each image
+    log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
     with open(log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Number', 'Estimated Particle Number'])
-
-    # Read the content of the config file
-    config_file_path = os.path.join(config_files_dir, config_file)
-    with open(config_file_path, 'r') as f:
-        config_content = f.read()
-
-    # Save the content of the config file
-    config_file_save_path = os.path.join(log_folder, config_file)
-    with open(config_file_save_path, 'w') as f:
-        f.write(config_content)
 
     # For each image file, 
     for filename in image_files:
@@ -358,7 +357,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
 
         # Run GMRL
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
+                                                            psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
 
         # Create the "runs" folder if it doesn't exist
         runs_folder = './runs'
@@ -373,9 +373,9 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
         lli = test_metrics['lli']
-        penalty_i = test_metrics['penalty_i']
+        penalty = test_metrics['penalty']
         # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-        data1 = list(zip(range(len(xi)), xi, lli, penalty_i))
+        data1 = list(zip(range(len(xi)), xi, lli, penalty))
 
         # Create a list of tuples containing fit_results_for_max_xi
         fitted_theta  = fit_results[estimated_num_particles]['theta']
@@ -409,35 +409,43 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
             writer = csv.writer(f)
             writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
+def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Process config files.')
+    parser.add_argument('--config-file-folder', type=str, default='config_files', help='Folder containing config files')
+    args = parser.parse_args()
 
-config_files_dir = 'config_files'
-config_files = os.listdir(config_files_dir)
+    config_files_dir = args.config_file_folder
+    config_files = os.listdir(config_files_dir)
 
-for config_file in config_files:
-    config = {}
-    try:
-        with open(os.path.join(config_files_dir, config_file), 'r') as f:
-            config = json.load(f)
-            # Check if the required fields are present in the config file
-            required_fields = ['dataset_name', \
-                                'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_bg_level', \
-                                'gen_particle_int_to_bg_level_list', 'gen_particle_int_sd_to_mean_int_list', 'generated_img_folder_removal_after_counting',\
-                                'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'use_exit_condition', 'max_hypothesis_index',]
-            for field in required_fields:
-                if field not in config:
-                    print(f"Error: '{field}' is missing in the config file")
+    for config_file in config_files:
+        config = {}
+        try:
+            with open(os.path.join(config_files_dir, config_file), 'r') as f:
+                config = json.load(f)
+                # Check if the required fields are present in the config file
+                required_fields = ['dataset_name', \
+                                    'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_bg_level', \
+                                    'gen_particle_int_to_bg_level_list', 'gen_particle_int_sd_to_mean_int_list', 'generated_img_folder_removal_after_counting',\
+                                    'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'use_exit_condition', 'max_hypothesis_index',]
+                for field in required_fields:
+                    if field not in config:
+                        print(f"Error: '{field}' is missing in the config file")
 
-    except (FileNotFoundError, json.JSONDecodeError):
-        print(f"Error: {config_file} file not found or invalid")
-        continue
+        except (FileNotFoundError, json.JSONDecodeError):
+            print(f"Error: {config_file} file not found or invalid")
+            continue
 
-    if config['generate_dataset']:
-        generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['gen_particle_int_to_bg_level_list'], amp_sds=config['gen_particle_int_sd_to_mean_int_list'], \
-                            n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'])
+        if config['generate_dataset']:
+            generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['gen_particle_int_to_bg_level_list'], amp_sds=config['gen_particle_int_sd_to_mean_int_list'], \
+                                n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'])
 
-    if config['analyze_dataset']:
-        analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['use_exit_condition'], last_h_index=config['max_hypothesis_index'], \
-                            rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'])
+        if config['analyze_dataset']:
+            analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['use_exit_condition'], last_h_index=config['max_hypothesis_index'], \
+                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config))
 
-    if config['remove_imgs_and_folder_after_test']:
-        shutil.rmtree(config['dataset_name'])
+        if config['generated_img_folder_removal_after_counting']:
+            shutil.rmtree(config['dataset_name'])
+
+if __name__ == '__main__':
+    main()
