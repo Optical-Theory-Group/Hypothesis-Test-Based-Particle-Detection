@@ -219,35 +219,35 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
+def generate_test_images(dataset_name, amp_to_bg=20, amp_sd=0.1, n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
     np.random.seed(random_seed)
     n_particle_min = 0
     n_particle_max = sz // 5
-    print(f'Generating {n_images * len(amp_to_bgs) * len(amp_sds)} images in folder image_dataset/{dataset_name}')
-    for amp_to_bg in amp_to_bgs:
-        for amp_sd in amp_sds:
-            os.makedirs(os.path.join("image_dataset", dataset_name), exist_ok=True)
-            for img_idx in range(n_images):
-                image = np.ones((sz, sz), dtype=float) * bg
-                num_particles = np.random.randint(n_particle_min, n_particle_max+1)
-                # num_particles = 1
-                for _ in range(num_particles):
-                    x = np.random.rand() * (sz - 3.1) + 2.1
-                    y = np.random.rand() * (sz - 3.1) + 2.1
-                    amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
-                    if amplitude <= 0: 
-                        print('Warning: Amplitude is less than or equal to 0')
-                        peaks_info = []
-                    else:
-                        peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
-                    image += psfconvolution(peaks_info, sz)
-                # Add Poisson noise
-                image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-                img_filename = f"img{img_idx}_{num_particles}particles.tiff"
-                # plt.imshow(image, cmap='gray')
-                pil_image = im.fromarray(image.astype(np.uint16))
-                pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
-                # plt.close()
+    print(f'Generating {n_images} images in folder image_dataset/{dataset_name}')
+
+    # Create the folder to store the images
+    os.makedirs(os.path.join("image_dataset", dataset_name), exist_ok=True)
+    for img_idx in range(n_images):
+        image = np.ones((sz, sz), dtype=float) * bg
+        num_particles = np.random.randint(n_particle_min, n_particle_max+1)
+        # num_particles = 1
+        for _ in range(num_particles):
+            x = np.random.rand() * (sz - 3.1) + 2.1
+            y = np.random.rand() * (sz - 3.1) + 2.1
+            amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
+            if amplitude <= 0: 
+                print('Warning: Amplitude is less than or equal to 0')
+                peaks_info = []
+            else:
+                peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+            image += psfconvolution(peaks_info, sz)
+        # Add Poisson noise
+        image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
+        img_filename = f"img{img_idx}_{num_particles}particles.tiff"
+        # plt.imshow(image, cmap='gray')
+        pil_image = im.fromarray(image.astype(np.uint16))
+        pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
+        # plt.close()
 
     
 # # snr_test()
@@ -411,7 +411,7 @@ def main():
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
                                     'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_bg_level', \
-                                    'gen_particle_int_to_bg_level_list', 'gen_particle_int_sd_to_mean_int_list', 'generated_img_folder_removal_after_counting',\
+                                    'gen_particle_int_to_bg_level', 'gen_particle_int_sd_to_mean_intt', 'generated_img_folder_removal_after_counting',\
                                     'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'use_exit_condition', 'max_hypothesis_index',]
                 for field in required_fields:
                     if field not in config:
@@ -422,7 +422,7 @@ def main():
             continue
 
         if config['generate_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['gen_particle_int_to_bg_level_list'], amp_sds=config['gen_particle_int_sd_to_mean_int_list'], \
+            generate_test_images(dataset_name=config['dataset_name'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
                                 n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'])
 
         if config['analyze_dataset']:
