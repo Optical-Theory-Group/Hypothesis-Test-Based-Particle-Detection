@@ -1,7 +1,6 @@
 import json
 import argparse
 from image_generation import psfconvolution
-from datetime import date
 import csv
 from PIL import Image as im
 import os
@@ -17,8 +16,9 @@ from main import make_subregions, create_separable_filter, get_tentative_peaks
 import diplib as dip
 import glob
 import shutil
+from sklearn.metrics import confusion_matrix
 import os
-import sys
+
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -334,8 +334,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         f.write(config_content)
 
     # Create a folder to store the logs for each image
-    log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
-    with open(log_file_path, 'w', newline='') as f:
+    main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
+    with open(main_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Number', 'Estimated Particle Number'])
 
@@ -405,9 +405,34 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         else:
             print('Test failed: Particle count - overestimation')
 
-        with open(log_file_path, 'a', newline='') as f:
+        with open(main_log_file_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+        
+    return log_folder
+
+def generate_confusion_matrix(csv_file, save_path, display=False, ):
+    # Read the CSV file
+    df = pd.read_csv(csv_file)
+
+    # Extract the actual and estimated particle numbers
+    actual = df['Actual Particle Number']
+    estimated = df['Estimated Particle Number']
+
+    # Generate the confusion matrix
+    matrix = confusion_matrix(actual, estimated)
+
+    # Display the confusion matrix
+    if display:
+        sns.heatmap(matrix, annot=True, fmt='d')
+        plt.title('Confusion Matrix')
+        plt.xlabel('Estimated Particle Number')
+        plt.ylabel('Actual Particle Number')
+        plt.show()
+
+    # Save the confusion matrix as a CSV file
+    matrix_df = pd.DataFrame(matrix)
+    matrix_df.to_csv(save_path, index=False)
 
 def main():
     # Parse command line arguments
@@ -441,11 +466,15 @@ def main():
                                 n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'])
 
         if config['analyze_dataset']:
-            analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['use_exit_condition'], last_h_index=config['max_hypothesis_index'], \
+            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['use_exit_condition'], last_h_index=config['max_hypothesis_index'], \
                                 rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config))
 
         if config['generated_img_folder_removal_after_counting']:
             shutil.rmtree(config['dataset_name'])
+        
+        # Generate confusino matrix
+        main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
+        generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
 
 if __name__ == '__main__':
     main()
