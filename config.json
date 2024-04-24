@@ -1,0 +1,12 @@
+{
+    "dataset_name": "dataset3",
+    "run_name": "run1",
+    "n_img": 3,
+    "psf_sd": 1.39,
+    "img_width": 20,
+    "bg_level": 500,
+    "particle_int_to_bg_level_list": [20],
+    "particle_int_sd_to_mean_int_list": [0.1],
+    "randseed": 0,
+    "remove_imgs_and_folder_after_test": false
+}

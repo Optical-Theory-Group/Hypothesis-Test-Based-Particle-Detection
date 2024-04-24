@@ -1,3 +1,4 @@
+import json
 import argparse
 from image_generation import psfconvolution
 from datetime import date
@@ -329,14 +330,14 @@ def make_images(n_img=100, psf_sd=1.39, sz=50, bg=500, brightness=9000):
         fname = f'{img_idx}_{num_particles}particles.png'
         plt.imsave(arr=image, fname=f'./test_images/{fname}')
 
-def generate_test_images(folder_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
+def generate_test_images(dataset_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
     np.random.seed(random_seed)
     print(f'Generating test images with {n_images} images per condition')
     n_particle_min = 0
     n_particle_max = sz // 5
     for amp_to_bg in amp_to_bgs:
         for amp_sd in amp_sds:
-            os.makedirs(folder_name, exist_ok=True)
+            os.makedirs(os.path.join("image_dataset", dataset_name), exist_ok=True)
             for img_idx in range(n_images):
                 image = np.ones((sz, sz), dtype=float) * bg
                 num_particles = np.random.randint(n_particle_min, n_particle_max+1)
@@ -354,10 +355,10 @@ def generate_test_images(folder_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=1
                 # Add Poisson noise
                 image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
                 img_filename = f"img{img_idx}_{num_particles}particles.tiff"
-                plt.imshow(image, cmap='gray')
+                # plt.imshow(image, cmap='gray')
                 pil_image = im.fromarray(image.astype(np.uint16))
-                pil_image.save(os.path.join(folder_name, img_filename))
-                plt.close()
+                pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
+                # plt.close()
     
 
 
@@ -396,16 +397,16 @@ def generate_test_images(folder_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=1
 
 #             # Save the image for later access to the data used for this test.
 #             # Create the folder path
-#             folder_name = f'snr_test/test_images/{idstring}'
-#             os.makedirs(folder_name, exist_ok=True)
-#             image_path = os.path.join(folder_name, f'img{i}_{num_particles}particles.png')
-#             # image_path = os.path.join(folder_name, f'amp-to-bg{amp_to_bg}_bg{bg}_{i}.png')
+#             dataset_name = f'snr_test/test_images/{idstring}'
+#             os.makedirs(dataset_name, exist_ok=True)
+#             image_path = os.path.join(dataset_name, f'img{i}_{num_particles}particles.png')
+#             # image_path = os.path.join(dataset_name, f'amp-to-bg{amp_to_bg}_bg{bg}_{i}.png')
 #             plt.imsave(image_path, image, cmap='gray')
 #         # Save the confusion table
-#         folder_name = f'snr_test/test_results/'
-#         os.makedirs(folder_name, exist_ok=True)
+#         dataset_name = f'snr_test/test_results/'
+#         os.makedirs(dataset_name, exist_ok=True)
 #         df = pd.DataFrame(confusion_table)
-#         csv_path = os.path.join(folder_name, f'row-actual_col-est_{idstring}.csv')
+#         csv_path = os.path.join(dataset_name, f'row-actual_col-est_{idstring}.csv')
 #         df.to_csv(csv_path, index=False)
 #         pass
     
@@ -437,15 +438,13 @@ def visualize_ctable(fname):
     plt.yticks(fontsize=15)
     plt.show(block=False)
     plt.tight_layout()
-    
-# visualize_ctable("./snr_test/test_results/row-actual_col-est_20240410_132353.csv")
-# test_model(specific_test_data_foldername='test_images')
-# test_model('amp_to_bg_3_amp_sd_0-20240410_170325')
-def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
-    # Get a list of image files in the folder
-    image_files = glob.glob(os.path.join(folder_name, '*.png')) + glob.glob(os.path.join(folder_name, '*.tiff'))
 
-    log_folder = os.path.join('./runs', folder_name)
+def analyze_whole_folder(dataset_name, run_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
+    # Get a list of image files in the folder
+    images_folder = os.path.join('./image_dataset', dataset_name)
+    image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
+
+    log_folder = os.path.join('./runs', dataset_name + '_' + run_name)
     os.makedirs(log_folder, exist_ok=True)
     log_file_path = os.path.join(log_folder, '_actual_vs_counted.csv')
     with open(log_file_path, 'w', newline='') as f:
@@ -476,38 +475,26 @@ def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
         if not os.path.exists(runs_folder):
             os.makedirs(runs_folder)
 
-        # Get the current date
-        current_date = date.today().strftime("%Y-%m-%d")
-
-        # Find the next available run number
-        run_number = 1
-        while os.path.exists(f"{runs_folder}/{os.path.splitext(os.path.basename(filename))[0]}-{current_date}-run{run_number}-randseed{rand_seed}_test_metrics.csv"):
-            run_number += 1
-
         # Get the input image file name
         input_image_file = os.path.splitext(os.path.basename(filename))[0]
-        # Check if there is a corresponding test_metrics file
-        test_metrics_file = f"{runs_folder}/{input_image_file}-{current_date}-run{run_number}_test_metrics.csv"
-        while os.path.exists(test_metrics_file):
-            run_number += 1
-            test_metrics_file = f"{runs_folder}/{input_image_file}-{current_date}-run{run_number}_test_metrics.csv"
-        csv_file1 = f"{runs_folder}/{os.path.splitext(os.path.basename(filename))[0]}-{current_date}-run{run_number}-randseed{rand_seed}_test_metrics.csv"
-        csv_file2 = f"{runs_folder}/{os.path.splitext(os.path.basename(filename))[0]}-{current_date}-run{run_number}-randseed{rand_seed}_fittings.csv"
+        csv_file1 = f"{log_folder}/metrics/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
+        csv_file2 = f"{log_folder}/metrics/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
 
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
         lli = test_metrics['lli']
         penalty_i = test_metrics['penalty_i']
-
-        fitted_theta  = fit_results[estimated_num_particles]['theta']
-
         # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
         data1 = list(zip(range(len(xi)), xi, lli, penalty_i))
 
         # Create a list of tuples containing fit_results_for_max_xi
+        fitted_theta  = fit_results[estimated_num_particles]['theta']
         data2 = [[fitted_theta]]  # Convert fitted_theta to a list
 
         # Write the data to the CSV files
+        os.makedirs(os.path.dirname(csv_file1), exist_ok=True)
+        os.makedirs(os.path.dirname(csv_file2), exist_ok=True)
+
         with open(csv_file1, 'w', newline='') as file1:
             writer1 = csv.writer(file1)
             writer1.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
@@ -530,29 +517,28 @@ def simple_run_test(folder_name, last_h_index=7, psf_sd=1.39, rand_seed=0):
 
         with open(log_file_path, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow([input_image_file, actual_num_particles, estimated_num_particles])
+            writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
- 
 
-# Create the parser
-parser = argparse.ArgumentParser(description="Run tests")
+config = {}
+try:
+    with open('config.json', 'r') as f:
+        config = json.load(f)
+        # Check if the required fields are present in the config file
+        required_fields = ['dataset_name', 'run_name', 'n_img', 'psf_sd', 'img_width', 'bg_level', \
+                           'particle_int_to_bg_level_list', 'particle_int_sd_to_mean_int_list', \
+                            'randseed', 'remove_imgs_and_folder_after_test']
+        for field in required_fields:
+            if field not in config:
+                print(f"Error: '{field}' is missing in the config file")
 
-# Add the arguments
-parser.add_argument('--foldername', type=str, required=True, help='The name of the folder for the test images to be created and used (default: None)')
-parser.add_argument('--last_h_index', type=int, default=3, help='The last h index to be tested (default: 3)')
-parser.add_argument('--rand_seed', type=int, default=0, help='The random seed for image analysis (default: 0)')
-parser.add_argument('--delete_images_folder', type=bool, default=True, help='Option to delete the folder containing the test images after the test is run (default: True)')
-parser.add_argument('--num_images', type=int, default=2, help='The number of images to be generated (default: 2)')
-parser.add_argument('--amp_to_bgs', type=float, default=20, help='The amplitude to background ratio (default: 20)')
-parser.add_argument('--normalized_amp_sd', type=float, default=0.1, help='The normalized amplitude standard deviation (between 0 and 0.25) (default: 0.1)')
-parser.add_argument('--image_size', type=int, default=20, help='The size of the generated images (default: 20)')
-parser.add_argument('--background_level', type=int, default=500, help='The background level of the generated images (default: 500)')
-parser.add_argument('--psf_sd', type=float, default=1.39, help='The standard deviation of the point spread function (default: 1.39)')
+except (FileNotFoundError, json.JSONDecodeError):
+    print("Error: config.json file not found or invalid")
+    exit()
 
-# Parse the arguments
-args = parser.parse_args()
+generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['particle_int_to_bg_level_list'], amp_sds=config['particle_int_sd_to_mean_int_list'], n_images=config['n_img'], 
+                        psf_sd=config['psf_sd'], sz=config['img_width'], bg=config['bg_level'], random_seed=config['randseed'])
 
-generate_test_images(folder_name=args.foldername, amp_to_bgs=[args.amp_to_bgs], amp_sds=[args.normalized_amp_sd], n_images=args.num_images, psf_sd=args.psf_sd, sz=args.image_size, bg=args.background_level, random_seed=args.rand_seed)
-simple_run_test(folder_name=args.foldername, last_h_index=args.last_h_index, rand_seed=args.rand_seed)
-if args.delete_images_folder:
-    shutil.rmtree(args.foldername)
+analyze_whole_folder(dataset_name=config['dataset_name'], run_name=config['run_name'], last_h_index=config['n_img'], rand_seed=config['randseed'])
+if config['remove_imgs_and_folder_after_test']:
+    shutil.rmtree(config['dataset_name'])
