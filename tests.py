@@ -240,80 +240,8 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-# def test_gmlr_with_image_generation():
-#     np.random.seed(42)
-#     psf_sd = 1.39
-#     sz = 30# Size of the width and height of the input image to be generated
-#     amplitude = 1000 #* np.random.rand() # As in the point spread function := amplitude * normalized 2D gaussian
-#     # amplitude = 1000 #* np.random.rand() # As in the point spread function := amplitude * normalized 2D gaussian
-#     bg = 500
-#     image = np.zeros((sz, sz))
-
-#     show_generated_input_image = True
-#     weak_peak_test = True
-#     if show_generated_input_image:    
-#         _, ax = plt.subplots(1,2, figsize=(10,5))
-#         ax[0].set_xlim(0-.5, sz-.5)
-#         ax[0].set_ylim(sz-.5, 0-.5) 
-#         ax[1].set_xlim(0-.5, sz-.5)
-#         ax[1].set_ylim(sz-.5, 0-.5) 
-#     if weak_peak_test:
-#         for j in range(3):
-#             y = 9 * (j + 0.2)
-#             for i in range(3):
-#                 x = 8 * (i + 0.9)
-#                 peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
-#                 image += psfconvolution(peaks_info, sz)
-#                 amplitude -= 100
-#                 # ax[0].plot(x, y, 'ro', markersize=15)
-#                 if show_generated_input_image:    
-#                     ax[0].imshow(image)
-#                     ax[0].text(x-.5, y+.5, 'x', fontsize=9, color='red') 
-#                     ax[0].text(x-.5, y+.5, f'  {amplitude:.1e}', fontsize=9, color='red') 
-#                     ax[1].text(x-.5, y+.5, 'o', fontsize=20, color='gray')
-#         plt.show(block=False)
-#     else:
-#         num_particles = np.random.randint(0, 8)
-#         for _ in range(num_particles):
-#             x = np.random.rand()*(sz-3) + 1.1
-#             y = np.random.rand()*(sz-3) + 1.1
-#             amplitude = max(np.random.normal(1,.3), 0.1) * amplitude
-#             peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
-#             image += psfconvolution(peaks_info, sz)
-#     # Adding background
-#     image += np.ones(image.shape)*bg
-#     image = np.random.poisson(image, size=(image.shape))
-#     tentative_peak_coordinates = get_tentative_peaks(image, min_distance=1)
-
-#     show_generated_input_image = True
-#     if show_generated_input_image:    
-#         im = ax[0].imshow(image)
-#         plt.colorbar(im, ax=ax[0])  # Add colorbar to ax[0]
-#         cmap = plt.get_cmap('plasma')
-#         ax[1].set_xlim(0-.5, sz-.5)
-#         ax[1].set_ylim(sz-.5, 0-.5) 
-#         ax[1].set_aspect('equal')
-#         for i, coord in enumerate(tentative_peak_coordinates):
-#             x, y = coord
-#             color = cmap(i / len(tentative_peak_coordinates))
-#             ax[1].text(y-.5, x+.5, f'x', fontsize=20, color=color) 
-#             plt.pause(0.1)
-#         # Add horizontal colorbar
-#         norm = plt.Normalize(vmin=0, vmax=len(tentative_peak_coordinates)-1)
-#         sm = ScalarMappable(norm=norm, cmap=cmap)
-#         plt.show(block=False)
-#         cbar = plt.colorbar(sm, ax=ax[1])
-#         cbar.ax.invert_yaxis()
-#         cbar.set_ticks(range(len(tentative_peak_coordinates)))
-#         cbar.set_ticklabels(range(1, len(tentative_peak_coordinates)+1))
-#         cbar.set_label('Peak Index')
-#         plt.tight_layout()
-#         plt.pause(0.1)
-
-#     generalized_maximum_likelihood_rule(roi_image=image, tentative_peak_coordinates=tentative_peak_coordinates, psf_sd=1.39)
-
-def make_images(n_img=100, psf_sd=1.39, sz=50, bg=500, brightness=9000):
-    for img_idx in range(n_img):
+def make_images(n_img_to_generate=100, psf_sd=1.39, sz=50, bg=500, brightness=9000):
+    for img_idx in range(n_img_to_generate):
         image = np.ones((sz, sz), dtype=float) * bg
         num_particles = np.random.randint(0, 6)
         for _ in range(num_particles):
@@ -359,56 +287,7 @@ def generate_test_images(dataset_name, amp_to_bgs=[20], amp_sds=[0.1], n_images=
                 pil_image = im.fromarray(image.astype(np.uint16))
                 pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
                 # plt.close()
-    
 
-
-
-# def snr_test(amp_sd=0, psf_sd=1.39, sz=40, bg=500, n_particle_min=0, n_particle_max=4, n_per_condition=100):
-#     # Build confusion table
-#     for amp_to_bg in [20, 2]:
-#         confusion_table = np.zeros((n_particle_max+1, n_particle_max+1))
-#         idstring = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-#         for i in range(n_per_condition):
-#             # Image Generation
-#             image = np.ones((sz, sz), dtype=float) * bg
-#             num_particles = np.random.randint(n_particle_min, n_particle_max+1)
-#             # num_particles = 1
-#             for _ in range(num_particles):
-#                 x = np.random.rand() * (sz - 3.1) + 2.1
-#                 y = np.random.rand() * (sz - 3.1) + 2.1
-#                 amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
-#                 if amplitude <= 0: 
-#                     print('Warning: Amplitude is less than or equal to 0')
-#                 peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
-#                 image += psfconvolution(peaks_info, sz)
-#             # Add Poisson noise
-#             image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-#             # plt.imshow(image)
-#             # plt.show(block=False)
-#             tentative_peaks = get_tentative_peaks(image, min_distance=1)
-#             rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
-#             estimated_num_particles = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, psf_sd=psf_sd,) 
-#                                                                         #   display_xi_graph=True,
-#                                                                         #   display_fit_results=True)
-                                    
-#             print(f'============ Test result: {i=} num_particles={num_particles}, estimated_num_particles={estimated_num_particles}')                                                            
-
-#             confusion_table[num_particles, estimated_num_particles] += 1
-
-#             # Save the image for later access to the data used for this test.
-#             # Create the folder path
-#             dataset_name = f'snr_test/test_images/{idstring}'
-#             os.makedirs(dataset_name, exist_ok=True)
-#             image_path = os.path.join(dataset_name, f'img{i}_{num_particles}particles.png')
-#             # image_path = os.path.join(dataset_name, f'amp-to-bg{amp_to_bg}_bg{bg}_{i}.png')
-#             plt.imsave(image_path, image, cmap='gray')
-#         # Save the confusion table
-#         dataset_name = f'snr_test/test_results/'
-#         os.makedirs(dataset_name, exist_ok=True)
-#         df = pd.DataFrame(confusion_table)
-#         csv_path = os.path.join(dataset_name, f'row-actual_col-est_{idstring}.csv')
-#         df.to_csv(csv_path, index=False)
-#         pass
     
 # # snr_test()
 # pass
@@ -477,8 +356,8 @@ def analyze_whole_folder(dataset_name, run_name, last_h_index=7, psf_sd=1.39, ra
 
         # Get the input image file name
         input_image_file = os.path.splitext(os.path.basename(filename))[0]
-        csv_file1 = f"{log_folder}/metrics/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
-        csv_file2 = f"{log_folder}/metrics/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
+        csv_file1 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
+        csv_file2 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
 
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
@@ -520,25 +399,30 @@ def analyze_whole_folder(dataset_name, run_name, last_h_index=7, psf_sd=1.39, ra
             writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
 
-config = {}
-try:
-    with open('config.json', 'r') as f:
-        config = json.load(f)
-        # Check if the required fields are present in the config file
-        required_fields = ['dataset_name', 'run_name', 'n_img', 'psf_sd', 'img_width', 'bg_level', \
-                           'particle_int_to_bg_level_list', 'particle_int_sd_to_mean_int_list', \
-                            'randseed', 'remove_imgs_and_folder_after_test']
-        for field in required_fields:
-            if field not in config:
-                print(f"Error: '{field}' is missing in the config file")
+config_files_dir = 'config_files'
+config_files = os.listdir(config_files_dir)
 
-except (FileNotFoundError, json.JSONDecodeError):
-    print("Error: config.json file not found or invalid")
-    exit()
+for config_file in config_files:
+    config = {}
+    try:
+        with open(os.path.join(config_files_dir, config_file), 'r') as f:
+            config = json.load(f)
+            # Check if the required fields are present in the config file
+            required_fields = ['dataset_name', 'run_name', 'generate_dataset', 'n_img_to_generate', 'psf_sd', 'img_width', 'bg_level', \
+                               'particle_int_to_bg_level_list', 'particle_int_sd_to_mean_int_list', \
+                                'randseed', 'remove_imgs_and_folder_after_test']
+            for field in required_fields:
+                if field not in config:
+                    print(f"Error: '{field}' is missing in the config file")
 
-generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['particle_int_to_bg_level_list'], amp_sds=config['particle_int_sd_to_mean_int_list'], n_images=config['n_img'], 
-                        psf_sd=config['psf_sd'], sz=config['img_width'], bg=config['bg_level'], random_seed=config['randseed'])
+    except (FileNotFoundError, json.JSONDecodeError):
+        print(f"Error: {config_file} file not found or invalid")
+        continue
 
-analyze_whole_folder(dataset_name=config['dataset_name'], run_name=config['run_name'], last_h_index=config['n_img'], rand_seed=config['randseed'])
-if config['remove_imgs_and_folder_after_test']:
-    shutil.rmtree(config['dataset_name'])
+    if config['generate_dataset']:
+        generate_test_images(dataset_name=config['dataset_name'], amp_to_bgs=config['particle_int_to_bg_level_list'], amp_sds=config['particle_int_sd_to_mean_int_list'], n_images=config['n_img_to_generate'], 
+                            psf_sd=config['psf_sd'], sz=config['img_width'], bg=config['bg_level'], random_seed=config['randseed'])
+
+    analyze_whole_folder(dataset_name=config['dataset_name'], run_name=config['run_name'], last_h_index=config['n_img_to_generate'], rand_seed=config['randseed'])
+    if config['remove_imgs_and_folder_after_test']:
+        shutil.rmtree(config['dataset_name'])

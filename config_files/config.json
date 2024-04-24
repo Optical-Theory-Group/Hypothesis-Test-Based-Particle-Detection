@@ -1,7 +1,8 @@
 {
     "dataset_name": "dataset3",
     "run_name": "run1",
-    "n_img": 3,
+    "generate_dataset": true,
+    "n_img_to_generate": 3,
     "psf_sd": 1.39,
     "img_width": 20,
     "bg_level": 500,
