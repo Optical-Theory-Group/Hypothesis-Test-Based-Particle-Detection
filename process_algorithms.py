@@ -491,7 +491,7 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
 
 def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_h_index=7, random_seed=0, display_fit_results=False, display_xi_graph=False):
 
-    np.random.seed(0)
+    np.random.seed(random_seed)
 
     np.set_printoptions(precision=3, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
