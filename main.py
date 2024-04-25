@@ -1,3 +1,4 @@
+import pprint
 import json
 import argparse
 from image_generation import psfconvolution
@@ -219,47 +220,43 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, amp_to_bg=20, amp_sd=0.1, n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42):
+def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, amp_sd=0.1, n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42, config_content=''):
     np.random.seed(random_seed)
     n_particle_min = 0
-    n_particle_max = sz // 5
+    n_particle_max = sz * sz // mean_area_per_particle
     print(f'Generating {n_images} images in folder image_dataset/{dataset_name}')
 
     # Create the folder to store the images
-    os.makedirs(os.path.join("image_dataset", dataset_name), exist_ok=True)
+    image_folder_path = os.path.join("image_dataset", dataset_name)
+    image_folder = os.makedirs(image_folder_path, exist_ok=True)
     for img_idx in range(n_images):
         image = np.ones((sz, sz), dtype=float) * bg
         num_particles = np.random.randint(n_particle_min, n_particle_max+1)
-        # num_particles = 1
+        num_cancelled_particles = 0
         for _ in range(num_particles):
-            x = np.random.rand() * (sz - 3.1) + 2.1
-            y = np.random.rand() * (sz - 3.1) + 2.1
+            x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
+            y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
             amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
             if amplitude <= 0: 
-                print('Warning: Amplitude is less than or equal to 0')
-                peaks_info = []
+                print('Warning: Amplitude is less than or equal to 0. This particle will not be added to the image and omission will be reflected in the file name.')
+                num_cancelled_particles += 1
             else:
-                peaks_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
-            image += psfconvolution(peaks_info, sz)
+                peak_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+                image += psfconvolution(peak_info, sz)
         # Add Poisson noise
         image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-        img_filename = f"img{img_idx}_{num_particles}particles.tiff"
+        img_filename = f"img{img_idx}_{num_particles - num_cancelled_particles}particles.tiff"
         # plt.imshow(image, cmap='gray')
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
         # plt.close()
-
-    
-# # snr_test()
-# pass
-
-# def n_particles_test():
-#     pass
+        
+    # Save the content of the config file
+    config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
+    with open(config_file_save_path, 'w') as f:
+        json.dump(json.loads(config_content), f, indent=4)
 
 # def separation_test():
-#     pass
-
-# def intensity_spread_test():
 #     pass
 
 # def psf_sd_test():
@@ -284,6 +281,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     images_folder = os.path.join('./image_dataset', dataset_name)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
+    print(f"Images loaded (total of {len(image_files)}):")
+
     # Create a folder to store the logs
     log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
     os.makedirs(log_folder, exist_ok=True)
@@ -301,9 +300,9 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
     # For each image file, 
     for filename in image_files:
-        # Load image
+        # Print the name of the image file
+        print(f"Analyzing {filename} ({image_files.index(filename)+1}/{len(image_files)})")
         image = np.array(im.open(filename))
-        image = np.array(image)
 
         # Extract the number of particles from filename
         basename = os.path.basename(filename)
@@ -359,16 +358,16 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         # Print the test results
         print(f'======   Test result: num_particles={actual_num_particles}, estimated_num_particles={estimated_num_particles}   ======')
         if actual_num_particles == estimated_num_particles:
-            print('Test passed: Accurate particle count')
+            print(f'- Test passed: actual {actual_num_particles} == estimated {estimated_num_particles}')
         elif actual_num_particles > estimated_num_particles:
-            print('Test failed: Particle count - underestimation')
+            print(f'- Test failed: actual {actual_num_particles} > estimated {estimated_num_particles}') 
         else:
-            print('Test failed: Particle count - overestimation')
+            print(f'- Test failed: actual {actual_num_particles} < estimated {estimated_num_particles}')
 
         with open(main_log_file_path, 'a', newline='') as f:
             writer = csv.writer(f)
             writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
-        print(f'Test results saved to to \t\n{filename=} ')
+        print(f'Test results saved to to \n\t' + filename)
         
     return log_folder
 
@@ -398,8 +397,13 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
-    parser.add_argument('--config-file-folder', type=str, default='config_files', help='Folder containing config files')
+    parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
     args = parser.parse_args()
+
+    # Check if config-file-folder is provided
+    if args.config_file_folder is None:
+        print("Please provide the folder name for config files using --config-file-folder or -c option.")
+        exit()
 
     config_files_dir = args.config_file_folder
     config_files = os.listdir(config_files_dir)
@@ -409,30 +413,38 @@ def main():
         print(config_file)
 
     for i, config_file in enumerate(config_files):
-        print(f"Processing {config_file}, {i+1}/{len(config_files)}")
+        print(f"Processing {config_file} ({i+1}/{len(config_files)})")
         print(config_file)
         try:
             with open(os.path.join(config_files_dir, config_file), 'r') as f:
                 config = json.load(f)
+                # Pretty print the config file
+                pprint.pprint(config)
+
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
-                                    'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_bg_level', \
-                                    'gen_particle_int_to_bg_level', 'gen_particle_int_sd_to_mean_intt', 'generated_img_folder_removal_after_counting',\
-                                    'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'use_exit_condition', 'max_hypothesis_index',]
+                                    'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_mean_area_per_particle', 'gen_bg_level', \
+                                    'gen_particle_int_to_bg_level', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
+                                    'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'analysis_use_exit_condition', 'analysis_max_h_number',]
                 for field in required_fields:
                     if field not in config:
-                        print(f"Error: '{field}' is missing in the config file")
+                        if config['generate_dataset'] and field.startswith('gen'):
+                            print(f"Error: '{field}' is not a valid field when 'generate_dataset' is True")
+                            exit()
+                        if config['analyze_dataset'] and field.startswith('analysis'):
+                            print(f"Error: '{field}' is not a valid field when 'analyze_dataset' is True")
+                            exit()
 
         except (FileNotFoundError, json.JSONDecodeError):
             print(f"Error: {config_file} file not found or invalid")
             continue
 
         if config['generate_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
-                                n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'])
+            generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_mean_area_per_particle'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
+                                n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
         if config['analyze_dataset']:
-            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['use_exit_condition'], last_h_index=config['max_hypothesis_index'], \
+            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
                                 rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config))
 
         if config['generated_img_folder_removal_after_counting']:
