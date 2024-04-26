@@ -19,6 +19,9 @@ import glob
 import shutil
 from sklearn.metrics import confusion_matrix
 import os
+import concurrent.futures
+import sys
+from datetime import datetime, timedelta
 
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
@@ -276,6 +279,68 @@ def visualize_ctable(fname):
     plt.show(block=False)
     plt.tight_layout()
 
+
+def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=''):
+    """
+        Displays progress bar for current progress.
+
+        Input:
+            progresscount: int
+                Current counter recording progress.
+            totalrealisations: int
+                Total number of realisations to be calculation
+            starttime: datetime
+                Time at which simulation was started
+
+        Return:
+            progresscount: int
+                Input value incremented by 1.
+    """
+    # update progress trackers and inform user if they have so requested
+    progresscount += 1
+    runtime = datetime.now() - starttime  
+    runtime -= timedelta(microseconds=runtime.microseconds)
+    runtimesecs = runtime.total_seconds() if runtime.total_seconds() > 0 else .1  #
+    remaintime = (runtime / progresscount) * (totalrealisations - progresscount)
+
+    strmsg = '{}/{}' \
+            '   in   : {} ({}/s  eta: {}). {}'.format(progresscount, totalrealisations,
+                                                    runtime, progresscount / runtimesecs, remaintime, statusmsg)
+
+    update_progress(progresscount / totalrealisations, strmsg)
+
+    return progresscount
+
+def update_progress(progress, status='', barlength=20):
+        """
+        Prints a progress bar to console
+
+        Parameters
+        ----------
+        progress : float
+            Variable ranging from 0 to 1 indicating fractional progress.
+        status : TYPE, optional
+            Status text to suffix progress bar. The default is ''.
+        barlength : str, optional
+            Controls width of progress bar in console. The default is 20.
+
+        """
+        if isinstance(progress, int):
+            progress = float(progress)
+        if not isinstance(progress, float):
+            progress = 0
+            status = 'error: progress var must be float\r\n'
+        if progress < 0:
+            progress = 0
+            status = 'Halt...\r\n'
+        if progress >= 1:
+            progress = 1
+            status += ' Done.\r\n'
+        block = int(round(barlength * progress))
+        text = '\rPercent: [{0}] {1:.2f}% {2}'.format('#' * block + '-' * (barlength - block), progress * 100, status)
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
 def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0, config_content=''):
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', dataset_name)
@@ -298,78 +363,111 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Number', 'Estimated Particle Number'])
 
+    # Create the "runs" folder if it doesn't exist
+    runs_folder = './runs'
+    if not os.path.exists(runs_folder):
+        os.makedirs(runs_folder)
+
     # For each image file, 
-    for filename in image_files:
-        # Print the name of the image file
-        print(f"Analyzing {filename} ({image_files.index(filename)+1}/{len(image_files)})")
-        image = np.array(im.open(filename))
-
-        # Extract the number of particles from filename
-        basename = os.path.basename(filename)
-        parts = basename.split('_')
-        num_particles_part = parts[1]
-        # Split this part on 'particles' to get the number
-        actual_num_particles = int(num_particles_part.split('particles')[0])
-
-        # Find tentative peaks
-        tentative_peaks = get_tentative_peaks(image, min_distance=1)
-        rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
-
-        # Run GMRL
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
-                                                            psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
-
-        # Create the "runs" folder if it doesn't exist
-        runs_folder = './runs'
-        if not os.path.exists(runs_folder):
-            os.makedirs(runs_folder)
-
-        # Get the input image file name
-        input_image_file = os.path.splitext(os.path.basename(filename))[0]
-        csv_file1 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
-        csv_file2 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
-
-        # Extract xi, lli, and penalty from test_metrics
-        xi = test_metrics['xi']
-        lli = test_metrics['lli']
-        penalty = test_metrics['penalty']
-        # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-        data1 = list(zip(range(len(xi)), xi, lli, penalty))
-
-        # Create a list of tuples containing fit_results_for_max_xi
-        fitted_theta  = fit_results[estimated_num_particles]['theta']
-        data2 = [[fitted_theta]]  # Convert fitted_theta to a list
-
-        # Write the data to the CSV files
-        os.makedirs(os.path.dirname(csv_file1), exist_ok=True)
-        os.makedirs(os.path.dirname(csv_file2), exist_ok=True)
-
-        with open(csv_file1, 'w', newline='') as file1:
-            writer1 = csv.writer(file1)
-            writer1.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
-            writer1.writerows(data1)
-
-        with open(csv_file2, 'w', newline='') as file2:
-            writer2 = csv.writer(file2)
-            writer2.writerow(['theta'])
-            writer2.writerows(data2)
-        print(f"Data saved to \n\t{csv_file1} and \n\t{csv_file2}")
-
-        # Print the test results
-        print(f'======   Test result: num_particles={actual_num_particles}, estimated_num_particles={estimated_num_particles}   ======')
-        if actual_num_particles == estimated_num_particles:
-            print(f'- Test passed: actual {actual_num_particles} == estimated {estimated_num_particles}')
-        elif actual_num_particles > estimated_num_particles:
-            print(f'- Test failed: actual {actual_num_particles} > estimated {estimated_num_particles}') 
-        else:
-            print(f'- Test failed: actual {actual_num_particles} < estimated {estimated_num_particles}')
-
-        with open(main_log_file_path, 'a', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
-        print(f'Test results saved to to \n\t' + filename)
+    starttime = datetime.now()
+    print('Beginning image analysis...')
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed)
+                       for seed, filename in enumerate(image_files)]
         
+        progress = 0
+        with open(main_log_file_path, 'a', newline='') as f: 
+            for cfresult in concurrent.futures.as_completed(futures):
+                if cfresult._exception is not None:
+                    raise RuntimeError(cfresult._exception)
+                analysis_result = cfresult.result()
+                
+                progress += 1
+                # csv_file1 = analysis_result['csv_files1']
+                # csv_file2 = analysis_result['csv_files2']
+                actual_num_particles = analysis_result['actual_num_particles']
+                estimated_num_particles = analysis_result['estimated_num_particles']
+                input_image_file = analysis_result['input_image_file']
+                # filename = analysis_result['filename']
+
+                writer = csv.writer(f)
+                writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+
+                statusmsg = f'{dataset_name} '
+                if actual_num_particles == estimated_num_particles:
+                    statusmsg += f'- Passed: act. {actual_num_particles} == est. {estimated_num_particles}'
+                elif actual_num_particles > estimated_num_particles:
+                    statusmsg += f'- Failed: act. {actual_num_particles} > est. {estimated_num_particles}'
+                else:
+                    statusmsg += f'- Failed: act. {actual_num_particles} < est. {estimated_num_particles}'
+
+                # statusmsg += f' Test results saved to {filename}'
+                report_progress(progress, len(image_files), starttime, statusmsg)
+            
     return log_folder
+
+def analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed):
+    # In case random numbers are used in analyse we seed here such that different parallel processes do not use the same random numbers
+    np.random.seed(seed) 
+
+    # Print the name of the image file
+    image = np.array(im.open(filename))
+
+    # Extract the number of particles from filename
+    basename = os.path.basename(filename)
+    parts = basename.split('_')
+    num_particles_part = parts[1]
+    # Split this part on 'particles' to get the number
+    actual_num_particles = int(num_particles_part.split('particles')[0])
+
+    # Find tentative peaks
+    tentative_peaks = get_tentative_peaks(image, min_distance=1)
+    rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+
+    # Run GMRL
+    estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
+                                                        psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
+
+    # Get the input image file name
+    input_image_file = os.path.splitext(os.path.basename(filename))[0]
+    csv_file1 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
+    csv_file2 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
+
+    # Extract xi, lli, and penalty from test_metrics
+    xi = test_metrics['xi']
+    lli = test_metrics['lli']
+    penalty = test_metrics['penalty']
+    # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
+    data1 = list(zip(range(len(xi)), xi, lli, penalty))
+
+    # Create a list of tuples containing fit_results_for_max_xi
+    fitted_theta = fit_results[estimated_num_particles]['theta']
+    data2 = [[fitted_theta]]  # Convert fitted_theta to a list
+
+    # Write the data to the CSV files
+    os.makedirs(os.path.dirname(csv_file1), exist_ok=True)
+    os.makedirs(os.path.dirname(csv_file2), exist_ok=True)
+
+    with open(csv_file1, 'w', newline='') as file1:
+        writer1 = csv.writer(file1)
+        writer1.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
+        writer1.writerows(data1)
+
+    with open(csv_file2, 'w', newline='') as file2:
+        writer2 = csv.writer(file2)
+        writer2.writerow(['theta'])
+        writer2.writerows(data2)
+
+    image_analysis_results = {'csv_files1': csv_file1,
+                              'csv_files2': csv_file2,
+                              'actual_num_particles': actual_num_particles,
+                              'estimated_num_particles': estimated_num_particles,
+                              'input_image_file': input_image_file,
+                              'filename': filename,
+                              }
+    
+    
+    return image_analysis_results
 
 def generate_confusion_matrix(csv_file, save_path, display=False, ):
     # Read the CSV file
@@ -395,6 +493,8 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
     matrix_df.to_csv(save_path, index=False)
 
 def main():
+    batchjobstarttime = datetime.now()
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
@@ -453,6 +553,9 @@ def main():
         # Generate confusino matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
         generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
+
+    batchjobendtime = datetime.now()
+    print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
 if __name__ == '__main__':
     main()

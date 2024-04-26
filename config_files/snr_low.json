@@ -1,5 +1,5 @@
 {
-    "dataset_name": “Low SNR",
+    "dataset_name": "Low SNR",
     "generate_dataset": true,
     "gen_randseed": 0,
     "gen_n_img": 200,
@@ -11,7 +11,7 @@
     "gen_particle_int_sd_to_mean_int": 0.0,
     "generated_img_folder_removal_after_counting": false,
     "analyze_dataset": true,
-    "analysis_name": “r20240425",
+    "analysis_name": "r20240425",
     "analysis_randseed": 0,
     "analysis_psf_sd": 1.4,
     "analysis_use_exit_condition": false,
