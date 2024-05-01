@@ -395,11 +395,11 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
                 statusmsg = f'{dataset_name} '
                 if actual_num_particles == estimated_num_particles:
-                    statusmsg += f'- Passed: act. {actual_num_particles} == est. {estimated_num_particles}'
+                    statusmsg += f'- Passed: act. {actual_num_particles} == est. {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
-                    statusmsg += f'- Failed: act. {actual_num_particles} > est. {estimated_num_particles}'
+                    statusmsg += f'- Failed: act. {actual_num_particles} > est. {estimated_num_particles}\n'
                 else:
-                    statusmsg += f'- Failed: act. {actual_num_particles} < est. {estimated_num_particles}'
+                    statusmsg += f'- Failed: act. {actual_num_particles} < est. {estimated_num_particles}\n'
 
                 # statusmsg += f' Test results saved to {filename}'
                 report_progress(progress, len(image_files), starttime, statusmsg)
