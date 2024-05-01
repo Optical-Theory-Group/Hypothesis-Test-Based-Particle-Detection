@@ -1062,11 +1062,11 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         lli += [sum_loglikelihood]
         if np.isinf(lli[-1]):
             lli[-1] = np.nan
-        if penalty[hypothesis_index] > 0 or hypothesis_index == 0:
+        if penalty[hypothesis_index] < 0 or hypothesis_index == 0:
             xi += [lli[-1] - penalty[-1]]
         else:
             xi += [lli[-1]]
-            print(f'Warning: penalty < 0. {hypothesis_index=} assigning "xi = lli", instead of "xi = lli - penalty".')
+            # print(f'Warning: penalty < 0. {hypothesis_index=} assigning "xi = lli", instead of "xi = lli - penalty".')
             # break
 
         if prev_xi_assigned and prev_xi > xi[-1]:
