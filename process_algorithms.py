@@ -726,7 +726,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                 # update the particles contributions to the modelhk_at_xxyy value
                 modelhk_at_xxyy += theta[particle_index][0] * integrated_psf_x[particle_index] * integrated_psf_y[particle_index] # particle intensity contribution at (xx, yy) 
                 
-                if modelhk_at_xxyy == 0:
+                if modelhk_at_xxyy <= 0:
                     modelhk_at_xxyy = min_model_xy 
 
             return modelhk_at_xxyy, integrated_psf_x, integrated_psf_y
