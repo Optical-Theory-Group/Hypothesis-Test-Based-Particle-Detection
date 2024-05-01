@@ -383,8 +383,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
                 analysis_result = cfresult.result()
                 
                 progress += 1
-                # csv_file1 = analysis_result['csv_files1']
-                # csv_file2 = analysis_result['csv_files2']
+                # scores_csv_filename = analysis_result['csv_files1']
+                # fits_csv_filename = analysis_result['csv_files2']
                 actual_num_particles = analysis_result['actual_num_particles']
                 estimated_num_particles = analysis_result['estimated_num_particles']
                 input_image_file = analysis_result['input_image_file']
@@ -430,36 +430,36 @@ def analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log
 
     # Get the input image file name
     input_image_file = os.path.splitext(os.path.basename(filename))[0]
-    csv_file1 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
-    csv_file2 = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
+    scores_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
+    fits_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
 
     # Extract xi, lli, and penalty from test_metrics
     xi = test_metrics['xi']
     lli = test_metrics['lli']
     penalty = test_metrics['penalty']
     # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-    data1 = list(zip(range(len(xi)), xi, lli, penalty))
+    metric_data = list(zip(range(len(xi)), xi, lli, penalty))
 
     # Create a list of tuples containing fit_results_for_max_xi
     fitted_theta = fit_results[estimated_num_particles]['theta']
-    data2 = [[fitted_theta]]  # Convert fitted_theta to a list
+    fitting_data = [[fitted_theta]]  # Convert fitted_theta to a list
 
     # Write the data to the CSV files
-    os.makedirs(os.path.dirname(csv_file1), exist_ok=True)
-    os.makedirs(os.path.dirname(csv_file2), exist_ok=True)
+    os.makedirs(os.path.dirname(scores_csv_filename), exist_ok=True)
+    os.makedirs(os.path.dirname(fits_csv_filename), exist_ok=True)
 
-    with open(csv_file1, 'w', newline='') as file1:
-        writer1 = csv.writer(file1)
-        writer1.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
-        writer1.writerows(data1)
+    with open(scores_csv_filename, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
+        writer.writerows(metric_data)
 
-    with open(csv_file2, 'w', newline='') as file2:
-        writer2 = csv.writer(file2)
-        writer2.writerow(['theta'])
-        writer2.writerows(data2)
+    with open(fits_csv_filename, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['theta'])
+        writer.writerows(fitting_data)
 
-    image_analysis_results = {'csv_files1': csv_file1,
-                              'csv_files2': csv_file2,
+    image_analysis_results = {'csv_files1': scores_csv_filename,
+                              'csv_files2': fits_csv_filename,
                               'actual_num_particles': actual_num_particles,
                               'estimated_num_particles': estimated_num_particles,
                               'input_image_file': input_image_file,
@@ -595,7 +595,7 @@ def main():
         if config['generated_img_folder_removal_after_counting']:
             shutil.rmtree(config['dataset_name'])
         
-        # Generate confusino matrix
+        # Generate confusion matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
         generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
 
