@@ -395,11 +395,11 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
                 statusmsg = f'{dataset_name} '
                 if actual_num_particles == estimated_num_particles:
-                    statusmsg += f'- Passed: act. {actual_num_particles} == est. {estimated_num_particles}\n'
+                    statusmsg += f'{input_image_file} - Passed: act. {actual_num_particles} == est. {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
-                    statusmsg += f'- Failed: act. {actual_num_particles} > est. {estimated_num_particles}\n'
+                    statusmsg += f'{input_image_file} - Failed: act. {actual_num_particles} > est. {estimated_num_particles}\n'
                 else:
-                    statusmsg += f'- Failed: act. {actual_num_particles} < est. {estimated_num_particles}\n'
+                    statusmsg += f'{input_image_file} - Failed: act. {actual_num_particles} < est. {estimated_num_particles}\n'
 
                 # statusmsg += f' Test results saved to {filename}'
                 report_progress(progress, len(image_files), starttime, statusmsg)
@@ -440,6 +440,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
     fisher_info = test_metrics['fisher_info']
     # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
     metric_data = list(zip(range(len(xi)), xi, lli, penalty, fisher_info))
+    # metric_data = list(zip(range(len(xi)), xi, lli, penalty, ))
 
     # Create a list of tuples containing fit_results_for_max_xi
     fitted_theta = fit_results[estimated_num_particles]['theta']

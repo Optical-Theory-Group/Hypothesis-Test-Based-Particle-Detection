@@ -615,7 +615,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     - particle_index: 1, 2, 3, ...     (particle 1, particle 2, particle 3, ...)
     - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
     """ 
-    min_model_xy = 1e-10
+    min_model_xy = 1e-1
     method = 'trust-exact'
     
     # MLE estimation of H1, H2, ... (where should it end?) 
@@ -1066,9 +1066,9 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         if np.isinf(lli[-1]):
             lli[-1] = np.nan
         if penalty[hypothesis_index] < 0 or hypothesis_index == 0:
-            xi += [lli[-1] - penalty[-1]]
-        else:
             xi += [lli[-1]]
+        else:
+            xi += [lli[-1] - penalty[-1]]
             # print(f'Warning: penalty < 0. {hypothesis_index=} assigning "xi = lli", instead of "xi = lli - penalty".')
             # break
 
@@ -1080,7 +1080,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             print('drop count >= 2. No higher order hypothesis will be tested for this image.')
             break
 
-        fisher_info += fisher_mat
+        fisher_info.append(fisher_mat)
 
     # Store xi, lli and penalty to test_metric
     test_metrics = {
