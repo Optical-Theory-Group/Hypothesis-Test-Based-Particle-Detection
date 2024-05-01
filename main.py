@@ -406,15 +406,15 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
             
     return log_folder
 
-def analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed):
+def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed):
     # In case random numbers are used in analyse we seed here such that different parallel processes do not use the same random numbers
     np.random.seed(seed) 
 
     # Print the name of the image file
-    image = np.array(im.open(filename))
+    image = np.array(im.open(image_filename))
 
-    # Extract the number of particles from filename
-    basename = os.path.basename(filename)
+    # Extract the number of particles from image_filename
+    basename = os.path.basename(image_filename)
     parts = basename.split('_')
     num_particles_part = parts[1]
     # Split this part on 'particles' to get the number
@@ -429,16 +429,17 @@ def analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log
                                                         psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
 
     # Get the input image file name
-    input_image_file = os.path.splitext(os.path.basename(filename))[0]
-    scores_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_scores.csv"
-    fits_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(filename))[0]}_fittings.csv"
+    input_image_file = os.path.splitext(os.path.basename(image_filename))[0]
+    scores_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_scores.csv"
+    fits_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_fittings.csv"
 
     # Extract xi, lli, and penalty from test_metrics
     xi = test_metrics['xi']
     lli = test_metrics['lli']
     penalty = test_metrics['penalty']
+    fisher_info = test_metrics['fisher_info']
     # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-    metric_data = list(zip(range(len(xi)), xi, lli, penalty))
+    metric_data = list(zip(range(len(xi)), xi, lli, penalty, fisher_info))
 
     # Create a list of tuples containing fit_results_for_max_xi
     fitted_theta = fit_results[estimated_num_particles]['theta']
@@ -450,7 +451,7 @@ def analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log
 
     with open(scores_csv_filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['hypothesis_index', 'xi', 'lli', 'penalty'])
+        writer.writerow(['hypothesis_index', 'xi', 'lli', 'penalty, fisher_info'])
         writer.writerows(metric_data)
 
     with open(fits_csv_filename, 'w', newline='') as file:
@@ -458,12 +459,12 @@ def analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log
         writer.writerow(['theta'])
         writer.writerows(fitting_data)
 
-    image_analysis_results = {'csv_files1': scores_csv_filename,
+    image_analysis_results = {'scores_csv_file': scores_csv_filename,
                               'csv_files2': fits_csv_filename,
                               'actual_num_particles': actual_num_particles,
                               'estimated_num_particles': estimated_num_particles,
                               'input_image_file': input_image_file,
-                              'filename': filename,
+                              'image_filename': image_filename,
                               }
     
     
