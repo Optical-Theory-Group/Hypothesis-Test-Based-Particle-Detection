@@ -629,6 +629,8 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     xi = [] # Which will be lli - penalty
     lli = [] # log likelihood
     penalty = [] # penalty term
+    
+    fisher_info = [] # Fisher Information Matrix
 
     # roi_max and roi_min will be used to initialize background and particle intensities estimations.
     roi_max, roi_min = np.max(roi_image), np.min(roi_image) 
@@ -1032,6 +1034,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                                 print("Warning: param_type is not recognized. Check the param_type value.")
                             fisher_mat[kk, ll] += ddt_modelhk_at_xxyy[particle_index_kk][param_type_kk] * ddt_modelhk_at_xxyy[particle_index_ll][param_type_ll] / modelhk_at_xxyy * scaling1 * scaling2
                             fisher_mat[ll, kk] = fisher_mat[kk, ll] # The FIM is symmetric.
+
         
         # Now I got the FIM under Hk. Let's use this to calculate the Xi_k (GMLR criterion)
         # Xi[k] = log(likelihood(data; MLE params under Hk)) - 1/2 * log(det(FIM under Hk))
@@ -1077,11 +1080,14 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             print('drop count >= 2. No higher order hypothesis will be tested for this image.')
             break
 
+        fisher_info += fisher_mat
+
     # Store xi, lli and penalty to test_metric
     test_metrics = {
         'xi': xi,
         'lli': lli,
         'penalty': penalty,
+        'fisher_info': fisher_info,
     }
 
     if display_xi_graph:
