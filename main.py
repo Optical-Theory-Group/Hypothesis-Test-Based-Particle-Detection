@@ -476,21 +476,66 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
     # Extract the actual and estimated particle numbers
     actual = df['Actual Particle Number']
     estimated = df['Estimated Particle Number']
-
+    
+    # Load the JSON file
+    json_file = os.path.join(os.path.dirname(csv_file), 'config_used.json')
+    with open(json_file, 'r') as f:
+        config_data = json.load(f)
+    
+    # Get the analysis_max_h_number from the JSON file
+    analysis_max_h_number = config_data.get('analysis_max_h_number', 0)
+    
+    # Set the matrix size based on analysis_max_h_number
+    matrix_size = analysis_max_h_number + 1
+    
     # Generate the confusion matrix
-    matrix = confusion_matrix(actual, estimated)
-
-    # Display the confusion matrix
+    matrix = confusion_matrix(actual, estimated, labels=range(matrix_size))
+    normalized_matrix = np.zeros(matrix.shape)
+    
     if display:
-        sns.heatmap(matrix, annot=True, fmt='d')
-        plt.title('Confusion Matrix')
-        plt.xlabel('Estimated Particle Number')
-        plt.ylabel('Actual Particle Number')
+        row_sums = matrix.sum(axis=1)
+        for i, row_sum in enumerate(row_sums):
+            if row_sum != 0:
+                normalized_matrix[i, :] = matrix[i, :] / row_sum
+            else:
+                normalized_matrix[i, :] = np.zeros(matrix.shape[1])
+        
+        _, ax = plt.subplots(figsize=(8, 5))  # Increase the size of the figure.
+        folder_name = os.path.basename(os.path.dirname(csv_file))
+        sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax)  # Plot the heatmap on the new axes.
+        ax.set_title(f'{folder_name}')
+        ax.set_xlabel('Estimated Particle Number')
+        ax.set_ylabel('Actual Particle Number')
+        ytick_labels = [f'{label} (count:{count})' for label, count in zip(range(matrix_size+1), row_sums)]
+        for i in range(matrix_size+1, matrix.shape[0]):
+            ytick_labels.append(f'{matrix_size} (count: 0)')
+        
+        ax.set_yticklabels(ytick_labels, rotation=0)
+        
+        # Draw lines between rows
+        for i in range(matrix.shape[0]):
+            ax.axhline(i, color='black', linewidth=1)
+        
+        plt.tight_layout()
         plt.show()
-
+    
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
     matrix_df.to_csv(save_path, index=False)
+
+def plot_confusion_matrices_from_all_folders_inside_run_folder():
+
+    # Get the list of folders in the specified directory
+    folder_path = ".downloads/public-archivedwl-469/runs/"
+    folders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
+
+    # Iterate over the folders
+    for folder in folders:
+        # Get the path to the actual_vs_counted.csv file
+        csv_file_path = os.path.join(folder_path, folder, "actual_vs_counted.csv")
+
+        # Generate and display the confusion matrix
+        generate_confusion_matrix(csv_file_path, display=True, save_path=None)
 
 def main():
     batchjobstarttime = datetime.now()
