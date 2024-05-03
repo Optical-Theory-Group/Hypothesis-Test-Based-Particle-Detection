@@ -230,7 +230,8 @@ def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, a
     
     n_particle_min = 0
     n_particle_max = sz * sz // mean_area_per_particle
-    print(f'Generating {n_images_per_count} images in folder image_dataset/{dataset_name}')
+    print(f'Generating {n_images_per_count} images per count {n_particle_min} to {n_particle_max} in folder image_dataset/{dataset_name}.\n\
+        Total number of images generated from this config is {n_images_per_count * (n_particle_max - n_particle_min + 1)}.')
 
     # Create the folder to store the images
     image_folder_path = os.path.join("image_dataset", dataset_name)
@@ -416,10 +417,9 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
 
     # Extract the number of particles from image_filename
     basename = os.path.basename(image_filename)
-    parts = basename.split('_')
-    num_particles_part = parts[1]
-    # Split this part on 'particles' to get the number
-    actual_num_particles = int(num_particles_part.split('particles')[0])
+    count_part = basename.split('-')[0]
+    num_particles = count_part.split('count')[1]
+    actual_num_particles = int(num_particles)
 
     # Find tentative peaks
     tentative_peaks = get_tentative_peaks(image, min_distance=1)
