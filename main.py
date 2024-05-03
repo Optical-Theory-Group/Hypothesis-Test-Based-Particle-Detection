@@ -223,37 +223,38 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, amp_sd=0.1, n_images=10, psf_sd=1.39, sz=20, bg=500, random_seed=42, config_content=''):
+def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, random_seed=42, config_content=''):
     np.random.seed(random_seed)
+
+    relative_intensity_min = 0.1
+    
     n_particle_min = 0
     n_particle_max = sz * sz // mean_area_per_particle
-    print(f'Generating {n_images} images in folder image_dataset/{dataset_name}')
+    print(f'Generating {n_images_per_count} images in folder image_dataset/{dataset_name}')
 
     # Create the folder to store the images
     image_folder_path = os.path.join("image_dataset", dataset_name)
-    image_folder = os.makedirs(image_folder_path, exist_ok=True)
-    for img_idx in range(n_images):
-        image = np.ones((sz, sz), dtype=float) * bg
-        num_particles = np.random.randint(n_particle_min, n_particle_max+1)
-        num_cancelled_particles = 0
-        for _ in range(num_particles):
-            x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
-            y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
-            amplitude = np.random.normal(1, amp_sd) * amp_to_bg * bg
-            if amplitude <= 0: 
-                print('Warning: Amplitude is less than or equal to 0. This particle will not be added to the image and omission will be reflected in the file name.')
-                num_cancelled_particles += 1
-            else:
+    os.makedirs(image_folder_path, exist_ok=True)
+
+    for n_particles in range(n_particle_min, n_particle_max+1):
+        for img_idx in range(n_images_per_count):
+            image = np.ones((sz, sz), dtype=float) * bg
+            for _ in range(n_particles):
+                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
+                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
+                relative_intensity = np.random.normal(1, amp_sd)
+                if relative_intensity < relative_intensity_min:
+                    relative_intensity = relative_intensity_min
+                    print('Warning: Randomly drawn particle intensity is less than 0.1 * "expected intensity". Forcing it to be 0.1 * "expected intensity"')
+                amplitude = relative_intensity * amp_to_bg * bg
                 peak_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
                 image += psfconvolution(peak_info, sz)
-        # Add Poisson noise
-        image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-        img_filename = f"img{img_idx}_{num_particles - num_cancelled_particles}particles.tiff"
-        # plt.imshow(image, cmap='gray')
-        pil_image = im.fromarray(image.astype(np.uint16))
-        pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
-        # plt.close()
-        
+            # Add Poisson noise
+            image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
+            img_filename = f"count{n_particles}-index{img_idx}.tiff"
+            pil_image = im.fromarray(image.astype(np.uint16))
+            pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
+    
     # Save the content of the config file
     config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
     with open(config_file_save_path, 'w') as f:
@@ -570,7 +571,7 @@ def main():
 
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
-                                    'generate_dataset', 'gen_randseed', 'gen_n_img', 'gen_psf_sd', 'gen_img_width', 'gen_mean_area_per_particle', 'gen_bg_level', \
+                                    'generate_dataset', 'gen_randseed', 'gen_n_img_per_count', 'gen_psf_sd', 'gen_img_width', 'gen_mean_area_per_particle', 'gen_bg_level', \
                                     'gen_particle_int_to_bg_level', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
                                     'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'analysis_use_exit_condition', 'analysis_max_h_number',]
                 for field in required_fields:
@@ -588,7 +589,7 @@ def main():
 
         if config['generate_dataset']:
             generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_mean_area_per_particle'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
-                                n_images=config['gen_n_img'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
+                                n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
         if config['analyze_dataset']:
             log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
