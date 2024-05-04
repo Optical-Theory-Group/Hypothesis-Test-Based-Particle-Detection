@@ -223,7 +223,7 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, random_seed=42, config_content=''):
+def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, random_seed=42, config_content=''):
     np.random.seed(random_seed)
 
     relative_intensity_min = 0.1
@@ -240,6 +240,7 @@ def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, a
     for n_particles in range(n_particle_min, n_particle_max+1):
         for img_idx in range(n_images_per_count):
             image = np.ones((sz, sz), dtype=float) * bg
+            chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
                 x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
                 y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
@@ -247,7 +248,7 @@ def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg=20, a
                 if relative_intensity < relative_intensity_min:
                     relative_intensity = relative_intensity_min
                     print('Warning: Randomly drawn particle intensity is less than 0.1 * "expected intensity". Forcing it to be 0.1 * "expected intensity"')
-                amplitude = relative_intensity * amp_to_bg * bg
+                amplitude = relative_intensity * chosen_mean_intensity
                 peak_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
                 image += psfconvolution(peak_info, sz)
             # Add Poisson noise
@@ -566,7 +567,7 @@ def main():
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
                                     'generate_dataset', 'gen_randseed', 'gen_n_img_per_count', 'gen_psf_sd', 'gen_img_width', 'gen_min_mean_area_per_particle', 'gen_bg_level', \
-                                    'gen_particle_int_to_bg_level', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
+                                    'gen_particle_int_mean_to_bg_level_min', 'gen_particle_int_mean_to_bg_level_max', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
                                     'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'analysis_use_exit_condition', 'analysis_max_h_number',]
                 for field in required_fields:
                     if field not in config:
@@ -582,7 +583,7 @@ def main():
             continue
 
         if config['generate_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_min_mean_area_per_particle'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
+            generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_min_mean_area_per_particle'], amp_to_bg_min=config['gen_particle_int_mean_to_bg_level_min'], amp_to_bg_max=config['gen_particle_int_mean_to_bg_level_max'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
                                 n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
         if config['analyze_dataset']:
