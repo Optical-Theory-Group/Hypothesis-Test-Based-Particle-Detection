@@ -398,11 +398,11 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
                 statusmsg = f'{dataset_name} '
                 if actual_num_particles == estimated_num_particles:
-                    statusmsg += f'{input_image_file}.tiff - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
-                    statusmsg += f'{input_image_file}.tiff - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}.tiff\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
                 else:
-                    statusmsg += f'{input_image_file}.tiff - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
                 # statusmsg += f' Test results saved to {filename}'
                 report_progress(progress, len(image_files), starttime, statusmsg)
@@ -474,6 +474,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
     return image_analysis_results
 
 def generate_confusion_matrix(csv_file, save_path, display=False, ):
+
     # Read the CSV file
     df = pd.read_csv(csv_file)
 
@@ -482,38 +483,30 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
     estimated = df['Estimated Particle Number']
     
     # Load the JSON file
-    json_file = os.path.join(os.path.dirname(csv_file), 'config_used.json')
-    with open(json_file, 'r') as f:
-        config_data = json.load(f)
+    # json_file = os.path.join(os.path.dirname(csv_file), 'config_used.json')
     
     # Get the analysis_max_h_number from the JSON file
-    analysis_max_h_number = config_data.get('analysis_max_h_number', 0)
+    # analysis_max_h_number = config_data.get('analysis_max_h_number', 0)
     
     # Set the matrix size based on analysis_max_h_number
-    matrix_size = analysis_max_h_number + 1
     
     # Generate the confusion matrix
-    matrix = confusion_matrix(actual, estimated, labels=range(matrix_size))
+    matrix = confusion_matrix(actual, estimated)
+    if matrix[-1].sum == 0:
+        matrix = matrix[:-1, :]
     normalized_matrix = np.zeros(matrix.shape)
     
     if display:
         row_sums = matrix.sum(axis=1)
-        for i, row_sum in enumerate(row_sums):
-            if row_sum != 0:
-                normalized_matrix[i, :] = matrix[i, :] / row_sum
-            else:
-                normalized_matrix[i, :] = np.zeros(matrix.shape[1])
-        
+        row_sums = np.reshape(row_sums, (len(row_sums),-1))
         _, ax = plt.subplots(figsize=(8, 5))  # Increase the size of the figure.
+        normalized_matrix = matrix / row_sums
         folder_name = os.path.basename(os.path.dirname(csv_file))
         sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax)  # Plot the heatmap on the new axes.
         ax.set_title(f'{folder_name}')
         ax.set_xlabel('Estimated Particle Number')
         ax.set_ylabel('Actual Particle Number')
-        ytick_labels = [f'{label} (count:{count})' for label, count in zip(range(matrix_size+1), row_sums)]
-        for i in range(matrix_size+1, matrix.shape[0]):
-            ytick_labels.append(f'{matrix_size} (count: 0)')
-        
+        ytick_labels = [f"{i} (count: {row_sums[i][0]})" for i in range(len(row_sums))]
         ax.set_yticklabels(ytick_labels, rotation=0)
         
         # Draw lines between rows
@@ -559,7 +552,7 @@ def main():
 
     print(f"Config files loaded (total of {len(config_files)}):")
     for config_file in config_files:
-        print(config_file)
+        print("> " + config_file)
 
     for i, config_file in enumerate(config_files):
         print(f"Processing {config_file} ({i+1}/{len(config_files)})")
@@ -572,7 +565,7 @@ def main():
 
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
-                                    'generate_dataset', 'gen_randseed', 'gen_n_img_per_count', 'gen_psf_sd', 'gen_img_width', 'gen_mean_area_per_particle', 'gen_bg_level', \
+                                    'generate_dataset', 'gen_randseed', 'gen_n_img_per_count', 'gen_psf_sd', 'gen_img_width', 'gen_min_mean_area_per_particle', 'gen_bg_level', \
                                     'gen_particle_int_to_bg_level', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
                                     'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'analysis_use_exit_condition', 'analysis_max_h_number',]
                 for field in required_fields:
@@ -589,7 +582,7 @@ def main():
             continue
 
         if config['generate_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_mean_area_per_particle'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
+            generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_min_mean_area_per_particle'], amp_to_bg=config['gen_particle_int_to_bg_level'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
                                 n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
         if config['analyze_dataset']:
@@ -608,3 +601,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    pass
