@@ -307,7 +307,7 @@ def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=
     remaintime = remaintime - timedelta(microseconds=remaintime.microseconds)
 
     strmsg = '{}/{}' \
-            '   in   : {} ({:.4f}/s  estimated remaining time: {}). {}'.format(progresscount, totalrealisations,
+            '   in   : {} ({:.4f}/s  Remaining run time estimate: {}). {}'.format(progresscount, totalrealisations,
                                                     runtime, progresscount / runtimesecs, remaintime, statusmsg)
 
     update_progress(progresscount / totalrealisations, strmsg)
