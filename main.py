@@ -22,7 +22,8 @@ import os
 import concurrent.futures
 import sys
 from datetime import datetime, timedelta
-
+from cProfile import Profile
+from pstats import SortKey, Stats
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -345,7 +346,7 @@ def update_progress(progress, status='', barlength=20):
         sys.stdout.write(text)
         sys.stdout.flush()
 
-def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0, config_content=''):
+def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0, config_content='', parallel=True):
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', dataset_name)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
@@ -375,25 +376,48 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     # For each image file, 
     starttime = datetime.now()
     print('Beginning image analysis...')
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed)
-                       for seed, filename in enumerate(image_files)]
-        
-        progress = 0
-        with open(main_log_file_path, 'a', newline='') as f: 
-            for cfresult in concurrent.futures.as_completed(futures):
-                if cfresult._exception is not None:
-                    raise RuntimeError(cfresult._exception)
-                analysis_result = cfresult.result()
-                
-                progress += 1
-                # scores_csv_filename = analysis_result['csv_files1']
-                # fits_csv_filename = analysis_result['csv_files2']
-                actual_num_particles = analysis_result['actual_num_particles']
-                estimated_num_particles = analysis_result['estimated_num_particles']
-                input_image_file = analysis_result['input_image_file']
-                # filename = analysis_result['filename']
+    if parallel:
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed)
+                        for seed, filename in enumerate(image_files)]
+            
+            progress = 0
+            with open(main_log_file_path, 'a', newline='') as f: 
+                for cfresult in concurrent.futures.as_completed(futures):
+                    if cfresult._exception is not None:
+                        raise RuntimeError(cfresult._exception)
+                    analysis_result = cfresult.result()
+                    
+                    # scores_csv_filename = analysis_result['csv_files1']
+                    # fits_csv_filename = analysis_result['csv_files2']
+                    actual_num_particles = analysis_result['actual_num_particles']
+                    estimated_num_particles = analysis_result['estimated_num_particles']
+                    input_image_file = analysis_result['input_image_file']
+                    # filename = analysis_result['filename']
 
+                    writer = csv.writer(f)
+                    writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+
+                    statusmsg = f'{dataset_name} '
+                    if actual_num_particles == estimated_num_particles:
+                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                    elif actual_num_particles > estimated_num_particles:
+                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                    else:
+                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
+
+                    # statusmsg += f' Test results saved to {filename}'
+                    report_progress(progress, len(image_files), starttime, statusmsg)
+                    progress += 1
+    else:
+        progress = 0
+        for seed, filename in enumerate(image_files):
+            analysis_result = analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed)
+            actual_num_particles = analysis_result['actual_num_particles']
+            estimated_num_particles = analysis_result['estimated_num_particles']
+            input_image_file = analysis_result['input_image_file']
+
+            with open(main_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
                 writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
@@ -405,8 +429,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
                 else:
                     statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
-                # statusmsg += f' Test results saved to {filename}'
-                report_progress(progress, len(image_files), starttime, statusmsg)
+            report_progress(progress, len(image_files), starttime, statusmsg)
+            progress += 1
             
     return log_folder
 
@@ -535,20 +559,42 @@ def plot_confusion_matrices_from_all_folders_inside_run_folder():
         # Generate and display the confusion matrix
         generate_confusion_matrix(csv_file_path, display=True, save_path=None)
 
+
 def main():
     batchjobstarttime = datetime.now()
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
+    parser.add_argument('--profile', '-p', type=bool, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
 
     # Check if config-file-folder is provided
-    if args.config_file_folder is None:
+    if (args.config_file_folder is None):
         print("Please provide the folder name for config files using --config-file-folder or -c option.")
         exit()
-
     config_files_dir = args.config_file_folder
+    
+    if args.profile is True:
+        # config_files_dir = './config_files/profile_test'
+        with Profile() as profile:
+            process(parallel=False, config_files_dir=config_files_dir)
+            (
+                Stats(profile)
+                .strip_dirs()
+                .sort_stats(SortKey.TIME)
+                .dump_stats('profile_results.prof')
+            )
+            
+            os.system('snakeviz profile_results.prof &')
+    else:
+        process(config_files_dir)
+
+    batchjobendtime = datetime.now()
+    print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
+
+
+def process(config_files_dir, parallel=True):
     config_files = os.listdir(config_files_dir)
 
     print(f"Config files loaded (total of {len(config_files)}):")
@@ -588,7 +634,7 @@ def main():
 
         if config['analyze_dataset']:
             log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config))
+                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
 
         if config['generated_img_folder_removal_after_counting']:
             shutil.rmtree(config['dataset_name'])
@@ -597,9 +643,7 @@ def main():
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
         generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
 
-    batchjobendtime = datetime.now()
-    print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
 if __name__ == '__main__':
     main()
-    pass
+    
