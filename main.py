@@ -400,11 +400,11 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
                     statusmsg = f'{dataset_name} '
                     if actual_num_particles == estimated_num_particles:
-                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}'
                     elif actual_num_particles > estimated_num_particles:
-                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}'
                     else:
-                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}'
 
                     # statusmsg += f' Test results saved to {filename}'
                     report_progress(progress, len(image_files), starttime, statusmsg)
@@ -545,10 +545,11 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
     matrix_df = pd.DataFrame(matrix)
     matrix_df.to_csv(save_path, index=False)
 
+
 def plot_confusion_matrices_from_all_folders_inside_run_folder():
 
     # Get the list of folders in the specified directory
-    folder_path = ".downloads/public-archivedwl-469/runs/"
+    folder_path = "./runs/"
     folders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
 
     # Iterate over the folders
@@ -569,6 +570,10 @@ def main():
     parser.add_argument('--profile', '-p', type=bool, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
 
+    print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
+    args.config_file_folder = './config_files/jupiter_run_140524'
+    args.profile = False
+
     # Check if config-file-folder is provided
     if (args.config_file_folder is None):
         print("Please provide the folder name for config files using --config-file-folder or -c option.")
@@ -578,7 +583,7 @@ def main():
     if args.profile is True:
         # config_files_dir = './config_files/profile_test'
         with Profile() as profile:
-            process(parallel=False, config_files_dir=config_files_dir)
+            process(parallel=True, config_files_dir=config_files_dir)
             (
                 Stats(profile)
                 .strip_dirs()
@@ -586,7 +591,7 @@ def main():
                 .dump_stats('profile_results.prof')
             )
             
-            os.system('snakeviz profile_results.prof &')
+            # os.system('snakeviz profile_results.prof &')
     else:
         process(config_files_dir)
 
@@ -646,4 +651,5 @@ def process(config_files_dir, parallel=True):
 
 if __name__ == '__main__':
     main()
+    # plot_confusion_matrices_from_all_folders_inside_run_folder()
     

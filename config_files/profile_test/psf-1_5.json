@@ -1,8 +1,8 @@
 {
     "dataset_name": "PSF 1.5",
-    "generate_dataset": true,
+    "generate_dataset": false,
     "gen_randseed": 0,
-    "gen_n_img_per_count": 1,
+    "gen_n_img_per_count": 2500,
     "gen_min_mean_area_per_particle": 100,
     "gen_psf_sd": 1.5,
     "gen_img_width": 20,

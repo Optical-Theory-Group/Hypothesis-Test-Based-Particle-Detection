@@ -38,9 +38,8 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
     return th
 
 
-# Maximum Likelihood Estimation of Hk
-def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image,
-                                  roi_min, roi_max, min_model_xy, psf_sd, szx, szy):
+# Maximum Likelihood Estimation of Hk                       
+def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy):
     theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy)
     modified_neg_loglikelihood = 0.0
 
@@ -162,6 +161,27 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         print("Warning: the shape of the jacobian is not the same as the shape of the parameters. Check required")
         # Reshape the gradient to have the same shape as norm_flat_trimmed_theta
         jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
+    # print(f'Jacobian new {jacobian}')
+
+    # ddt_nll = np.zeros((hypothesis_index + 1, 3)) # 3 --> 1 for intensity, 2 for coordinates
+    # for yy in range(szy):
+    #     for xx in range(szx):
+    #         pixel_val = roi_image[yy, xx]
+    #         model_xy, integrated_psf_x, integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy, psf_sd)
+    #         ddt_nll[0][0] += (1 - pixel_val / model_xy) * roi_max 
+    #         ddt_nll[0][1] = ddt_nll[0][2] = np.nan
+    #         for p_idx in range(1, hypothesis_index + 1):
+    #             ddt_nll[p_idx][0] += (1 - pixel_val / model_xy) * (integrated_psf_x[p_idx] * integrated_psf_y[p_idx]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+    #             ddt_nll[p_idx][1] += (1 - pixel_val / model_xy) * ddt_integrated_psf_1d(xx, theta[p_idx][1], psf_sd) * theta[p_idx][0] * integrated_psf_y[p_idx] * szx
+    #             ddt_nll[p_idx][2] += (1 - pixel_val / model_xy) * ddt_integrated_psf_1d(yy, theta[p_idx][2], psf_sd) * theta[p_idx][0] * integrated_psf_x[p_idx] * szy
+    # jacobian = ddt_nll.flatten()
+    # jacobian = jacobian[~np.isnan(jacobian)]
+    # # Check the shape of the gradient
+    # if jacobian.shape != norm_flat_trimmed_theta.shape:
+    #     print("Warning: the shape of the jacobian is not the same as the shape of the parameters. Check required")
+    #     # Reshape the gradient to have the same shape as norm_flat_trimmed_theta
+    #     jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
+    # print(f'Jacobian orig {jacobian}')
     return jacobian
 
 
@@ -212,65 +232,139 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
     D2dt2_integrated_psf_1d_x.insert(0, None)        
     D2dt2_integrated_psf_1d_y.insert(0, None)       
 
-    d2dt2_nll_2d = np.zeros((hypothesis_index * 3 + 1, hypothesis_index * 3 + 1))
+    # d2dt2_nll_2d = np.zeros((hypothesis_index * 3 + 1, hypothesis_index * 3 + 1))
+
+    # # Among 00, i0, i1, i2, selecting unordered pairs give 10 combinations. (4C2 + 4 = 10)
+    # d2dt2_nll_00_00 = 0
+    # d2dt2_nll_i0_00 = 0
+    # d2dt2_nll_i1_00 = 0
+    # d2dt2_nll_i2_00 = 0
+    # d2dt2_nll_i0_i0 = 0
+    # d2dt2_nll_i1_i0 = 0
+    # d2dt2_nll_i1_i1 = 0
+    # d2dt2_nll_i2_i0 = 0
+    # d2dt2_nll_i2_i1 = 0
+    # d2dt2_nll_i2_i2 = 0
+
+    # pixelval_over_model_squared = roi_image / Model_xy**2
+    # d2dt2_nll_00_00 = np.sum(pixelval_over_model_squared * (roi_max)**2)
+    # d2dt2_nll_2d[0][0] = d2dt2_nll_00_00
+            
+    # for pidx in range(1, hypothesis_index + 1):
+    #     # 2. i0, 00
+    #     # pixelval_over_model_squared * integrated_psf_x[pidx] * integrated_psf_y[pidx] * (roi_max - roi_min) * (2 * np.pi * psf_sd**2) * (roi_max)
+    #     d2dt2_nll_i0_00 += np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) * (roi_max - roi_min) * (2 * np.pi * psf_sd**2) * (roi_max) )
+    #     d2dt2_nll_2d[0][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_00
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 1][0] = d2dt2_nll_i0_00
+    #     # 3. i1, 00
+    #     d2dt2_nll_i1_00 += np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta[pidx][0] * (szx) * (roi_max) )
+    #     d2dt2_nll_2d[0][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_00
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 2][0] = d2dt2_nll_i1_00
+    #     # 4. i2, 00
+    #     d2dt2_nll_i2_00 += np.sum(pixelval_over_model_squared * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta[pidx][0] * (szy) * (roi_max) )
+    #     d2dt2_nll_2d[0][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_00
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 3][0] = d2dt2_nll_i2_00
+    #     # 5. i0, i0 ##
+    #     d2dt2_nll_i0_i0 += np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 )
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_i0
+    #     # 6. i1, i0
+    #     d2dt2_nll_i1_i0 += np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) \
+    #                               * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2) )
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2_nll_i1_i0
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i0
+    #     # 7. i2, i0
+    #     d2dt2_nll_i2_i0 += np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) \
+    #                               * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2) )
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2_nll_i2_i0
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i0
+    #     # 8. i1, i1 
+    #     d2dt2_nll_i1_i1 += np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx]**2, Ddt_integrated_psf_1d_x[pidx] ** 2) \
+    #                               + (1 - roi_image / Model_xy) * np.outer(Integrated_psf_y[pidx], D2dt2_integrated_psf_1d_x[pidx])) * theta[pidx][0] * szx**2   )
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i1
+    #     # 9. i2, i1 
+    #     d2dt2_nll_i2_i1 += np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) * theta[pidx][0] \
+    #                               * np.outer(Ddt_integrated_psf_1d_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * szy )
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = d2dt2_nll_i2_i1
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i1
+    #     # 10. i2, i2 ##
+    #     d2dt2_nll_i2_i2 += np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Ddt_integrated_psf_1d_y[pidx]** 2, Integrated_psf_x[pidx]**2) \
+    #                               + (1 - roi_image / Model_xy) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]))   * theta[pidx][0] * szy**2  )
+    #     d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2
+        
+    # check_vec = [d2dt2_nll_i0_00, d2dt2_nll_i1_00, d2dt2_nll_i2_00, d2dt2_nll_i0_i0, d2dt2_nll_i1_i0, d2dt2_nll_i1_i1, d2dt2_nll_i2_i0, d2dt2_nll_i2_i1, d2dt2_nll_i2_i2]
+
+    d2dt2_nll_2d_orig = np.zeros((hypothesis_index * 3 + 1, hypothesis_index * 3 + 1))
 
     # Among 00, i0, i1, i2, selecting unordered pairs give 10 combinations. (4C2 + 4 = 10)
-    d2dt2_nll_00_00 = 0
-    d2dt2_nll_i0_00 = 0
-    d2dt2_nll_i1_00 = 0
-    d2dt2_nll_i2_00 = 0
-    d2dt2_nll_i0_i0 = 0
-    d2dt2_nll_i1_i0 = 0
-    d2dt2_nll_i1_i1 = 0
-    d2dt2_nll_i2_i0 = 0
-    d2dt2_nll_i2_i1 = 0
-    d2dt2_nll_i2_i2 = 0
+    d2dt2_nll_00_00_orig = 0
+    d2dt2_nll_i0_00_orig = 0
+    d2dt2_nll_i1_00_orig = 0
+    d2dt2_nll_i2_00_orig = 0
+    d2dt2_nll_i0_i0_orig = 0
+    d2dt2_nll_i1_i0_orig = 0
+    d2dt2_nll_i1_i1_orig = 0
+    d2dt2_nll_i2_i0_orig = 0
+    d2dt2_nll_i2_i1_orig = 0
+    d2dt2_nll_i2_i2_orig = 0
 
-    pixelval_over_model_squared = roi_image / Model_xy**2
-    d2dt2_nll_00_00 = np.sum(pixelval_over_model_squared * (roi_max)**2)
-    d2dt2_nll_2d[0][0] = d2dt2_nll_00_00
-            
-    for pidx in range(1, hypothesis_index + 1):
-        # 2. i0, 00
-        d2dt2_nll_i0_00 = np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) * (roi_max - roi_min) * (2 * np.pi * psf_sd**2) * (roi_max) )
-        d2dt2_nll_2d[0][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_00
-        d2dt2_nll_2d[(pidx - 1) * 3 + 1][0] = d2dt2_nll_i0_00
-        # 3. i1, 00
-        d2dt2_nll_i1_00 = np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta[pidx][0] * (szx) * (roi_max) )
-        d2dt2_nll_2d[0][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_00
-        d2dt2_nll_2d[(pidx - 1) * 3 + 2][0] = d2dt2_nll_i1_00
-        # 4. i2, 00
-        d2dt2_nll_i2_00 = np.sum(pixelval_over_model_squared * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta[pidx][0] * (szy) * (roi_max) )
-        d2dt2_nll_2d[0][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_00
-        d2dt2_nll_2d[(pidx - 1) * 3 + 3][0] = d2dt2_nll_i2_00
-        # 5. i0, i0 ##
-        d2dt2_nll_i0_i0 = np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 )
-        d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_i0
-        # 6. i1, i0
-        d2dt2_nll_i1_i0 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) \
-                                  * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2) )
-        d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2_nll_i1_i0
-        d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i0
-        # 7. i2, i0
-        d2dt2_nll_i2_i0 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) \
-                                  * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2) )
-        d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2_nll_i2_i0
-        d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i0
-        # 8. i1, i1 
-        d2dt2_nll_i1_i1 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx]**2, Ddt_integrated_psf_1d_x[pidx] ** 2) \
-                                  + (1 - roi_image / Model_xy) * np.outer(Integrated_psf_y[pidx], D2dt2_integrated_psf_1d_x[pidx])) * theta[pidx][0] * szx**2   )
-        d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i1
-        # 9. i2, i1 
-        d2dt2_nll_i2_i1 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) * theta[pidx][0] \
-                                  * np.outer(Ddt_integrated_psf_1d_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * szy )
-        d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = d2dt2_nll_i2_i1
-        d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i1
-        # 10. i2, i2 ##
-        d2dt2_nll_i2_i2 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Ddt_integrated_psf_1d_y[pidx]** 2, Integrated_psf_x[pidx]**2) \
-                                  + (1 - roi_image / Model_xy) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]))   * theta[pidx][0] * szy**2  )
-        d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2
+    for yy in range(szy):
+        for xx in range(szx):
+            pixel_val2 = roi_image[yy, xx]
+            model_xy2, integrated_psf_x, integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy, psf_sd)
+            pixelval_over_model_squared2 = pixel_val2 / model_xy2**2
+            d2dt2_nll_00_00_orig += pixelval_over_model_squared2 * (roi_max)**2
+            d2dt2_nll_2d_orig[0][0] = d2dt2_nll_00_00_orig
+            for pidx in range(1, hypothesis_index + 1):
+                # 2. i0, 00
+                d2dt2_nll_i0_00_orig += pixelval_over_model_squared2 * integrated_psf_x[pidx] * integrated_psf_y[pidx] * (roi_max - roi_min) * (2 * np.pi * psf_sd**2) * (roi_max)
+                d2dt2_nll_2d_orig[0][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_00_orig
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 1][0] = d2dt2_nll_i0_00_orig
+                # 3. i1, 00
+                d2dt2_nll_i1_00_orig += pixelval_over_model_squared2 * ddt_integrated_psf_1d(xx, theta[pidx][1], psf_sd) * theta[pidx][0] * integrated_psf_y[pidx] * (szx) * (roi_max)
+                d2dt2_nll_2d_orig[0][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_00_orig
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 2][0] = d2dt2_nll_i1_00_orig
+                # 4. i2, 00
+                d2dt2_nll_i2_00_orig += pixelval_over_model_squared2 * ddt_integrated_psf_1d(yy, theta[pidx][2], psf_sd) * theta[pidx][0] * integrated_psf_x[pidx] * (szy) * (roi_max)
+                d2dt2_nll_2d_orig[0][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_00_orig
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 3][0] = d2dt2_nll_i2_00_orig
+                # 5. i0, i0 ##
+                d2dt2_nll_i0_i0_orig += pixelval_over_model_squared2 * (integrated_psf_x[pidx] * integrated_psf_y[pidx])**2 * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_i0_orig
+                # 6. i1, i0
+                d2dt2_nll_i1_i0_orig += (pixelval_over_model_squared2 * theta[pidx][0] * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val2 / model_xy2)) \
+                                    * ddt_integrated_psf_1d(xx, theta[pidx][1], psf_sd) * integrated_psf_y[pidx] * szx * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2) 
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2_nll_i1_i0_orig
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i0_orig
+                # 7. i2, i0
+                d2dt2_nll_i2_i0_orig += (pixelval_over_model_squared2 * theta[pidx][0] * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val2 / model_xy2)) \
+                                    * ddt_integrated_psf_1d(yy, theta[pidx][2], psf_sd) * integrated_psf_x[pidx] * szy * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2_nll_i2_i0_orig
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i0_orig
+                # 8. i1, i1 
+                d2dt2_nll_i1_i1_orig += (pixelval_over_model_squared2 * theta[pidx][0] * ddt_integrated_psf_1d(xx, theta[pidx][1], psf_sd) ** 2 * integrated_psf_y[pidx] \
+                                                        + (1 - pixel_val2 / model_xy2) * d2dt2_integrated_psf_1d(xx, theta[pidx][1], psf_sd))   * theta[pidx][0] * integrated_psf_y[pidx] * szx**2 
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i1_orig
+                # 9. i2, i1 
+                d2dt2_nll_i2_i1_orig += (pixelval_over_model_squared2 * theta[pidx][0] * integrated_psf_x[pidx] * integrated_psf_y[pidx] + (1 - pixel_val2 / model_xy2)) * theta[pidx][0] \
+                                        * ddt_integrated_psf_1d(xx, theta[pidx][1], psf_sd)  \
+                                        * ddt_integrated_psf_1d(yy, theta[pidx][2], psf_sd)  \
+                                        * szx * szy
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = d2dt2_nll_i2_i1_orig
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i1_orig
+                # 10. i2, i2 ##
+                d2dt2_nll_i2_i2_orig += (pixelval_over_model_squared2 * theta[pidx][0] * ddt_integrated_psf_1d(yy, theta[pidx][2], psf_sd) ** 2 * integrated_psf_x[pidx] \
+                                                        + (1 - pixel_val2 / model_xy2) * d2dt2_integrated_psf_1d(yy, theta[pidx][2], psf_sd))   * theta[pidx][0] * integrated_psf_x[pidx] * szy**2 
+                d2dt2_nll_2d_orig[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2_orig
+        
+    # check_vec2 = [d2dt2_nll_i0_00_orig, d2dt2_nll_i1_00_orig, d2dt2_nll_i2_00_orig, d2dt2_nll_i0_i0_orig, d2dt2_nll_i1_i0_orig, d2dt2_nll_i1_i1_orig, d2dt2_nll_i2_i0_orig, d2dt2_nll_i2_i1_orig, d2dt2_nll_i2_i2_orig]
+    # check_vec2 = np.squeeze(np.array(check_vec2))
 
-    return d2dt2_nll_2d
+    # if not all(np.isclose(np.abs(np.array(check_vec) - np.array(check_vec2)), np.zeros(check_vec2.shape), atol=1e-1)) :
+    #     print("Warning: The Hessian matrix is not the same as the original Hessian matrix. Check required")
+    #     print(f'Hess new {check_vec}')
+    #     print(f'Hess orig {check_vec2}')
+    #     print(f'Hess diff {np.array(check_vec) - np.array(check_vec2)}')
+    return d2dt2_nll_2d_orig
 
 
 def getbox(input_image, ii, sz, x_positions, y_positions):
@@ -999,10 +1093,15 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             # Now, let's update the parameters using scipy.optimize.minimize
             if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
                 print("norm_flat_trimmed_theta contains NaN or inf values.")
-                pass
+
             # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
-            result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy),
-                               method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+            try:
+                result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy),
+                                method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+            except Exception as e:
+                print(f"Error occurred during optimization: {e}")
+                
+
             # print(f'H{hypothesis_index} converged?: {result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
             length = len(fn_snapshots)
