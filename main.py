@@ -570,8 +570,8 @@ def main():
     parser.add_argument('--profile', '-p', type=bool, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
 
-    print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
-    args.config_file_folder = './config_files/jupiter_run_140524'
+    # print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
+    # args.config_file_folder = './config_files/jupiter_run_140524'
     args.profile = False
 
     # Check if config-file-folder is provided
@@ -646,7 +646,7 @@ def process(config_files_dir, parallel=True):
         
         # Generate confusion matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
-        generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
+        # generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
 
 
 if __name__ == '__main__':
