@@ -224,8 +224,8 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, random_seed=42, config_content=''):
-    np.random.seed(random_seed)
+def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, gen_random_seed=42, config_content=''):
+    np.random.seed(gen_random_seed)
 
     relative_intensity_min = 0.1
     
@@ -346,7 +346,10 @@ def update_progress(progress, status='', barlength=20):
         sys.stdout.write(text)
         sys.stdout.flush()
 
-def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
+def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
+    # Set random seed
+    np.random.seed(analysis_rand_seed)
+
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', dataset_name)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
@@ -376,10 +379,16 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     # For each image file, 
     starttime = datetime.now()
     print('Beginning image analysis...')
+
+    # Create a list of random seeds for each image
+    image_rand_seeds = list(range(len(image_files)))
+    np.random.shuffle(image_rand_seeds)
+
+    # Analyze the images in parallel or sequentially
     if parallel:
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed)
-                        for seed, filename in enumerate(image_files)]
+            futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, )
+                        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
             
             progress = 0
             with open(main_log_file_path, 'a', newline='') as f: 
@@ -411,8 +420,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
                     progress += 1
     else:
         progress = 0
-        for seed, filename in enumerate(image_files):
-            analysis_result = analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
+        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
+            analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['input_image_file']
@@ -434,10 +443,7 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
             
     return log_folder
 
-def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed, display_fit_results=False, display_xi_graph=False):
-    # In case random numbers are used in analyse we seed here such that different parallel processes do not use the same random numbers
-    np.random.seed(seed) 
-
+def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=False, display_xi_graph=False):
     # Print the name of the image file
     image = np.array(im.open(image_filename))
 
@@ -453,7 +459,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
 
     # Run GMRL
     estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
-                                                        psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+                                                        psf_sd=psf_sd, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
 
     # Get the input image file name
     input_image_file = os.path.splitext(os.path.basename(image_filename))[0]
@@ -646,6 +652,9 @@ def process(config_files_dir, parallel=True):
 
         if config['generated_img_folder_removal_after_counting']:
             shutil.rmtree(config['dataset_name'])
+
+        # Combine analysis log files into one.
+        
         
         # Generate confusion matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
