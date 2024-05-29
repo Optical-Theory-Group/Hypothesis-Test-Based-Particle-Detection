@@ -424,7 +424,7 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
             analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
-            input_image_file = analysis_result['input_image_file']
+            input_image_file = analysis_result['image_filename']
 
             with open(main_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
@@ -461,65 +461,43 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
                                                         psf_sd=psf_sd, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
 
-    # Get the input image file name
-    input_image_file = os.path.splitext(os.path.basename(image_filename))[0]
-    scores_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_scores.csv"
-    fits_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_fittings.csv"
+    image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
 
     # Extract xi, lli, and penalty from test_metrics
     xi = test_metrics['xi']
     lli = test_metrics['lli']
     penalty = test_metrics['penalty']
     fisher_info = test_metrics['fisher_info']
-    # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-    metric_data = list(zip(range(len(xi)), xi, lli, penalty, fisher_info))
-    # metric_data = list(zip(range(len(xi)), xi, lli, penalty, ))
+    fit_parameters = [result['theta'] for result in fit_results]
 
-    # Create a list of tuples containing fit_results_for_max_xi
-    fitted_theta = fit_results[estimated_num_particles]['theta']
-    fitting_data = [[fitted_theta]]  # Convert fitted_theta to a list
+    # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
+    file_h_info = [f"{image_filename} (h{h_index})" for h_index in range(len(xi))]
+    accepted = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+    metric_data = list(zip(file_h_info, accepted, xi, lli, penalty, fisher_info, fit_parameters))
 
     # Write the data to the CSV files
-    os.makedirs(os.path.dirname(scores_csv_filename), exist_ok=True)
-    os.makedirs(os.path.dirname(fits_csv_filename), exist_ok=True)
+    os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
 
-    with open(scores_csv_filename, 'w', newline='') as file:
+    with open(image_analysis_log_filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['hypothesis_index', 'xi', 'lli', 'penalty, fisher_info'])
+        writer.writerow(['image_filename (h number)', 'accepted?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
         writer.writerows(metric_data)
 
-    with open(fits_csv_filename, 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['theta'])
-        writer.writerows(fitting_data)
-
-    image_analysis_results = {'scores_csv_file': scores_csv_filename,
-                              'csv_files2': fits_csv_filename,
+    image_analysis_results = {
                               'actual_num_particles': actual_num_particles,
                               'estimated_num_particles': estimated_num_particles,
-                              'input_image_file': input_image_file,
                               'image_filename': image_filename,
                               }
-    
     
     return image_analysis_results
 
 def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
-
     # Read the CSV file
     df = pd.read_csv(csv_file)
 
     # Extract the actual and estimated particle numbers
     actual = df['Actual Particle Number']
     estimated = df['Estimated Particle Number']
-    
-    # Load the JSON file
-    # json_file = os.path.join(os.path.dirname(csv_file), 'config_used.json')
-    
-    # Get the analysis_max_h_number from the JSON file
-    # analysis_max_h_number = config_data.get('analysis_max_h_number', 0)
-    
-    # Set the matrix size based on analysis_max_h_number
     
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
@@ -607,6 +585,33 @@ def main():
     batchjobendtime = datetime.now()
     print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
+def combine_log_files(log_folder):
+
+    # Create the fitting_results.csv file
+    whole_metrics_log_filename = os.path.join(log_folder, 'whole_metrics_log_filename.csv')
+    print(f"{whole_metrics_log_filename=}")
+    
+    os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
+
+    # Get all the *_fittings.csv files in the image_log folder
+    individual_image_log_files = glob.glob(os.path.join(log_folder, 'image_log', '*_analysis_log.csv'))
+
+    # Open the fitting_results.csv file in write mode
+    with open(whole_metrics_log_filename, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['image_filename (h number)', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+
+        # Iterate over the fittings_files
+        for log_file in individual_image_log_files:
+            # Get the image file name without the extension
+            # image_file_name = os.path.splitext(os.path.basename(log_file))[0].split('_analysis_log')[0] + ".tiff"
+            # Read the fitting file
+            with open(log_file, 'r') as f_ind:
+                reader = csv.reader(f_ind)
+                # Skip the first row (header)
+                next(reader)
+                rows = list(reader)
+                writer.writerows(rows)
 
 def process(config_files_dir, parallel=True):
     config_files = os.listdir(config_files_dir)
@@ -654,6 +659,7 @@ def process(config_files_dir, parallel=True):
             shutil.rmtree(config['dataset_name'])
 
         # Combine analysis log files into one.
+        combine_log_files(log_folder)
         
         
         # Generate confusion matrix
@@ -707,8 +713,10 @@ def quick_test():
 
         if config['analyze_dataset']:
             log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=True, display_xi_graph=True)
+                                analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=False, display_xi_graph=False)
 
+        # Combine analysis log files into one.
+        combine_log_files(log_folder)
     
 
 if __name__ == '__main__':

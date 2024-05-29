@@ -1219,7 +1219,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
 
     # Determine the most likely hypothesis
     estimated_num_particles = np.argmax(xi)
-    input("End of a single image test - Press any key to continue...")
+    # input("End of a single image test - Press any key to continue...")
     plt.close('all')
 
     return estimated_num_particles, fit_results, test_metrics 
