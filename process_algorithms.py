@@ -900,20 +900,20 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
 
     # Figure showing parameter estimation results for all tested hypotheses.
     if display_fit_results:
-        _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
+        _, ax_main = plt.subplots(2, last_h_index + 1, figsize=(2 * (last_h_index + 1), 4))
         # Create a colormap instance
         cmap = plt.get_cmap('turbo')# Create a colormap instance for tentative peak coordinates presentation.
         
         for i, coord in enumerate(rough_peaks_xy):
             x, y = coord # Check whether this is correct.
             color = cmap(i / len(rough_peaks_xy))  # Use turbo colormap
-            ax_main[1].text(x, y, f'{i}', fontsize=6, color=color) 
+            ax_main[1][0].text(x, y, f'{i}', fontsize=6, color=color) 
 
-        ax_main[1].set_xlim(0-.5, szx-.5)
-        ax_main[1].set_ylim(szy-.5, 0-.5) 
-        ax_main[1].set_aspect('equal')
-        ax_main[1].set_title('Tentative Peak Coordinates', fontsize=8)
-        ax_main[0].imshow(roi_image)
+        ax_main[1][0].set_xlim(0-.5, szx-.5)
+        ax_main[1][0].set_ylim(szy-.5, 0-.5) 
+        ax_main[1][0].set_aspect('equal')
+        ax_main[1][0].set_title('Tentative Peak Coordinates', fontsize=8)
+        ax_main[0][0].imshow(roi_image)
         plt.show(block=False)
     
     # xi_drop_count is used for exit condition of the loop.
@@ -1035,21 +1035,21 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
 
         if display_fit_results and hypothesis_index > 0:
             # ax_main[0].cla()
-            _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
-            ax_main[0].set_title(f"H{hypothesis_index} - convgd: {convergence_list[hypothesis_index]}\nbg: {theta[0][0]:.1f}", fontsize=8)
+            # _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
+            ax_main[0][hypothesis_index].set_title(f"H{hypothesis_index} - convgd: {convergence_list[hypothesis_index]}\nbg: {theta[0][0]:.1f}", fontsize=8)
             for particle_index in range(1, hypothesis_index + 1):
                 # print(f"theta[ {particle_index} ]: {theta[particle_index][0]:.3f}\t{theta[particle_index][1]:.3f}\t{theta[particle_index][2]:.3f}")
-                ax_main[0].imshow(roi_image)
+                ax_main[0][hypothesis_index].imshow(roi_image)
                 red = random.randint(200, 255)
                 green = random.randint(0, 100)
                 blue = random.randint(0, 50)
                 color_code = '#%02X%02X%02X' % (red, green, blue)
-                ax_main[0].scatter(theta[particle_index][1], theta[particle_index][2], s=10, color=color_code, marker='x')
-                ax_main[0].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
+                ax_main[0][hypothesis_index].scatter(theta[particle_index][1], theta[particle_index][2], s=10, color=color_code, marker='x')
+                ax_main[0][hypothesis_index].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
                                             f'  {theta[particle_index][0]:.1f}', color=color_code, fontsize=10,) 
-            ax_main[1].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
-            ax_main[1].plot(np.arange(snapshot_length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
-            ax_main[1].set_ylim(bottom=0)
+            ax_main[1][hypothesis_index].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
+            ax_main[1][hypothesis_index].plot(np.arange(snapshot_length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
+            ax_main[1][hypothesis_index].set_ylim(bottom=0)
             plt.tight_layout()
             plt.show(block=False)
             pass
