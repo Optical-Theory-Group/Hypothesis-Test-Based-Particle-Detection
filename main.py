@@ -586,7 +586,6 @@ def main():
     print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
 def combine_log_files(log_folder):
-
     # Create the fitting_results.csv file
     whole_metrics_log_filename = os.path.join(log_folder, 'whole_metrics_log_filename.csv')
     print(f"{whole_metrics_log_filename=}")
@@ -717,6 +716,13 @@ def quick_test():
 
         # Combine analysis log files into one.
         combine_log_files(log_folder)
+        
+        # Delete the image_log directory and all its contents
+        dir_path = os.path.join(log_folder, 'image_log')
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+
+
     
 
 if __name__ == '__main__':
