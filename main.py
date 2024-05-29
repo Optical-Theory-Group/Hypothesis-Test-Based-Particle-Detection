@@ -498,7 +498,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
     
     return image_analysis_results
 
-def generate_confusion_matrix(csv_file, save_path, display=False, ):
+def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
 
     # Read the CSV file
     df = pd.read_csv(csv_file)
@@ -521,7 +521,7 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
         matrix = matrix[:-1, :]
     normalized_matrix = np.zeros(matrix.shape)
     
-    if display:
+    if display or savefig:
         row_sums = matrix.sum(axis=1)
         row_sums = np.reshape(row_sums, (len(row_sums),-1))
         _, ax = plt.subplots(figsize=(8, 5))  # Increase the size of the figure.
@@ -537,28 +537,31 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
         # Draw lines between rows
         for i in range(matrix.shape[0]):
             ax.axhline(i, color='black', linewidth=1)
-        
         plt.tight_layout()
-        plt.show()
+        if display:
+            plt.show()
+        if savefig:
+            file_name = os.path.splitext(save_path)[0]  # Remove the file extension
+            plt.savefig(file_name + '.png', dpi=300)
     
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
     matrix_df.to_csv(save_path, index=False)
 
 
-def plot_confusion_matrices_from_all_folders_inside_run_folder():
+# def plot_confusion_matrices_from_all_folders_inside_run_folder():
 
-    # Get the list of folders in the specified directory
-    folder_path = "./runs/"
-    folders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
+#     # Get the list of folders in the specified directory
+#     folder_path = "./runs/"
+#     folders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
 
-    # Iterate over the folders
-    for folder in folders:
-        # Get the path to the actual_vs_counted.csv file
-        csv_file_path = os.path.join(folder_path, folder, "actual_vs_counted.csv")
+#     # Iterate over the folders
+#     for folder in folders:
+#         # Get the path to the actual_vs_counted.csv file
+#         csv_file_path = os.path.join(folder_path, folder, "actual_vs_counted.csv")
 
-        # Generate and display the confusion matrix
-        generate_confusion_matrix(csv_file_path, display=True, save_path=None)
+#         # Generate and display the confusion matrix
+#         generate_confusion_matrix(csv_file_path, display=True, save_path=None)
 
 
 def main():
@@ -646,7 +649,7 @@ def process(config_files_dir, parallel=True):
         
         # Generate confusion matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
-        # generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=True)
+        generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=False, savefig=True)
 
 def main2():
     # Parse command line arguments
@@ -700,6 +703,6 @@ def main2():
     
 
 if __name__ == '__main__':
-    # main()
-    main2()
+    main()
+    # main2()
     # plot_confusion_matrices_from_all_folders_inside_run_folder()
