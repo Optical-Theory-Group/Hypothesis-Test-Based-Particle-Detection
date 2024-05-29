@@ -74,7 +74,7 @@ def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy,
 
     if hypothesis_index == 0:
         model = theta
-        if model == 0:
+        if model <= 0:
             model = min_model_xy
         return model, np.nan, np.nan
     # Initialize the psf_x and psf_y arrays
@@ -349,14 +349,14 @@ def create_separable_filter(one_d_kernel, origin):
         adjusted_kernel: The adjusted kernel.
     """
     # Get the length of the 1D kernel
-    length = len(one_d_kernel)
+    kernel_length = len(one_d_kernel)
 
     # Create a full 2D kernel from the 1D kernel
     full_kernel = np.outer(one_d_kernel, one_d_kernel)
 
     # Calculate padding based on the desired origin
     pad_before = origin - 1
-    pad_after = length - origin
+    pad_after = kernel_length - origin
 
     # Apply padding to create an adjusted kernel
     adjusted_kernel = np.pad(full_kernel, ((pad_before, pad_after), (pad_before, pad_after)), mode='constant')
@@ -1000,7 +1000,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
 
             # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
             try:
-                result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy),
+                minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy),
                                 method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             except Exception as e:
                 print(f"Error occurred during optimization: {e}")
@@ -1008,9 +1008,9 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
 
             # print(f'H{hypothesis_index} converged?: {result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
-            length = len(fn_snapshots)
-            convergence = result.success
-            norm_theta = result.x
+            snapshot_length = len(fn_snapshots)
+            convergence = minimization_result.success
+            norm_theta = minimization_result.x
 
             convergence_list.append(convergence)
 
@@ -1048,7 +1048,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                 ax_main[0].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
                                             f'  {theta[particle_index][0]:.1f}', color=color_code, fontsize=10,) 
             ax_main[1].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
-            ax_main[1].plot(np.arange(length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
+            ax_main[1].plot(np.arange(snapshot_length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
             ax_main[1].set_ylim(bottom=0)
             plt.tight_layout()
             plt.show(block=False)
@@ -1200,17 +1200,17 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         max_xi_index = np.nanargmax(xi)
         _, axs = plt.subplots(3,1, figsize=(4.2,3.9))
         ax = axs[0]
-        length = len(xi)
-        ax.plot(range(length), xi, 'o-', color='purple')              
+        hypothesis_list_length = len(xi)
+        ax.plot(range(hypothesis_list_length), xi, 'o-', color='purple')              
         ax.set_ylabel('xi\n(logL- penalty)')
         ax.axvline(x=max_xi_index, color='gray', linestyle='--')
         ax = axs[1]
-        ax.plot(range(length), lli, 'o-', color='navy')
+        ax.plot(range(hypothesis_list_length), lli, 'o-', color='navy')
         ax.set_ylabel('loglikelihood')
         ax = axs[2]
         ax.axhline(y=0, color='black', linestyle='--')
         # ax.plot(range(last_h_index + 1), np.exp(penalty * 2), 'o-', color='crimson') 
-        ax.plot(range(length), penalty, 'o-', color='crimson') 
+        ax.plot(range(hypothesis_list_length), penalty, 'o-', color='crimson') 
         ax.set_ylabel('penalty')
         ax.set_xlabel('hypothesis_index')
         plt.tight_layout()

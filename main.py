@@ -224,8 +224,8 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, gen_random_seed=42, config_content=''):
-    np.random.seed(gen_random_seed)
+def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, generation_random_seed=42, config_content=''):
+    np.random.seed(generation_random_seed)
 
     relative_intensity_min = 0.1
     
@@ -644,11 +644,11 @@ def process(config_files_dir, parallel=True):
 
         if config['generate_dataset']:
             generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_min_mean_area_per_particle'], amp_to_bg_min=config['gen_particle_int_mean_to_bg_level_min'], amp_to_bg_max=config['gen_particle_int_mean_to_bg_level_max'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
-                                n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
+                                n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], generation_random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
         if config['analyze_dataset']:
             log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+                                analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
 
         if config['generated_img_folder_removal_after_counting']:
             shutil.rmtree(config['dataset_name'])
@@ -660,7 +660,7 @@ def process(config_files_dir, parallel=True):
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
         generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=False, savefig=True)
 
-def main2():
+def quick_test():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
@@ -707,11 +707,11 @@ def main2():
 
         if config['analyze_dataset']:
             log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=True, display_xi_graph=True)
+                                analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=True, display_xi_graph=True)
 
     
 
 if __name__ == '__main__':
-    main()
-    # main2()
+    # main()
+    quick_test()
     # plot_confusion_matrices_from_all_folders_inside_run_folder()
