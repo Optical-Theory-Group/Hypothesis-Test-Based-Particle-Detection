@@ -401,7 +401,7 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
                     # fits_csv_filename = analysis_result['csv_files2']
                     actual_num_particles = analysis_result['actual_num_particles']
                     estimated_num_particles = analysis_result['estimated_num_particles']
-                    input_image_file = analysis_result['input_image_file']
+                    input_image_file = analysis_result['image_filename']
                     # filename = analysis_result['filename']
 
                     writer = csv.writer(f)
@@ -659,7 +659,11 @@ def process(config_files_dir, parallel=True):
 
         # Combine analysis log files into one.
         combine_log_files(log_folder)
-        
+
+        # Delete the image_log directory and all its contents
+        dir_path = os.path.join(log_folder, 'image_log')
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
         
         # Generate confusion matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
@@ -722,10 +726,7 @@ def quick_test():
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
 
-
-    
-
 if __name__ == '__main__':
-    # main()
-    quick_test()
+    main()
+    # quick_test()
     # plot_confusion_matrices_from_all_folders_inside_run_folder()
