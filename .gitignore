@@ -3,3 +3,4 @@ runs/*
 *.pyc
 .downloads/*
 downloads/*
+config_files/*

@@ -394,7 +394,10 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
             with open(main_log_file_path, 'a', newline='') as f: 
                 for cfresult in concurrent.futures.as_completed(futures):
                     if cfresult._exception is not None:
-                        raise RuntimeError(cfresult._exception)
+                        if isinstance(cfresult._exception, Warning):
+                            print("Encountered a Warning:", cfresult._exception)
+                        else:
+                            raise RuntimeError(cfresult._exception)
                     analysis_result = cfresult.result()
                     
                     # scores_csv_filename = analysis_result['csv_files1']
@@ -558,7 +561,7 @@ def main():
     args = parser.parse_args()
 
     # print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
-    # args.config_file_folder = './config_files/jupiter_run_140524'
+    args.config_file_folder = './config_files/jupiter_run_300524'
     args.profile = False
 
     # Check if config-file-folder is provided
@@ -655,7 +658,8 @@ def process(config_files_dir, parallel=True):
                                 analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
 
         if config['generated_img_folder_removal_after_counting']:
-            shutil.rmtree(config['dataset_name'])
+            dir_path =os.path.join("image_dataset", config['dataset_name'])
+            shutil.rmtree(dir_path)
 
         # Combine analysis log files into one.
         combine_log_files(log_folder)
