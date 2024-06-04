@@ -343,10 +343,15 @@ def update_progress(progress, status='', barlength=20):
             status += ' Done.\r\n'
         block = int(round(barlength * progress))
         text = '\rPercent: [{0}] {1:.2f}% {2}'.format('#' * block + '-' * (barlength - block), progress * 100, status)
-        _, columns = os.get_terminal_size(0)  # get the width of the terminal
-        clear_line = '\r' + ' ' * columns + '\r'
+        try:
+            _, erase_length = os.get_terminal_size(0)  # get the width of the terminal
+        except OSError:
+            erase_length = len(text) + 10
+        clear_line = '\r' + ' ' * erase_length + '\r'
         sys.stdout.write(clear_line + text)
         sys.stdout.flush()
+        # sys.stdout.write(text)
+        # sys.stdout.flush()
 
 def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
     # Set random seed
