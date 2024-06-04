@@ -343,7 +343,9 @@ def update_progress(progress, status='', barlength=20):
             status += ' Done.\r\n'
         block = int(round(barlength * progress))
         text = '\rPercent: [{0}] {1:.2f}% {2}'.format('#' * block + '-' * (barlength - block), progress * 100, status)
-        sys.stdout.write(text)
+        _, columns = os.get_terminal_size(0)  # get the width of the terminal
+        clear_line = '\r' + ' ' * columns + '\r'
+        sys.stdout.write(clear_line + text)
         sys.stdout.flush()
 
 def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
@@ -412,11 +414,11 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
                     statusmsg = f'{dataset_name} '
                     if actual_num_particles == estimated_num_particles:
-                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}'
+                        statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}'
                     elif actual_num_particles > estimated_num_particles:
-                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}'
+                        statusmsg += f'\"{input_image_file}\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}'
                     else:
-                        statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}'
+                        statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}'
 
                     # statusmsg += f' Test results saved to {filename}'
                     report_progress(progress, len(image_files), starttime, statusmsg)
@@ -560,8 +562,8 @@ def main():
     parser.add_argument('--profile', '-p', type=bool, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
 
-    # print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
-    args.config_file_folder = './config_files/jupiter_run_300524'
+    print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
+    args.config_file_folder = './config_files/300524'
     args.profile = False
 
     # Check if config-file-folder is provided
