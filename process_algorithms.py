@@ -40,13 +40,15 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
 
 # Maximum Likelihood Estimation of Hk                       
 def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy):
+    # Force-fix negative values
+    norm_flat_trimmed_theta[norm_flat_trimmed_theta < 0] = 0
+    # Force-fix infinite values
+    norm_flat_trimmed_theta[np.isinf(norm_flat_trimmed_theta)] = 1
+    # Denormalize theta to calculate model_xy
     theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy)
-    modified_neg_loglikelihood = 0.0
-
-    model_xy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy),
-                                                   hypothesis_index, min_model_xy, psf_sd)
+    # Calculate the model value at each pixel position
+    model_xy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy), hypothesis_index, min_model_xy, psf_sd)
     modified_neg_loglikelihood = np.sum(model_xy - roi_image * np.log(model_xy))
-
     return modified_neg_loglikelihood
 
 
@@ -952,21 +954,25 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             theta[0][0] = roi_min
             theta[0][1] = theta[0][2] = np.nan
 
-            for particle_index in range(1, hypothesis_index + 1): # Note that the particle index starts from 1, not 0. 
-                # Initialize estimated particle intensities to the maximum value of the Gaussian roi image.
-                theta[particle_index][0] = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+            try:
+                for particle_index in range(1, hypothesis_index + 1): # Note that the particle index starts from 1, not 0. 
+                    # Initialize estimated particle intensities to the maximum value of the Gaussian roi image.
+                    theta[particle_index][0] = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
 
-            # Initialize all particle coordinates as the center of mass of the image.
-            for particle_index in range(1, hypothesis_index + 1):
-                if len(rough_peaks_xy) <= 0:
-                    break
-                if particle_index <= len(rough_peaks_xy):
-                    theta[particle_index][1] = rough_peaks_xy[particle_index-1][0]
-                    theta[particle_index][2] = rough_peaks_xy[particle_index-1][1]
-                else:
-                    # assign random positions. 
-                    theta[particle_index][1] = random.random() * (szx - 1)
-                    theta[particle_index][2] = random.random() * (szy - 1)
+                # Initialize all particle coordinates as the center of mass of the image.
+                for particle_index in range(1, hypothesis_index + 1):
+                    if len(rough_peaks_xy) <= 0:
+                        break
+                    if particle_index <= len(rough_peaks_xy):
+                        theta[particle_index][1] = rough_peaks_xy[particle_index-1][0]
+                        theta[particle_index][2] = rough_peaks_xy[particle_index-1][1]
+                    else:
+                        # assign random positions. 
+                        theta[particle_index][1] = random.random() * (szx - 1)
+                        theta[particle_index][2] = random.random() * (szy - 1)
+            except Exception as e:
+                print(f"Error occurred during initialization of theta inside gmlr(): {e}")
+                print(f"theta: {theta}")
 
         # Only do the MLE if k > 0
         if hypothesis_index == 0:
@@ -1004,6 +1010,9 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                                 method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             except Exception as e:
                 print(f"Error occurred during optimization: {e}")
+                # print("Here is the last (denorm) theta snapshot:")
+                # print(denormalize(theta_snapshots[-1], hypothesis_index, roi_min, roi_max, psf_sd, szx, szy))
+
                 
 
             # print(f'H{hypothesis_index} converged?: {result.success}')
@@ -1079,15 +1088,18 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                     # Below are set as nan, as they are not used. (background does not have x and y coordinates)
                     ddt_modelhk_at_xxyy[0][1] = ddt_modelhk_at_xxyy[0][2] = np.nan
 
-                    # -- Below are special treatment for the [1]'s index and beyond (related to the particle intensities and coordinates)
-                    for particle_index in range(1, hypothesis_index + 1):
-                        # model = background + (i_0 * psf_x_0 * psf_y_0) + (i_1 * psf_x_1 * psf_y_1) + ...
-                        # Calculate derivatives w.r.t particle[particle_index]'s intensity
-                        ddt_modelhk_at_xxyy[particle_index][0] = integrated_psf_x[particle_index] * integrated_psf_y[particle_index]
-                        # Calculate derivatives w.r.t particle[particle_index]'s x coordinate
-                        ddt_modelhk_at_xxyy[particle_index][1] = ddt_integrated_psf_1d(xx, theta[particle_index][1], psf_sd) * theta[particle_index][0] * integrated_psf_y[particle_index]
-                        # Calculate derivatives w.r.t particle[particle_index]'s y coordinate
-                        ddt_modelhk_at_xxyy[particle_index][2] = ddt_integrated_psf_1d(yy, theta[particle_index][2], psf_sd) * theta[particle_index][0] * integrated_psf_x[particle_index]
+                    try:
+                        # -- Below are special treatment for the [1]'s index and beyond (related to the particle intensities and coordinates)
+                        for particle_index in range(1, hypothesis_index + 1):
+                            # model = background + (i_0 * psf_x_0 * psf_y_0) + (i_1 * psf_x_1 * psf_y_1) + ...
+                            # Calculate derivatives w.r.t particle[particle_index]'s intensity
+                            ddt_modelhk_at_xxyy[particle_index][0] = integrated_psf_x[particle_index] * integrated_psf_y[particle_index]
+                            # Calculate derivatives w.r.t particle[particle_index]'s x coordinate
+                            ddt_modelhk_at_xxyy[particle_index][1] = ddt_integrated_psf_1d(xx, theta[particle_index][1], psf_sd) * theta[particle_index][0] * integrated_psf_y[particle_index]
+                            # Calculate derivatives w.r.t particle[particle_index]'s y coordinate
+                            ddt_modelhk_at_xxyy[particle_index][2] = ddt_integrated_psf_1d(yy, theta[particle_index][2], psf_sd) * theta[particle_index][0] * integrated_psf_x[particle_index]
+                    except Exception as e:
+                        print(f"Error occurred during the calculation of derivatives inside gmlr(): {e}")
                         
                     # Calculate the Fisher Information Matrix (FIM) under Hk.
                     assert fisher_mat.shape == (n_hk_params, n_hk_params)
@@ -1095,41 +1107,13 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                     # Building the Fisher Information Matrix regarding Hk.
                     # - Calculation with regards to the background 
                     fisher_mat[0, 0] += ddt_modelhk_at_xxyy[0][0] ** 2 / modelhk_at_xxyy
-                    for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
-                        # convert kk to particle_index and param_type
-                        particle_index = (kk - 1) // n_hk_params_per_particle + 1
-                        param_type = (kk - 1) % n_hk_params_per_particle
-                        scaling1 = roi_max
-                        if param_type == 0:
-                            scaling2 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
-                        elif param_type == 1:
-                            scaling2 = szx
-                        elif param_type == 2:
-                            scaling2 = szy
-                        else:
-                            print("Warning: param_type is not recognized. Check the param_type value.")
-                            
-                        # Using Poisson pdf for likelihood function, the following formula is derived. (Ref: Smith et al. 2010, nmeth, SI eq (9)).
-                        fisher_mat[0, kk] += ddt_modelhk_at_xxyy[0][0] * ddt_modelhk_at_xxyy[particle_index][param_type] / modelhk_at_xxyy * scaling1 * scaling2
-                        fisher_mat[kk, 0] = fisher_mat[0, kk] # The FIM is symmetric.
+                    try:
 
-                    # - Calculation with regards to the particles
-                    for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
-                        # convert kk to particle_index and param_type
-                        particle_index_kk = (kk - 1) // n_hk_params_per_particle + 1
-                        param_type_kk = (kk - 1) % n_hk_params_per_particle
-                        if param_type == 0:
-                            scaling1 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
-                        elif param_type == 1:
-                            scaling1 = szx
-                        elif param_type == 2:
-                            scaling1 = szy
-                        else:
-                            print("Warning: param_type is not recognized. Check the param_type value.")
-                        for ll in range(kk, hypothesis_index * n_hk_params_per_particle + 1):
+                        for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
                             # convert kk to particle_index and param_type
-                            particle_index_ll = (ll - 1) // n_hk_params_per_particle  + 1
-                            param_type_ll = (ll - 1) % n_hk_params_per_particle
+                            particle_index = (kk - 1) // n_hk_params_per_particle + 1
+                            param_type = (kk - 1) % n_hk_params_per_particle
+                            scaling1 = roi_max
                             if param_type == 0:
                                 scaling2 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
                             elif param_type == 1:
@@ -1138,9 +1122,41 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                                 scaling2 = szy
                             else:
                                 print("Warning: param_type is not recognized. Check the param_type value.")
-                            fisher_mat[kk, ll] += ddt_modelhk_at_xxyy[particle_index_kk][param_type_kk] * ddt_modelhk_at_xxyy[particle_index_ll][param_type_ll] / modelhk_at_xxyy * scaling1 * scaling2
-                            fisher_mat[ll, kk] = fisher_mat[kk, ll] # The FIM is symmetric.
+                                
+                            # Using Poisson pdf for likelihood function, the following formula is derived. (Ref: Smith et al. 2010, nmeth, SI eq (9)).
+                            fisher_mat[0, kk] += ddt_modelhk_at_xxyy[0][0] * ddt_modelhk_at_xxyy[particle_index][param_type] / modelhk_at_xxyy * scaling1 * scaling2
+                            fisher_mat[kk, 0] = fisher_mat[0, kk] # The FIM is symmetric.
 
+                        # - Calculation with regards to the particles
+                        for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
+                            # convert kk to particle_index and param_type
+                            particle_index_kk = (kk - 1) // n_hk_params_per_particle + 1
+                            param_type_kk = (kk - 1) % n_hk_params_per_particle
+                            if param_type == 0:
+                                scaling1 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+                            elif param_type == 1:
+                                scaling1 = szx
+                            elif param_type == 2:
+                                scaling1 = szy
+                            else:
+                                print("Warning: param_type is not recognized. Check the param_type value.")
+                            for ll in range(kk, hypothesis_index * n_hk_params_per_particle + 1):
+                                # convert kk to particle_index and param_type
+                                particle_index_ll = (ll - 1) // n_hk_params_per_particle  + 1
+                                param_type_ll = (ll - 1) % n_hk_params_per_particle
+                                if param_type == 0:
+                                    scaling2 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+                                elif param_type == 1:
+                                    scaling2 = szx
+                                elif param_type == 2:
+                                    scaling2 = szy
+                                else:
+                                    print("Warning: param_type is not recognized. Check the param_type value.")
+                                fisher_mat[kk, ll] += ddt_modelhk_at_xxyy[particle_index_kk][param_type_kk] * ddt_modelhk_at_xxyy[particle_index_ll][param_type_ll] / modelhk_at_xxyy * scaling1 * scaling2
+                                fisher_mat[ll, kk] = fisher_mat[kk, ll] # The FIM is symmetric.
+
+                    except Exception as e:
+                        print(f"Error occurred during the calculation of FIM regarding the background inside gmlr(): {e}")
         
         # Now I got the FIM under Hk. Let's use this to calculate the Xi_k (GMLR criterion)
         # Xi[k] = log(likelihood(data; MLE params under Hk)) - 1/2 * log(det(FIM under Hk))

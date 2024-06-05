@@ -309,7 +309,7 @@ def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=
     remaintime = remaintime - timedelta(microseconds=remaintime.microseconds)
 
     strmsg = '{}/{}' \
-            '   in   : {} ({:.4f}/s  Remaining run time estimate: {}). {}'.format(progresscount, totalrealisations,
+            ' in : {} ({:.4f}/s  Remaining time estimate: {}). {}'.format(progresscount, totalrealisations,
                                                     runtime, progresscount / runtimesecs, remaintime, statusmsg)
 
     update_progress(progresscount / totalrealisations, strmsg)
@@ -404,26 +404,31 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
                         if isinstance(cfresult._exception, Warning):
                             print("Encountered a Warning:", cfresult._exception)
                         else:
-                            raise RuntimeError(cfresult._exception)
-                    analysis_result = cfresult.result()
-                    
-                    # scores_csv_filename = analysis_result['csv_files1']
-                    # fits_csv_filename = analysis_result['csv_files2']
-                    actual_num_particles = analysis_result['actual_num_particles']
-                    estimated_num_particles = analysis_result['estimated_num_particles']
-                    input_image_file = analysis_result['image_filename']
-                    # filename = analysis_result['filename']
+                            print("Encountered an Exception:", cfresult._exception)
+                            print("Proceeding without addressing the exception.")
+                            # raise RuntimeError(cfresult._exception)
+                    try:
+                        analysis_result = cfresult.result()
+                        
+                        # scores_csv_filename = analysis_result['csv_files1']
+                        # fits_csv_filename = analysis_result['csv_files2']
+                        actual_num_particles = analysis_result['actual_num_particles']
+                        estimated_num_particles = analysis_result['estimated_num_particles']
+                        input_image_file = analysis_result['image_filename']
+                        # filename = analysis_result['filename']
 
-                    writer = csv.writer(f)
-                    writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+                        writer = csv.writer(f)
+                        writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
-                    statusmsg = f'{dataset_name} '
-                    if actual_num_particles == estimated_num_particles:
-                        statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}'
-                    elif actual_num_particles > estimated_num_particles:
-                        statusmsg += f'\"{input_image_file}\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}'
-                    else:
-                        statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}'
+                        if actual_num_particles == estimated_num_particles:
+                            statusmsg = f'\"{input_image_file}\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}'
+                        elif actual_num_particles > estimated_num_particles:
+                            statusmsg = f'\"{input_image_file}\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}'
+                        else:
+                            statusmsg = f'\"{input_image_file}\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}'
+                    except Exception as e:
+                        print(f"Error in cfresult.result(): {e}")
+                        statusmsg = f'Error: {e}'
 
                     # statusmsg += f' Test results saved to {filename}'
                     report_progress(progress, len(image_files), starttime, statusmsg)
@@ -569,6 +574,7 @@ def main():
 
     print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
     args.config_file_folder = './config_files/300524'
+    # args.config_file_folder = './config_files/error_causing_file_analysis'
     args.profile = False
 
     # Check if config-file-folder is provided
@@ -680,6 +686,29 @@ def process(config_files_dir, parallel=True):
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
         generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=False, savefig=True)
 
+def quick_test2():
+    config_files_dir = './config_files/300524'
+    config_files = os.listdir(config_files_dir)
+    config_file = config_files[0]
+    with open(os.path.join(config_files_dir, config_file), 'r') as f:
+        config = json.load(f)
+        # Pretty print the config file
+        pprint.pprint(config)
+        analysis_rand_seed_per_image = 7258
+        filename = "./image_dataset/PSF 1.1/count1-index88.tiff"
+            # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
+            #                     analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+        psf_sd = config['analysis_psf_sd']
+        last_h_index = config['analysis_max_h_number']
+        use_exit_condi = config['analysis_use_exit_condition']
+        dataset_name = config['dataset_name']
+        analysis_name = config['analysis_name']
+        log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
+        analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
+    
+    pass
+
+
 def quick_test():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
@@ -740,4 +769,5 @@ def quick_test():
 if __name__ == '__main__':
     main()
     # quick_test()
+    # quick_test2()
     # plot_confusion_matrices_from_all_folders_inside_run_folder()
