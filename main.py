@@ -225,23 +225,25 @@ def test_glrt4_with_2_particles_image():
     
     pass
 
-def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, generation_random_seed=42, config_content=''):
+def generate_test_images(dataset_name, minimum_number_of_particles=0, maximum_number_of_particles=4, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_total_image_count=10, psf_sd=1.39, sz=20, bg=500, generation_random_seed=42, config_content=''):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
     relative_intensity_min = 0.1
+    number_of_counts = maximum_number_of_particles - minimum_number_of_particles + 1
+    number_of_images_per_count = np.ceil(n_total_image_count / number_of_counts)
     
-    n_particle_min = 0
-    n_particle_max = sz * sz // mean_area_per_particle
-    print(f'Generating {n_images_per_count} images per count {n_particle_min} to {n_particle_max} in folder image_dataset/{dataset_name}.\n\
-        Total number of images generated from this config is {n_images_per_count * (n_particle_max - n_particle_min + 1)}.')
+    # Print the number of images to be generated and folder to store the images. 
+    print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
+    print(f'Total number of images generated from this config is {number_of_images_per_count * number_of_counts}. Note that this number may be slightly higher than the total number of images requested.')
+    print(f'Saving dataset to: ./image_dataset/{dataset_name}.')
 
     # Create the folder to store the images
     image_folder_path = os.path.join("image_dataset", dataset_name)
     os.makedirs(image_folder_path, exist_ok=True)
 
-    for n_particles in range(n_particle_min, n_particle_max+1):
-        for img_idx in range(n_images_per_count):
+    for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
+        for img_idx in range(number_of_images_per_count):
             image = np.ones((sz, sz), dtype=float) * bg
             chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
@@ -271,8 +273,6 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
         raise ValueError(f"Separation {separation} is greater than the size of the image {sz}.")
     # Set the random seed
     np.random.seed(generation_random_seed)
-    # Set the number of particles to 2.
-    n_particles = 2
     # Create the folder to store the images
     image_folder_path = os.path.join("image_dataset", f"{subfolder_name}{separation}")
     os.makedirs(image_folder_path, exist_ok=True)
@@ -300,18 +300,6 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
         img_filename = f"separation{separation}-index{img_idx}.tiff"
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
-        # Print the progress
-        # print(f"\r{img_idx}-th image {n_images_per_separation} generated", end="")
-        # sys.stdout.flush()
-        
-
-#     pass
-
-# def psf_sd_test():
-#     pass
-
-# def imagewidth_test():
-#     pass
 
 def visualize_ctable(fname):
     df = pd.read_csv(fname)
@@ -394,7 +382,7 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.write(text)
         # sys.stdout.flush()
 
-def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
+def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
     # Set random seed
     np.random.seed(analysis_rand_seed)
 
@@ -405,7 +393,7 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     print(f"Images loaded (total of {len(image_files)}):")
 
     # Create a folder to store the logs
-    log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
+    log_folder = os.path.join('./runs', dataset_name + '_' + code_version_date)
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
@@ -693,31 +681,38 @@ def process(config_files_dir, parallel=True):
 
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
-                                    'generate_dataset', 'gen_randseed', 'gen_n_img_per_count', 'gen_psf_sd', 'gen_img_width', 'gen_min_mean_area_per_particle', 'gen_bg_level', \
-                                    'gen_particle_int_mean_to_bg_level_min', 'gen_particle_int_mean_to_bg_level_max', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
-                                    'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'analysis_use_exit_condition', 'analysis_max_h_number',]
+                                    'code_version_date',\
+                                    'generate_the_dataset', 'gen_randseed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
+                                    "gen_minimum_particle_count",
+                                    "gen_maximum_particle_count",
+                                    'gen_bg_level', \
+                                    'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
+                                    'analysis_delete_the_dataset_after_analysis',\
+                                    'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
                 for field in required_fields:
                     if field not in config:
-                        if config['generate_dataset'] and field.startswith('gen'):
-                            print(f"Error: '{field}' is not a valid field when 'generate_dataset' is True")
+                        # If config['generate_the_dataset'] is True, then all fields starting with 'gen' are required.
+                        if config['generate_the_dataset'] and field.startswith('gen'):
+                            print(f"Error: '{field}' is not a valid field when 'generate_the_dataset' is True")
                             exit()
-                        if config['analyze_dataset'] and field.startswith('analysis'):
-                            print(f"Error: '{field}' is not a valid field when 'analyze_dataset' is True")
+                        # If config['analyze_the_dataset'] is True, then all fields starting with 'analysis' are required.
+                        if config['analyze_the_dataset'] and field.startswith('analysis'):
+                            print(f"Error: '{field}' is not a valid field when 'analyze_the_dataset' is True")
                             exit()
 
         except (FileNotFoundError, json.JSONDecodeError):
             print(f"Error: {config_file} file not found or invalid")
             continue
 
-        if config['generate_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], mean_area_per_particle=config['gen_min_mean_area_per_particle'], amp_to_bg_min=config['gen_particle_int_mean_to_bg_level_min'], amp_to_bg_max=config['gen_particle_int_mean_to_bg_level_max'], amp_sd=config['gen_particle_int_sd_to_mean_int'], \
-                                n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], generation_random_seed=config['gen_randseed'], config_content=json.dumps(config))
+        if config['generate_the_dataset']:
+            generate_test_images(dataset_name=config['dataset_name'], minimum_number_of_particles=config['gen_minimum_particle_count'], maximum_number_of_particles=config['gen_maximum_particle_count'], mean_area_per_particle=config['gen_minimum_particle_count'], amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], \
+                                n_total_image_count=config['gen_total_image_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], generation_random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
-        if config['analyze_dataset']:
-            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+        if config['analyze_the_dataset']:
+            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
+                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
 
-        if config['generated_img_folder_removal_after_counting']:
+        if config['analysis_delete_the_dataset_after_analysis']:
             dir_path =os.path.join("image_dataset", config['dataset_name'])
             shutil.rmtree(dir_path)
 
@@ -743,14 +738,14 @@ def quick_test2():
         pprint.pprint(config)
         analysis_rand_seed_per_image = 7258
         filename = "./image_dataset/PSF 1.1/count1-index88.tiff"
-            # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-            #                     analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
-        psf_sd = config['analysis_psf_sd']
-        last_h_index = config['analysis_max_h_number']
-        use_exit_condi = config['analysis_use_exit_condition']
+            # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
+            #                     analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+        psf_sd = config['analysis_predefined_psf_sd']
+        last_h_index = config['analysis_maximum_hypothesis_index']
+        use_exit_condi = config['analysis_use_premature_hypothesis_choice']
         dataset_name = config['dataset_name']
-        analysis_name = config['analysis_name']
-        log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
+        code_version_date = config['code_version_date']
+        log_folder = os.path.join('./runs', dataset_name + '_' + code_version_date)
         analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
     
     pass
@@ -786,24 +781,27 @@ def quick_test():
                 pprint.pprint(config)
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', \
-                                    'generate_dataset', 'gen_randseed', 'gen_n_img_per_count', 'gen_psf_sd', 'gen_img_width', 'gen_min_mean_area_per_particle', 'gen_bg_level', \
-                                    'gen_particle_int_mean_to_bg_level_min', 'gen_particle_int_mean_to_bg_level_max', 'gen_particle_int_sd_to_mean_int', 'generated_img_folder_removal_after_counting',\
-                                    'analysis_name', 'analysis_randseed', 'analysis_psf_sd', 'analysis_use_exit_condition', 'analysis_max_h_number',]
+                                    'generate_the_dataset', 'gen_randseed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
+                                    "gen_minimum_particle_count",
+                                    "gen_maximum_particle_count",
+                                    'gen_bg_level', \
+                                    'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 'analysis_delete_the_dataset_after_analysis',\
+                                    'code_version_date', 'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
                 for field in required_fields:
                     if field not in config:
-                        if config['generate_dataset'] and field.startswith('gen'):
-                            print(f"Error: '{field}' is not a valid field when 'generate_dataset' is True")
+                        if config['generate_the_dataset'] and field.startswith('gen'):
+                            print(f"Error: '{field}' is not a valid field when 'generate_the_dataset' is True")
                             exit()
-                        if config['analyze_dataset'] and field.startswith('analysis'):
-                            print(f"Error: '{field}' is not a valid field when 'analyze_dataset' is True")
+                        if config['analyze_the_dataset'] and field.startswith('analysis'):
+                            print(f"Error: '{field}' is not a valid field when 'analyze_the_dataset' is True")
                             exit()
         except (FileNotFoundError, json.JSONDecodeError):
             print(f"Error: {config_file} file not found or invalid")
             continue
 
-        if config['analyze_dataset']:
-            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                analysis_rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=False, display_xi_graph=False)
+        if config['analyze_the_dataset']:
+            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
+                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=False, display_xi_graph=False)
 
         # Combine analysis log files into one.
         combine_log_files(log_folder)
@@ -817,7 +815,7 @@ def quick_test():
 # separation = 0 
 # n_images = 100
 # generate_separation_test_images(separation=separation, n_images_per_separation=n_images, amp_to_bg=5, psf_sd=psf_sd, sz=20, bg=500, generation_random_seed=42)
-# log_folder = analyze_whole_folder(dataset_name=f'separation_test{separation}', analysis_name='', use_exit_condi=False, last_h_index=4, psf_sd=psf_sd, analysis_rand_seed=0, config_content='', parallel=False, display_fit_results=False, display_xi_graph=False)
+# log_folder = analyze_whole_folder(dataset_name=f'separation_test{separation}', code_version_date='', use_exit_condi=False, last_h_index=4, psf_sd=psf_sd, analysis_rand_seed=0, config_content='', parallel=False, display_fit_results=False, display_xi_graph=False)
 # combine_log_files(log_folder)
 # # Delete the image_log directory and all its contents
 # dir_path = os.path.join(log_folder, 'image_log')
