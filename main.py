@@ -195,36 +195,6 @@ def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1
 
     return t_g, p_value
 
-def test_glrt4_with_2_particles_image():
-    # intensity = 2500
-    psf_sd = 1.39
-    sz = 20# Size of the width and height of the input image to be generated
-    scaling = 3000  # As in the point spread function := scaling * normalized 2D gaussian
-    bg = 500
-    image = np.zeros((sz, sz))
-    x = 5
-    y = 5
-    peaks_info = [{'x': x, 'y': y, 'prefactor': scaling, 'psf_sd': psf_sd}]
-    image += psfconvolution(peaks_info, sz)
-    show_fig = True
-    image += np.ones(image.shape)*bg
-    np.random.seed(42)
-    image = np.random.poisson(image, size=(image.shape))
-    if show_fig:    
-        plt.imshow(image)
-        plt.colorbar()
-
-    fittype = 1
-    psf_sd = 1.39
-    h0_params,h1_params,crlbs1,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
-        
-    for p in h1_params:
-        print(f'{p=}')
-    print(f'{crlbs1=}')
-    print(f'{p_value=}')
-    
-    pass
-
 def generate_test_images(dataset_name, minimum_number_of_particles=0, maximum_number_of_particles=4, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_total_image_count=10, psf_sd=1.39, sz=20, bg=500, generation_random_seed=42, config_content=''):
     # Set the random seed
     np.random.seed(generation_random_seed)
@@ -301,18 +271,6 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
 
-def visualize_ctable(fname):
-    df = pd.read_csv(fname)
-    plt.figure()
-    sns.heatmap(df, annot=True, fmt='g', cmap='Reds', cbar=False, annot_kws={"size": 15})
-    plt.xlabel("Estimated number of particles", size=15)
-    plt.ylabel("Actual number of particles", size=15)
-    plt.xticks(fontsize=15)
-    plt.yticks(fontsize=15)
-    plt.show(block=False)
-    plt.tight_layout()
-
-
 def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=''):
     """
         Displays progress bar for current progress.
@@ -383,6 +341,7 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.flush()
 
 def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
+    '''Analyzes all the images in the dataset folder.'''
     # Set random seed
     np.random.seed(analysis_rand_seed)
 
@@ -403,10 +362,10 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
             json.dump(json.loads(config_content), f, indent=4)
 
     # Create a folder to store the logs for each image
-    main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
-    with open(main_log_file_path, 'w', newline='') as f:
+    label_prediction_log_file_path = os.path.join(log_folder, 'label_prediction_log.csv')
+    with open(label_prediction_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Input Image File', 'Actual Particle Number', 'Estimated Particle Number'])
+        writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count'])
 
     # Create the "runs" folder if it doesn't exist
     runs_folder = './runs'
@@ -423,29 +382,29 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
 
     # Analyze the images in parallel or sequentially
     if parallel:
+        # Analyze the images in parallel using ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Create a list of futures for each image
             futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, )
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
-            
             progress = 0
-            with open(main_log_file_path, 'a', newline='') as f: 
+            # Write the results to the main log file
+            with open(label_prediction_log_file_path, 'a', newline='') as f: 
+                # Iterate over the futures that are completed. 
                 for cfresult in concurrent.futures.as_completed(futures):
+                    # If an exception is raised, print the exception and continue to the next image
                     if cfresult._exception is not None:
                         if isinstance(cfresult._exception, Warning):
                             print("Encountered a Warning:", cfresult._exception)
                         else:
                             print("Encountered an Exception:", cfresult._exception)
                             print("Proceeding without addressing the exception.")
-                            # raise RuntimeError(cfresult._exception)
+                    # Get the result of the future and write the results to the main log file
                     try:
                         analysis_result = cfresult.result()
-                        
-                        # scores_csv_filename = analysis_result['csv_files1']
-                        # fits_csv_filename = analysis_result['csv_files2']
                         actual_num_particles = analysis_result['actual_num_particles']
                         estimated_num_particles = analysis_result['estimated_num_particles']
                         input_image_file = analysis_result['image_filename']
-                        # filename = analysis_result['filename']
 
                         writer = csv.writer(f)
                         writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
@@ -471,7 +430,7 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['image_filename']
 
-            with open(main_log_file_path, 'a', newline='') as f: 
+            with open(label_prediction_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
                 writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
@@ -575,42 +534,26 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
         if savefig:
             file_name = os.path.splitext(save_path)[0] + '.png'  # Remove the file extension
             plt.savefig(file_name, dpi=300)
-            # plt.close()
-            # plt.savefig(save_path)
     
     # Save the confusion matrix as a CSV file
-    matrix_df = pd.DataFrame(matrix)
+    matrix_df = pd.DataFrame(os.path.splitext(save_path)[0] + '.csv')
     matrix_df.to_csv(save_path, index=False)
 
 
-# def plot_confusion_matrices_from_all_folders_inside_run_folder():
-
-#     # Get the list of folders in the specified directory
-#     folder_path = "./runs/"
-#     folders = [f for f in os.listdir(folder_path) if os.path.isdir(os.path.join(folder_path, f))]
-
-#     # Iterate over the folders
-#     for folder in folders:
-#         # Get the path to the actual_vs_counted.csv file
-#         csv_file_path = os.path.join(folder_path, folder, "actual_vs_counted.csv")
-
-#         # Generate and display the confusion matrix
-#         generate_confusion_matrix(csv_file_path, display=True, save_path=None)
-
 
 def main():
+    # Start the batch job timer
     batchjobstarttime = datetime.now()
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
-    parser.add_argument('--profile', '-p', type=bool, help='Boolean to decide whether to profile or not.')
+    parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
 
-    print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
+    # Override config file folder argument for testing purposes
+    print('Forcing the config file folder to ./config_files/300524 for testing purposes - remove the line below this code in main() to restore correct behaviour.')
     args.config_file_folder = './config_files/300524'
-    # args.config_file_folder = './config_files/error_causing_file_analysis'
-    args.profile = False
 
     # Check if config-file-folder is provided
     if (args.config_file_folder is None):
@@ -619,7 +562,6 @@ def main():
     config_files_dir = args.config_file_folder
     
     if args.profile is True:
-        # config_files_dir = './config_files/profile_test'
         with Profile() as profile:
             process(parallel=True, config_files_dir=config_files_dir)
             (
@@ -628,7 +570,6 @@ def main():
                 .sort_stats(SortKey.TIME)
                 .dump_stats('profile_results.prof')
             )
-            
             # os.system('snakeviz profile_results.prof &')
     else:
         process(config_files_dir)
@@ -636,7 +577,8 @@ def main():
     batchjobendtime = datetime.now()
     print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
-def combine_log_files(log_folder):
+def combine_log_files(log_folder, delete_individual_files=False):
+    '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
     # Create the fitting_results.csv file
     whole_metrics_log_filename = os.path.join(log_folder, 'whole_metrics_log_filename.csv')
     print(f"{whole_metrics_log_filename=}")
@@ -663,7 +605,14 @@ def combine_log_files(log_folder):
                 rows = list(reader)
                 writer.writerows(rows)
 
+    # Delete the image_log directory and all its contents
+    if delete_individual_files:
+        dir_path = os.path.join(log_folder, 'image_log')
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+
 def process(config_files_dir, parallel=True):
+    '''Process the config files in the config_files_dir directory.'''
     config_files = os.listdir(config_files_dir)
 
     print(f"Config files loaded (total of {len(config_files)}):")
@@ -680,15 +629,15 @@ def process(config_files_dir, parallel=True):
                 pprint.pprint(config)
 
                 # Check if the required fields are present in the config file
-                required_fields = ['dataset_name', \
-                                    'code_version_date',\
+                required_fields = ['dataset_name', 'code_version_date',\
                                     'generate_the_dataset', 'gen_randseed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
                                     "gen_minimum_particle_count",
                                     "gen_maximum_particle_count",
-                                    'gen_bg_level', \
-                                    'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
+                                    'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
                                     'analysis_delete_the_dataset_after_analysis',\
                                     'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
+                
+                # Check if the required fields are present in the config file
                 for field in required_fields:
                     if field not in config:
                         # If config['generate_the_dataset'] is True, then all fields starting with 'gen' are required.
@@ -699,36 +648,33 @@ def process(config_files_dir, parallel=True):
                         if config['analyze_the_dataset'] and field.startswith('analysis'):
                             print(f"Error: '{field}' is not a valid field when 'analyze_the_dataset' is True")
                             exit()
-
+        # If the config file is not found or invalid, print an error message and continue to the next config file
         except (FileNotFoundError, json.JSONDecodeError):
             print(f"Error: {config_file} file not found or invalid")
             continue
 
+        # Generate the dataset 
         if config['generate_the_dataset']:
             generate_test_images(dataset_name=config['dataset_name'], minimum_number_of_particles=config['gen_minimum_particle_count'], maximum_number_of_particles=config['gen_maximum_particle_count'], mean_area_per_particle=config['gen_minimum_particle_count'], amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], \
                                 n_total_image_count=config['gen_total_image_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], generation_random_seed=config['gen_randseed'], config_content=json.dumps(config))
-
+        # Analyze the dataset
         if config['analyze_the_dataset']:
-            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
+            log_folder_path = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
                                 analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
 
+        # Delete the dataset after analysis
         if config['analysis_delete_the_dataset_after_analysis']:
             dir_path =os.path.join("image_dataset", config['dataset_name'])
             shutil.rmtree(dir_path)
 
         # Combine analysis log files into one.
-        combine_log_files(log_folder)
-
-        # Delete the image_log directory and all its contents
-        dir_path = os.path.join(log_folder, 'image_log')
-        if os.path.exists(dir_path):
-            shutil.rmtree(dir_path)
+        combine_log_files(log_folder_path, delete_individual_files=True)
         
         # Generate confusion matrix
-        main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
-        generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=False, savefig=True)
+        label_prediction_log_file_path = os.path.join(log_folder_path, 'label_prediction_log.csv')
+        generate_confusion_matrix(label_prediction_log_file_path, os.path.join(log_folder_path, 'confusion_matrix.csv'), display=False, savefig=True)
 
-def quick_test2():
+def quick_analysis():
     config_files_dir = './config_files/300524'
     config_files = os.listdir(config_files_dir)
     config_file = config_files[0]
@@ -738,8 +684,8 @@ def quick_test2():
         pprint.pprint(config)
         analysis_rand_seed_per_image = 7258
         filename = "./image_dataset/PSF 1.1/count1-index88.tiff"
-            # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
-            #                     analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+        # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
+        #                     analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
         psf_sd = config['analysis_predefined_psf_sd']
         last_h_index = config['analysis_maximum_hypothesis_index']
         use_exit_condi = config['analysis_use_premature_hypothesis_choice']
@@ -747,93 +693,12 @@ def quick_test2():
         code_version_date = config['code_version_date']
         log_folder = os.path.join('./runs', dataset_name + '_' + code_version_date)
         analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
-    
     pass
 
-
-def quick_test():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Process config files.')
-    parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
-    parser.add_argument('--profile', '-p', type=bool, help='Boolean to decide whether to profile or not.')
-    args = parser.parse_args()
-    args.profile = False
-
-    # Check if config-file-folder is provided
-    if (args.config_file_folder is None):
-        print("Please provide the folder name for config files using --config-file-folder or -c option.")
-        exit()
-    config_files_dir = args.config_file_folder
-    parallel=False
-    
-    
-    config_files = os.listdir(config_files_dir)
-    print(f"Config files loaded (total of {len(config_files)}):")
-    for config_file in config_files:
-        print("> " + config_file)
-    for i, config_file in enumerate(config_files):
-        print(f"Processing {config_file} ({i+1}/{len(config_files)})")
-        print(config_file)
-        try:
-            with open(os.path.join(config_files_dir, config_file), 'r') as f:
-                config = json.load(f)
-                # Pretty print the config file
-                pprint.pprint(config)
-                # Check if the required fields are present in the config file
-                required_fields = ['dataset_name', \
-                                    'generate_the_dataset', 'gen_randseed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
-                                    "gen_minimum_particle_count",
-                                    "gen_maximum_particle_count",
-                                    'gen_bg_level', \
-                                    'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 'analysis_delete_the_dataset_after_analysis',\
-                                    'code_version_date', 'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
-                for field in required_fields:
-                    if field not in config:
-                        if config['generate_the_dataset'] and field.startswith('gen'):
-                            print(f"Error: '{field}' is not a valid field when 'generate_the_dataset' is True")
-                            exit()
-                        if config['analyze_the_dataset'] and field.startswith('analysis'):
-                            print(f"Error: '{field}' is not a valid field when 'analyze_the_dataset' is True")
-                            exit()
-        except (FileNotFoundError, json.JSONDecodeError):
-            print(f"Error: {config_file} file not found or invalid")
-            continue
-
-        if config['analyze_the_dataset']:
-            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
-                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel, display_fit_results=False, display_xi_graph=False)
-
-        # Combine analysis log files into one.
-        combine_log_files(log_folder)
-        
-        # Delete the image_log directory and all its contents
-        dir_path = os.path.join(log_folder, 'image_log')
-        if os.path.exists(dir_path):
-            shutil.rmtree(dir_path)
-
-# psf_sd = 1
-# separation = 0 
-# n_images = 100
-# generate_separation_test_images(separation=separation, n_images_per_separation=n_images, amp_to_bg=5, psf_sd=psf_sd, sz=20, bg=500, generation_random_seed=42)
-# log_folder = analyze_whole_folder(dataset_name=f'separation_test{separation}', code_version_date='', use_exit_condi=False, last_h_index=4, psf_sd=psf_sd, analysis_rand_seed=0, config_content='', parallel=False, display_fit_results=False, display_xi_graph=False)
-# combine_log_files(log_folder)
-# # Delete the image_log directory and all its contents
-# dir_path = os.path.join(log_folder, 'image_log')
-# if os.path.exists(dir_path):
-#     shutil.rmtree(dir_path)
-# # Generate confusion matrix
-# main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
-# generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=False, savefig=True)
-# pass
-
 if __name__ == '__main__':
-    # psfs = ['0_7', '0_8', '0_9', '1_2', '1_3', '1_4']
     psfs = ['0_7']
     foldernames = [f"./runs/290624/runs/PSF {psf}_2024-05-29" for psf in psfs]
     for foldername in foldernames:
         generate_confusion_matrix(foldername + '/actual_vs_counted.csv', foldername +  '/cmat.csv', display=False, savefig=True)
     pass
     # main()
-    # quick_test()
-    # quick_test2()
-    # plot_confusion_matrices_from_all_folders_inside_run_folder()
