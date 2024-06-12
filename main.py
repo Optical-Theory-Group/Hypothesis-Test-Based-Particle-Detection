@@ -24,6 +24,7 @@ import sys
 from datetime import datetime, timedelta
 from cProfile import Profile
 from pstats import SortKey, Stats
+import time
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -225,8 +226,9 @@ def test_glrt4_with_2_particles_image():
     pass
 
 def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_images_per_count=10, psf_sd=1.39, sz=20, bg=500, generation_random_seed=42, config_content=''):
+    # Set the random seed
     np.random.seed(generation_random_seed)
-
+    # Set the minimum relative intensity of a particle
     relative_intensity_min = 0.1
     
     n_particle_min = 0
@@ -243,6 +245,7 @@ def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2
             image = np.ones((sz, sz), dtype=float) * bg
             chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
+                # [ToDo] Refine the following ranges.
                 x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
                 y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
                 relative_intensity = np.random.normal(1, amp_sd)
@@ -263,7 +266,45 @@ def generate_test_images(dataset_name, mean_area_per_particle=0, amp_to_bg_min=2
     with open(config_file_save_path, 'w') as f:
         json.dump(json.loads(config_content), f, indent=4)
 
-# def separation_test():
+def generate_separation_test_images(subfolder_name='separation_test', separation=3, n_images_per_separation=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, ):
+    if separation > sz:
+        raise ValueError(f"Separation {separation} is greater than the size of the image {sz}.")
+    # Set the random seed
+    np.random.seed(generation_random_seed)
+    # Set the number of particles to 2.
+    n_particles = 2
+    # Create the folder to store the images
+    image_folder_path = os.path.join("image_dataset", f"{subfolder_name}{separation}")
+    os.makedirs(image_folder_path, exist_ok=True)
+    print(f'Generating {n_images_per_separation} images with separation {separation} in folder {image_folder_path}.')
+    # Generate the images
+    for img_idx in range(n_images_per_separation):
+        image = np.ones((sz, sz), dtype=float) * bg
+        particle_intensity = bg * amp_to_bg
+        angle = np.random.uniform(0, 2*np.pi)
+        # Particle 1
+        while True:
+            x1 = sz / 2 + separation / 2 * np.cos(angle)
+            y1 = sz / 2 + separation / 2 * np.sin(angle)
+            if 2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1 and 2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1:
+                break
+        peak_info = [{'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
+        image += psfconvolution(peak_info, sz)
+        # Particle 2
+        x2 = sz / 2 - separation / 2 * np.cos(angle)
+        y2 = sz / 2 - separation / 2 * np.sin(angle)
+        peak_info = [{'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
+        image += psfconvolution(peak_info, sz)
+        # Add Poisson noise
+        image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
+        img_filename = f"separation{separation}-index{img_idx}.tiff"
+        pil_image = im.fromarray(image.astype(np.uint16))
+        pil_image.save(os.path.join(image_folder_path, img_filename))
+        # Print the progress
+        # print(f"\r{img_idx}-th image {n_images_per_separation} generated", end="")
+        # sys.stdout.flush()
+        
+
 #     pass
 
 # def psf_sd_test():
@@ -368,9 +409,10 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
-    config_file_save_path = os.path.join(log_folder, 'config_used.json')
-    with open(config_file_save_path, 'w') as f:
-        json.dump(json.loads(config_content), f, indent=4)
+    if config_content:
+        config_file_save_path = os.path.join(log_folder, 'config_used.json')
+        with open(config_file_save_path, 'w') as f:
+            json.dump(json.loads(config_content), f, indent=4)
 
     # Create a folder to store the logs for each image
     main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
@@ -447,11 +489,11 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
 
                 statusmsg = f'{dataset_name} '
                 if actual_num_particles == estimated_num_particles:
-                    statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
-                    statusmsg += f'\"{input_image_file}.tiff\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
                 else:
-                    statusmsg += f'\"{input_image_file}.tiff\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
             report_progress(progress, len(image_files), starttime, statusmsg)
             progress += 1
@@ -465,7 +507,10 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     # Extract the number of particles from image_filename
     basename = os.path.basename(image_filename)
     count_part = basename.split('-')[0]
-    num_particles = count_part.split('count')[1]
+    if count_part.startswith("separation"):
+        num_particles = 2
+    else:
+        num_particles = count_part.split('count')[1]
     actual_num_particles = int(num_particles)
 
     # Find tentative peaks
@@ -516,21 +561,21 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
     
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
-    if matrix[-1].sum == 0:
-        matrix = matrix[:-1, :]
+    # if matrix[-1].sum == 0:
+    #     matrix = matrix[:-1, :]
     normalized_matrix = np.zeros(matrix.shape)
     
     if display or savefig:
         row_sums = matrix.sum(axis=1)
-        row_sums = np.reshape(row_sums, (len(row_sums),-1))
         _, ax = plt.subplots(figsize=(8, 5))  # Increase the size of the figure.
-        normalized_matrix = matrix / row_sums
+        epsilon = 1e-7
+        normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
         folder_name = os.path.basename(os.path.dirname(csv_file))
-        sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax)  # Plot the heatmap on the new axes.
+        sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
         ax.set_title(f'{folder_name}')
         ax.set_xlabel('Estimated Particle Number')
         ax.set_ylabel('Actual Particle Number')
-        ytick_labels = [f"{i} (count: {row_sums[i][0]})" for i in range(len(row_sums))]
+        ytick_labels = [f"{i} (count: {row_sums[i]})" for i in range(len(row_sums))]
         ax.set_yticklabels(ytick_labels, rotation=0)
         
         # Draw lines between rows
@@ -538,10 +583,12 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
             ax.axhline(i, color='black', linewidth=1)
         plt.tight_layout()
         if display:
-            plt.show()
+            plt.show(block=False)
         if savefig:
-            file_name = os.path.splitext(save_path)[0]  # Remove the file extension
-            plt.savefig(file_name + '.png', dpi=300)
+            file_name = os.path.splitext(save_path)[0] + '.png'  # Remove the file extension
+            plt.savefig(file_name, dpi=300)
+            # plt.close()
+            # plt.savefig(save_path)
     
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
@@ -766,8 +813,29 @@ def quick_test():
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
 
+# psf_sd = 1
+# separation = 0 
+# n_images = 100
+# generate_separation_test_images(separation=separation, n_images_per_separation=n_images, amp_to_bg=5, psf_sd=psf_sd, sz=20, bg=500, generation_random_seed=42)
+# log_folder = analyze_whole_folder(dataset_name=f'separation_test{separation}', analysis_name='', use_exit_condi=False, last_h_index=4, psf_sd=psf_sd, analysis_rand_seed=0, config_content='', parallel=False, display_fit_results=False, display_xi_graph=False)
+# combine_log_files(log_folder)
+# # Delete the image_log directory and all its contents
+# dir_path = os.path.join(log_folder, 'image_log')
+# if os.path.exists(dir_path):
+#     shutil.rmtree(dir_path)
+# # Generate confusion matrix
+# main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
+# generate_confusion_matrix(main_log_file_path, os.path.join(log_folder, 'confusion_matrix.csv'), display=False, savefig=True)
+# pass
+
 if __name__ == '__main__':
-    main()
+    # psfs = ['0_7', '0_8', '0_9', '1_2', '1_3', '1_4']
+    psfs = ['0_7']
+    foldernames = [f"./runs/290624/runs/PSF {psf}_2024-05-29" for psf in psfs]
+    for foldername in foldernames:
+        generate_confusion_matrix(foldername + '/actual_vs_counted.csv', foldername +  '/cmat.csv', display=False, savefig=True)
+    pass
+    # main()
     # quick_test()
     # quick_test2()
     # plot_confusion_matrices_from_all_folders_inside_run_folder()
