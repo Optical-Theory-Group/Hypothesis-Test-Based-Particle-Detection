@@ -201,7 +201,7 @@ def generate_test_images(dataset_name, minimum_number_of_particles=0, maximum_nu
     # Set the minimum relative intensity of a particle
     relative_intensity_min = 0.1
     number_of_counts = maximum_number_of_particles - minimum_number_of_particles + 1
-    number_of_images_per_count = np.ceil(n_total_image_count / number_of_counts)
+    number_of_images_per_count = int(np.ceil(n_total_image_count / number_of_counts))
     
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
@@ -410,11 +410,11 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
                         writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
                         if actual_num_particles == estimated_num_particles:
-                            statusmsg = f'\"{input_image_file}\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}'
+                            statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
                         elif actual_num_particles > estimated_num_particles:
-                            statusmsg = f'\"{input_image_file}\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}'
+                            statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}'
                         else:
-                            statusmsg = f'\"{input_image_file}\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}'
+                            statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}'
                     except Exception as e:
                         print(f"Error in cfresult.result(): {e}")
                         statusmsg = f'Error: {e}'
@@ -436,11 +436,11 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
 
                 statusmsg = f'{dataset_name} '
                 if actual_num_particles == estimated_num_particles:
-                    statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
-                    statusmsg += f'\"{input_image_file}\" - Actual Number: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
                 else:
-                    statusmsg += f'\"{input_image_file}\" - Actual Number {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                    statusmsg += f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
             report_progress(progress, len(image_files), starttime, statusmsg)
             progress += 1
@@ -503,8 +503,8 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
     df = pd.read_csv(csv_file)
 
     # Extract the actual and estimated particle numbers
-    actual = df['Actual Particle Number']
-    estimated = df['Estimated Particle Number']
+    actual = df['Actual Particle Count']
+    estimated = df['Estimated Particle Count']
     
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
@@ -520,8 +520,8 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
         folder_name = os.path.basename(os.path.dirname(csv_file))
         sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
         ax.set_title(f'{folder_name}')
-        ax.set_xlabel('Estimated Particle Number')
-        ax.set_ylabel('Actual Particle Number')
+        ax.set_xlabel('Estimated Particle Count')
+        ax.set_ylabel('Actual Particle Count')
         ytick_labels = [f"{i} (count: {row_sums[i]})" for i in range(len(row_sums))]
         ax.set_yticklabels(ytick_labels, rotation=0)
         
@@ -536,7 +536,7 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
             plt.savefig(file_name, dpi=300)
     
     # Save the confusion matrix as a CSV file
-    matrix_df = pd.DataFrame(os.path.splitext(save_path)[0] + '.csv')
+    matrix_df = pd.DataFrame(matrix)
     matrix_df.to_csv(save_path, index=False)
 
 
@@ -552,8 +552,8 @@ def main():
     args = parser.parse_args()
 
     # Override config file folder argument for testing purposes
-    print('Forcing the config file folder to ./config_files/300524 for testing purposes - remove the line below this code in main() to restore correct behaviour.')
-    args.config_file_folder = './config_files/300524'
+    # print('Forcing the config file folder to ./config_files/300524 for testing purposes - remove the line below this code in main() to restore correct behaviour.')
+    # args.config_file_folder = './config_files/300524'
 
     # Check if config-file-folder is provided
     if (args.config_file_folder is None):
@@ -630,7 +630,7 @@ def process(config_files_dir, parallel=True):
 
                 # Check if the required fields are present in the config file
                 required_fields = ['dataset_name', 'code_version_date',\
-                                    'generate_the_dataset', 'gen_randseed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
+                                    'generate_the_dataset', 'gen_random_seed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
                                     "gen_minimum_particle_count",
                                     "gen_maximum_particle_count",
                                     'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
@@ -655,12 +655,25 @@ def process(config_files_dir, parallel=True):
 
         # Generate the dataset 
         if config['generate_the_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], minimum_number_of_particles=config['gen_minimum_particle_count'], maximum_number_of_particles=config['gen_maximum_particle_count'], mean_area_per_particle=config['gen_minimum_particle_count'], amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], \
-                                n_total_image_count=config['gen_total_image_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], generation_random_seed=config['gen_randseed'], config_content=json.dumps(config))
+            generate_test_images(dataset_name=config['dataset_name'], 
+                                minimum_number_of_particles=config['gen_minimum_particle_count'], 
+                                maximum_number_of_particles=config['gen_maximum_particle_count'], 
+                                amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], 
+                                amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], 
+                                amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], 
+                                
+                                psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], 
+                                bg=config['gen_bg_level'], 
+                                generation_random_seed=config['gen_random_seed'], 
+                                config_content=json.dumps(config))
         # Analyze the dataset
         if config['analyze_the_dataset']:
-            log_folder_path = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
-                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+            log_folder_path = analyze_whole_folder(dataset_name=config['dataset_name'], 
+                                                code_version_date=config['code_version_date'], 
+                                                use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
+                                                last_h_index=config['analysis_maximum_hypothesis_index'], 
+                                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
+                                                config_content=json.dumps(config), parallel=parallel)
 
         # Delete the dataset after analysis
         if config['analysis_delete_the_dataset_after_analysis']:
@@ -696,9 +709,4 @@ def quick_analysis():
     pass
 
 if __name__ == '__main__':
-    psfs = ['0_7']
-    foldernames = [f"./runs/290624/runs/PSF {psf}_2024-05-29" for psf in psfs]
-    for foldername in foldernames:
-        generate_confusion_matrix(foldername + '/actual_vs_counted.csv', foldername +  '/cmat.csv', display=False, savefig=True)
-    pass
-    # main()
+    main()
