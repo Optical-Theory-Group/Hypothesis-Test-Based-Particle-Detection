@@ -195,7 +195,7 @@ def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1
 
     return t_g, p_value
 
-def generate_test_images(dataset_name, minimum_number_of_particles=0, maximum_number_of_particles=4, amp_to_bg_min=2, amp_to_bg_max=50, amp_sd=0.1, n_total_image_count=10, psf_sd=1.39, sz=20, bg=500, generation_random_seed=42, config_content=''):
+def generate_test_images(dataset_name,  maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -656,6 +656,7 @@ def process(config_files_dir, parallel=True):
         # Generate the dataset 
         if config['generate_the_dataset']:
             generate_test_images(dataset_name=config['dataset_name'], 
+                                n_total_image_count=config['gen_total_image_count'],
                                 minimum_number_of_particles=config['gen_minimum_particle_count'], 
                                 maximum_number_of_particles=config['gen_maximum_particle_count'], 
                                 amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], 
