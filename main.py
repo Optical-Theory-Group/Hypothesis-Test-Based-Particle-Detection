@@ -1,3 +1,4 @@
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pprint
 import json
 import argparse
@@ -498,13 +499,18 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     
     return image_analysis_results
 
-def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
+def generate_confusion_matrix(label_pred_log_file_path, save_path, display=False, savefig=True):
     # Read the CSV file
-    df = pd.read_csv(csv_file)
-
+    df = pd.read_csv(label_pred_log_file_path)
     # Extract the actual and estimated particle numbers
-    actual = df['Actual Particle Count']
-    estimated = df['Estimated Particle Count']
+    try:
+        actual = df['Actual Particle Count']
+    except KeyError:
+        actual = df['Actual Particle Number'] 
+    try:
+        estimated = df['Estimated Particle Count']
+    except KeyError:
+        estimated = df['Estimated Particle Number']
     
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
@@ -512,12 +518,23 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
     #     matrix = matrix[:-1, :]
     normalized_matrix = np.zeros(matrix.shape)
     
+    row_sums = matrix.sum(axis=1)
     if display or savefig:
-        row_sums = matrix.sum(axis=1)
         _, ax = plt.subplots(figsize=(8, 5))  # Increase the size of the figure.
-        epsilon = 1e-7
-        normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
-        folder_name = os.path.basename(os.path.dirname(csv_file))
+
+        # Debugging output
+        print("Original matrix:\n", matrix)
+        print("Row sums before normalization:", row_sums)
+
+        # Adjusted normalization with debugging
+        for row in range(matrix.shape[0]):
+            normalized_matrix[row] = matrix[row] / row_sums[row] if row_sums[row] != 0 else np.zeros(matrix.shape[1])
+
+        # Debugging output to check if normalization is as expected
+        print("Normalized matrix:\n", normalized_matrix)
+
+        # normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
+        folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
         sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
         ax.set_title(f'{folder_name}')
         ax.set_xlabel('Estimated Particle Count')
@@ -526,19 +543,66 @@ def generate_confusion_matrix(csv_file, save_path, display=False, savefig=True):
         ax.set_yticklabels(ytick_labels, rotation=0)
         
         # Draw lines between rows
-        for i in range(matrix.shape[0]):
+        for i in range(matrix.shape[0]+1):
             ax.axhline(i, color='black', linewidth=1)
         plt.tight_layout()
         if display:
             plt.show(block=False)
         if savefig:
-            file_name = os.path.splitext(save_path)[0] + '.png'  # Remove the file extension
+            file_name = save_path + '/' + '/confusion_mat.png'  # Remove the file extension
             plt.savefig(file_name, dpi=300)
     
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
-    matrix_df.to_csv(save_path, index=False)
+    matrix_df.to_csv(save_path + 'confusion_matrix.csv', index=False)
 
+    # Calculate the metrics
+    row_sums = matrix.sum(axis=1)
+    actual_counts = np.array([0, 1, 2, 3, 4, 5])
+    estimated_counts = np.arange(matrix.shape[1])
+    correct_counts_per_row = np.diag(matrix)
+    false_counts = matrix.sum() - correct_counts_per_row.sum()
+    accuracy = correct_counts_per_row.sum() / (correct_counts_per_row.sum() + false_counts)
+    overestimation_rate = np.triu(matrix, k=1).sum() / matrix.sum()
+    underestimation_rate = np.tril(matrix, k=-1).sum() / matrix.sum()
+    miss_by_one_rate = (np.diag(matrix, k=1).sum() + np.diag(matrix, k=-1).sum() + correct_counts_per_row.sum()) / matrix.sum()
+
+    # Generate repeated actual and estimated counts
+    actual_repeats = []
+    estimated_repeats = []
+
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            actual_repeats.extend([actual_counts[i]] * int(matrix[i, j]))
+            estimated_repeats.extend([estimated_counts[j]] * int(matrix[i, j]))
+
+    # Convert to numpy arrays
+    actual_repeats = np.array(actual_repeats)
+    estimated_repeats = np.array(estimated_repeats)
+
+    # Mean Absolute Error (MAE) and RMSE
+    mae = mean_absolute_error(actual_repeats, estimated_repeats)
+    rmse = np.sqrt(mean_squared_error(actual_repeats, estimated_repeats))
+
+    print(f"Accuracy: {accuracy}")
+    print(f"Overestimation Rate: {overestimation_rate}")
+    print(f"Underestimation Rate: {underestimation_rate}")
+    print(f"Miss-by-One Rate: {miss_by_one_rate}")
+    print(f"Mean Absolute Error: {mae}")
+    print(f"Root Mean Squared Error: {rmse}")
+
+    # Prepare metrics for saving
+    metrics = {
+        'Accuracy': accuracy,
+        'Overestimation Rate': overestimation_rate,
+        'Underestimation Rate': underestimation_rate,
+        'Miss-by-One Rate': miss_by_one_rate,
+        'Mean Absolute Error': mae,
+        'Root Mean Squared Error': rmse
+    }
+
+    metrics_df = pd.DataFrame(metrics, index=[0])
+    metrics_df.to_csv(save_path + '/metrics.csv', index=False)
 
 
 def main():
@@ -625,6 +689,7 @@ def process(config_files_dir, parallel=True):
         try:
             with open(os.path.join(config_files_dir, config_file), 'r') as f:
                 config = json.load(f)
+                
                 # Pretty print the config file
                 pprint.pprint(config)
 
@@ -636,6 +701,14 @@ def process(config_files_dir, parallel=True):
                                     'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
                                     'analysis_delete_the_dataset_after_analysis',\
                                     'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
+
+                # Modify field values with '.'
+                for field in required_fields:
+                    if field in config and isinstance(config[field], str):
+                        if '.' in config[field]:
+                            before_change = config[field]
+                            config[field] = config[field].replace('.', '_')
+                            print(f"Modified field '{field}' value - before: {before_change}, after: {config[field]}")
                 
                 # Check if the required fields are present in the config file
                 for field in required_fields:
@@ -710,4 +783,17 @@ def quick_analysis():
     pass
 
 if __name__ == '__main__':
-    main()
+    # main()
+    items = [.7]
+    for item in items:
+        if item == 1 or item == 1.1:
+            numstr = f'{item:.1f}'.replace('.', '_')
+            # label_prediction_log_filepath = f'./runs/PSF {numstr}_2024-06-13/label_prediction_log.csv'
+            label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF {numstr}_2024-06-13/label_prediction_log.csv"
+            save_path = os.path.dirname(label_prediction_log_filepath)
+        else:
+            numstr = f'{item:.1f}'
+            # label_prediction_log_filepath = f'./runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv'
+            label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv"
+            save_path = os.path.dirname(label_prediction_log_filepath)
+        generate_confusion_matrix(label_prediction_log_filepath, save_path, display=False, savefig=True)
