@@ -358,12 +358,12 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
 
     # Save the content of the config file
     if config_content:
-        config_file_save_path = os.path.join(log_folder, 'config_used.json')
+        config_file_save_path = os.path.join(log_folder, f'{dataset_name}_{code_version_date}_config_used.json')
         with open(config_file_save_path, 'w') as f:
             json.dump(json.loads(config_content), f, indent=4)
 
-    # Create a folder to store the logs for each image
-    label_prediction_log_file_path = os.path.join(log_folder, 'label_prediction_log.csv')
+    # Prepare the label (actual count) prediction (estimated count) log file
+    label_prediction_log_file_path = os.path.join(log_folder, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
     with open(label_prediction_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count'])
@@ -499,7 +499,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     
     return image_analysis_results
 
-def generate_confusion_matrix(label_pred_log_file_path, save_path, display=False, savefig=True):
+def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_version_date, display=False, savefig=True):
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
     # Extract the actual and estimated particle numbers
@@ -549,12 +549,17 @@ def generate_confusion_matrix(label_pred_log_file_path, save_path, display=False
         if display:
             plt.show(block=False)
         if savefig:
-            file_name = save_path + '/' + '/confusion_mat.png'  # Remove the file extension
-            plt.savefig(file_name, dpi=300)
+            png_file_path = os.path.dirname(label_pred_log_file_path)
+            png_file_name = f'/{dataset_name}_{code_version_date}_confusion_mat.png'
+            png_file_path += png_file_name
+            plt.savefig(png_file_path, dpi=300)
     
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
-    matrix_df.to_csv(save_path + 'confusion_matrix.csv', index=False)
+    csv_file_path = os.path.dirname(label_pred_log_file_path)
+    csv_file_name = f'/{dataset_name}_{code_version_date}_confusion_mat.csv'
+    csv_file_path += csv_file_name
+    matrix_df.to_csv(csv_file_path, index=False)
 
     # Calculate the metrics
     row_sums = matrix.sum(axis=1)
@@ -602,8 +607,10 @@ def generate_confusion_matrix(label_pred_log_file_path, save_path, display=False
     }
 
     metrics_df = pd.DataFrame(metrics, index=[0])
-    metrics_df.to_csv(save_path + '/metrics.csv', index=False)
-
+    csv_file_path = os.path.dirname(label_pred_log_file_path)
+    csv_file_name = f'/{dataset_name}_{code_version_date}_metrics.csv'
+    csv_file_path += csv_file_name
+    metrics_df.to_csv(csv_file_path, index=False)
 
 def main():
     # Start the batch job timer
@@ -641,10 +648,10 @@ def main():
     batchjobendtime = datetime.now()
     print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
-def combine_log_files(log_folder, delete_individual_files=False):
+def combine_log_files(log_folder, dataset_name, code_version_date, delete_individual_files=False):
     '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
     # Create the fitting_results.csv file
-    whole_metrics_log_filename = os.path.join(log_folder, 'whole_metrics_log_filename.csv')
+    whole_metrics_log_filename = os.path.join(log_folder, f'{dataset_name}_{code_version_date}_metrics_log_per_image_hypothesis.csv')
     print(f"{whole_metrics_log_filename=}")
     
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
@@ -754,12 +761,16 @@ def process(config_files_dir, parallel=True):
             dir_path =os.path.join("image_dataset", config['dataset_name'])
             shutil.rmtree(dir_path)
 
+        # Get the dataset name and code version date
+        dataset_name = config['dataset_name']
+        code_version_date = config['code_version_date']
+
         # Combine analysis log files into one.
-        combine_log_files(log_folder_path, delete_individual_files=True)
+        combine_log_files(log_folder_path, dataset_name, code_version_date, delete_individual_files=True)
         
         # Generate confusion matrix
-        label_prediction_log_file_path = os.path.join(log_folder_path, 'label_prediction_log.csv')
-        generate_confusion_matrix(label_prediction_log_file_path, os.path.join(log_folder_path, 'confusion_matrix.csv'), display=False, savefig=True)
+        label_prediction_log_file_path = os.path.join(log_folder_path, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
+        generate_confusion_matrix(label_prediction_log_file_path, os.path.join(log_folder_path, 'confusion_matrix.csv'), dataset_name, code_version_date, display=False, savefig=True)
 
 def quick_analysis():
     config_files_dir = './config_files/300524'
@@ -796,4 +807,4 @@ if __name__ == '__main__':
             # label_prediction_log_filepath = f'./runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv'
             label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv"
             save_path = os.path.dirname(label_prediction_log_filepath)
-        generate_confusion_matrix(label_prediction_log_filepath, save_path, display=False, savefig=True)
+        generate_confusion_matrix(label_prediction_log_filepath, 'PSF_0.7', '2024-05-29', display=False, savefig=True)
