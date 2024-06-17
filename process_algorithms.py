@@ -40,10 +40,10 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
 
 # Maximum Likelihood Estimation of Hk                       
 def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy):
-    # Force-fix negative values
-    norm_flat_trimmed_theta[norm_flat_trimmed_theta < 0] = 0
-    # Force-fix infinite values
-    norm_flat_trimmed_theta[np.isinf(norm_flat_trimmed_theta)] = 1
+    # # Force-fix negative values
+    # norm_flat_trimmed_theta[norm_flat_trimmed_theta < 0] = 0
+    # # Force-fix infinite values
+    # norm_flat_trimmed_theta[np.isinf(norm_flat_trimmed_theta)] = 1
     # Denormalize theta to calculate model_xy
     theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy)
     # Calculate the model value at each pixel position
