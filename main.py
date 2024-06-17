@@ -662,7 +662,7 @@ def combine_log_files(log_folder, dataset_name, code_version_date, delete_indivi
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_filename (h number)', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        writer.writerow(['image_filename (h number)', 'selected', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
 
         # Iterate over the fittings_files
         for log_file in individual_image_log_files:
