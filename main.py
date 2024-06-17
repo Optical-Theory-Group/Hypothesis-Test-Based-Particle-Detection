@@ -597,7 +597,7 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
     print(f"Root Mean Squared Error: {rmse}")
 
     # Prepare metrics for saving
-    metrics = {
+    scores = {
         'Accuracy': accuracy,
         'Overestimation Rate': overestimation_rate,
         'Underestimation Rate': underestimation_rate,
@@ -606,9 +606,9 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
         'Root Mean Squared Error': rmse
     }
 
-    metrics_df = pd.DataFrame(metrics, index=[0])
+    metrics_df = pd.DataFrame(scores, index=[0])
     csv_file_path = os.path.dirname(label_pred_log_file_path)
-    csv_file_name = f'/{dataset_name}_{code_version_date}_metrics.csv'
+    csv_file_name = f'/{dataset_name}_{code_version_date}_scores.csv'
     csv_file_path += csv_file_name
     metrics_df.to_csv(csv_file_path, index=False)
 
@@ -770,7 +770,7 @@ def process(config_files_dir, parallel=True):
         
         # Generate confusion matrix
         label_prediction_log_file_path = os.path.join(log_folder_path, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
-        generate_confusion_matrix(label_prediction_log_file_path, os.path.join(log_folder_path, 'confusion_matrix.csv'), dataset_name, code_version_date, display=False, savefig=True)
+        generate_confusion_matrix(label_prediction_log_file_path, dataset_name, code_version_date, display=False, savefig=True)
 
 def quick_analysis():
     config_files_dir = './config_files/300524'
@@ -795,16 +795,17 @@ def quick_analysis():
 
 if __name__ == '__main__':
     # main()
-    items = [.7]
-    for item in items:
-        if item == 1 or item == 1.1:
-            numstr = f'{item:.1f}'.replace('.', '_')
-            # label_prediction_log_filepath = f'./runs/PSF {numstr}_2024-06-13/label_prediction_log.csv'
-            label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF {numstr}_2024-06-13/label_prediction_log.csv"
-            save_path = os.path.dirname(label_prediction_log_filepath)
-        else:
-            numstr = f'{item:.1f}'
-            # label_prediction_log_filepath = f'./runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv'
-            label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv"
-            save_path = os.path.dirname(label_prediction_log_filepath)
-        generate_confusion_matrix(label_prediction_log_filepath, 'PSF_0.7', '2024-05-29', display=False, savefig=True)
+    # items = [1]
+    # for item in items:
+    #     if item == 1 or item == 1.1:
+    #         numstr = f'{item:.1f}'.replace('.', '_')
+    #         # label_prediction_log_filepath = f'./runs/PSF {numstr}_2024-06-13/label_prediction_log.csv'
+    #         label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF {numstr}_2024-06-13/label_prediction_log.csv"
+    #         # save_path = os.path.dirname(label_prediction_log_filepath)
+    #     else:
+    #         numstr = f'{item:.1f}'
+    #         # label_prediction_log_filepath = f'./runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv'
+    #         label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv"
+    #         # save_path = os.path.dirname(label_prediction_log_filepath)
+    #     generate_confusion_matrix(label_prediction_log_filepath, 'PSF_1.0', '2024-06-13', display=False, savefig=True)
+    pass
