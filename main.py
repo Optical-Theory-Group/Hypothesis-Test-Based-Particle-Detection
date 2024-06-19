@@ -196,7 +196,7 @@ def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1
 
     return t_g, p_value
 
-def generate_test_images(dataset_name,  maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
+def generate_test_images(dataset_name,  code_version, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -210,7 +210,7 @@ def generate_test_images(dataset_name,  maximum_number_of_particles, amp_to_bg_m
     print(f'Saving dataset to: ./image_dataset/{dataset_name}.')
 
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", dataset_name)
+    image_folder_path = os.path.join("image_dataset", f"{dataset_name}_{code_version}")
     os.makedirs(image_folder_path, exist_ok=True)
 
     for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
@@ -718,7 +718,7 @@ def process(config_files_dir, parallel=True):
                         if '.' in config[field]:
                             before_change = config[field]
                             config[field] = config[field].replace('.', '_')
-                            print(f"Modified field '{field}' value - before: {before_change}, after: {config[field]}")
+                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
                 
                 # Check if the required fields are present in the config file
                 for field in required_fields:
@@ -739,6 +739,7 @@ def process(config_files_dir, parallel=True):
         # Generate the dataset 
         if config['generate_the_dataset']:
             generate_test_images(dataset_name=config['dataset_name'], 
+                                code_version=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
                                 minimum_number_of_particles=config['gen_minimum_particle_count'], 
                                 maximum_number_of_particles=config['gen_maximum_particle_count'], 
@@ -758,22 +759,21 @@ def process(config_files_dir, parallel=True):
                                                 last_h_index=config['analysis_maximum_hypothesis_index'], 
                                                 analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
                                                 config_content=json.dumps(config), parallel=parallel)
+            # Get the dataset name and code version date
+            dataset_name = config['dataset_name']
+            code_version_date = config['code_version_date']
+
+            # Combine analysis log files into one.
+            combine_log_files(log_folder_path, dataset_name, code_version_date, delete_individual_files=True)
+            
+            # Generate confusion matrix
+            label_prediction_log_file_path = os.path.join(log_folder_path, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
+            generate_confusion_matrix(label_prediction_log_file_path, dataset_name, code_version_date, display=False, savefig=True)
 
         # Delete the dataset after analysis
         if config['analysis_delete_the_dataset_after_analysis']:
             dir_path =os.path.join("image_dataset", config['dataset_name'])
             shutil.rmtree(dir_path)
-
-        # Get the dataset name and code version date
-        dataset_name = config['dataset_name']
-        code_version_date = config['code_version_date']
-
-        # Combine analysis log files into one.
-        combine_log_files(log_folder_path, dataset_name, code_version_date, delete_individual_files=True)
-        
-        # Generate confusion matrix
-        label_prediction_log_file_path = os.path.join(log_folder_path, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
-        generate_confusion_matrix(label_prediction_log_file_path, dataset_name, code_version_date, display=False, savefig=True)
 
 def quick_analysis():
     config_files_dir = './config_files/300524'
@@ -797,6 +797,9 @@ def quick_analysis():
     pass
 
 def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", ):
+    metric_of_interest = 'penalty'
+    # metric_of_interest = 'lli'
+    # metric_of_interest = 'xi'
     # Fix legacy formats: 
     # - Step 1: Open the CSV file for reading
     with open(file_path, 'r') as file:
@@ -839,6 +842,8 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
     unique_true_counts = df['true_count'].unique()
     
     for true_count in unique_true_counts:
+        if true_count == 2:
+            pass
         # Filter DataFrame for the current true_count
         df_filtered = df[df['true_count'] == true_count]
         
@@ -850,15 +855,21 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         num_h_numbers = len(unique_h_numbers)
         
         # Determine the max y-value for consistent y-range across subplots
+        min_metric, max_metric = 0, 0
+        edges = np.linspace(0, 1, 41)
+        # for _, group_data in grouped:
+        valid_data = grouped[metric_of_interest]
+        # if not valid_data.empty:
+        min_metric = valid_data.min().min()
+        max_metric = valid_data.max().max()
+        edges = np.linspace(min_metric, max_metric, 41)
         max_y_value = 0
-        min_xi, max_xi = 0, 0
-        for _, group_data in grouped:
-            valid_data = group_data['xi'].dropna()
-            if not valid_data.empty:
-                counts, _ = np.histogram(valid_data, bins=40)
-                max_y_value = max(max_y_value, max(counts))
-                min_xi = valid_data.min()
-                max_xi = valid_data.max()
+        for h_number, group_data in grouped:
+            numerical_data = group_data[metric_of_interest].astype(float)
+            counts, _ = np.histogram(numerical_data, bins=edges)
+            max_y_value = max(max_y_value, max(counts))
+        max_y_value *= 1.1
+                
         
         # Create a figure with subplots
         fig, axs = plt.subplots(num_h_numbers, 1, figsize=(5, 1.6 * num_h_numbers))
@@ -874,23 +885,24 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         # Plot histograms for each h number
         for i, (h_number, group_data) in enumerate(grouped):
             ax = axs[i] if num_h_numbers > 1 else axs[0]
-            ax.hist(group_data['xi'], bins=40, color=color_map[h_number])
-            ax.set_xlim(min_xi, max_xi)
+            ax.hist(group_data[metric_of_interest], bins=edges, color=color_map[h_number])
+            ax.set_xlim(min_metric, max_metric)
             ax.set_ylim(0, max_y_value)  # Set consistent y-range
             ax.set_ylabel('Count')
             ax.legend([f'H{h_number}'])
         
         # Adjust layout and save the figure
         deepest_folder_name = os.path.basename(os.path.dirname(file_path))
-        plt.suptitle(f'Xi values for true count {true_count} in {deepest_folder_name}')
+        plt.suptitle(f'{metric_of_interest} values for true count {true_count} in {deepest_folder_name}')
         plt.tight_layout()
-        plt.savefig(f'xi hist per h for true count {true_count}.png')
+        fig_path = os.path.join(os.path.dirname(file_path), f'{metric_of_interest} hist per h for true count {true_count}.png')
+        plt.savefig(fig_path)
         plt.close(fig)  # Close the figure to free memory
-        print(f'saved: xi hist per h for true count {true_count}.png')
+        print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
 if __name__ == '__main__':
-    make_metrics_histograms()
-    # main()
+    # make_metrics_histograms()
+    main()
     # items = [1]
     # for item in items:
     #     if item == 1 or item == 1.1:
