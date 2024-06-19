@@ -1,3 +1,4 @@
+import matplotlib
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pprint
 import json
@@ -25,7 +26,6 @@ import sys
 from datetime import datetime, timedelta
 from cProfile import Profile
 from pstats import SortKey, Stats
-import time
 
 def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
@@ -480,15 +480,18 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
 
     # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
     file_h_info = [f"{image_filename} (h{h_index})" for h_index in range(len(xi))]
-    accepted = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
-    metric_data = list(zip(file_h_info, accepted, xi, lli, penalty, fisher_info, fit_parameters))
+    true_counts = [actual_num_particles for _ in range(len(xi))]
+    h_numbers = [h_index for h_index in range(len(xi))]
+    selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+    metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
 
     # Write the data to the CSV files
     os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
 
     with open(image_analysis_log_filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['image_filename (h number)', 'accepted?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        # writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
         writer.writerows(metric_data)
 
     image_analysis_results = {
@@ -662,7 +665,7 @@ def combine_log_files(log_folder, dataset_name, code_version_date, delete_indivi
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_filename (h number)', 'selected', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
 
         # Iterate over the fittings_files
         for log_file in individual_image_log_files:
@@ -793,7 +796,100 @@ def quick_analysis():
         analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
     pass
 
+def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", ):
+    # Fix legacy formats: 
+    # - Step 1: Open the CSV file for reading
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+    # - Step 2: Check the first line
+    first_line = lines[0].strip()
+    expected_header = 'image_filename (h number),xi,lli,penalty,fisher_info,fit_parameters'
+    new_header = 'image_filename (h number),accepted?,xi,lli,penalty,fisher_info,fit_parameters'
+    # - Step 3: Prepare the modified version if needed
+    if first_line == expected_header:
+        lines[0] = new_header + '\n'
+    # - Step 4 & 5: Open the file for writing and write the modified content
+    with open(file_path, 'w') as file:
+        file.writelines(lines)
+
+    # Step 1: Read the CSV file
+    df = pd.read_csv(file_path)
+
+    # Add true_count and h number columns if they are not present in the dataframe.
+    # Extract the true count and h number from the image_filename (h number) column if they are not present in the dataframe.
+    overwrite_needed = False
+    if 'true_count' not in df.columns:
+        df['true_count'] = df['image_filename (h number)'].apply(lambda x: int(x.split('/')[-1].split('\\')[-1].split('count')[-1].split('-')[0]))
+        overwrite_needed = True
+    if 'h number' not in df.columns:
+        df['h number'] = df['image_filename (h number)'].apply(lambda x: int(x.split('/')[-1].split('\\')[-1].split('h')[-1].split(')')[0]))
+        overwrite_needed = True
+
+    if overwrite_needed:
+        # Rename the original file as back up
+        backup_file_path = file_path.rsplit('.', 1)[0] + '_backup_' + datetime.now().strftime("%Y-%m-%d") + '.' + file_path.rsplit('.', 1)[1]
+        os.rename(file_path, backup_file_path)
+        
+        # save the df to csv in the order: image_filename (h number), true_count, est_count, h number, selected, xi, lli, penalty, fisher_info, fit_parameters
+        df = df[['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters']]
+        df.to_csv(file_path, index=False)
+
+    
+    # Identify all unique true_count values
+    unique_true_counts = df['true_count'].unique()
+    
+    for true_count in unique_true_counts:
+        # Filter DataFrame for the current true_count
+        df_filtered = df[df['true_count'] == true_count]
+        
+        # Group by 'h number'
+        grouped = df_filtered.groupby('h number')
+        
+        # Determine the number of unique h_numbers for the current true_count
+        unique_h_numbers = sorted(df_filtered['h number'].unique())
+        num_h_numbers = len(unique_h_numbers)
+        
+        # Determine the max y-value for consistent y-range across subplots
+        max_y_value = 0
+        min_xi, max_xi = 0, 0
+        for _, group_data in grouped:
+            valid_data = group_data['xi'].dropna()
+            if not valid_data.empty:
+                counts, _ = np.histogram(valid_data, bins=40)
+                max_y_value = max(max_y_value, max(counts))
+                min_xi = valid_data.min()
+                max_xi = valid_data.max()
+        
+        # Create a figure with subplots
+        fig, axs = plt.subplots(num_h_numbers, 1, figsize=(5, 1.6 * num_h_numbers))
+        
+        # Ensure axs is iterable
+        if num_h_numbers == 1:
+            axs = [axs]
+        
+        # Get a colormap
+        cmap = matplotlib.colormaps['turbo_r']
+        color_map = {h_number: cmap(i / len(unique_h_numbers)) for i, h_number in enumerate(unique_h_numbers)}
+        
+        # Plot histograms for each h number
+        for i, (h_number, group_data) in enumerate(grouped):
+            ax = axs[i] if num_h_numbers > 1 else axs[0]
+            ax.hist(group_data['xi'], bins=40, color=color_map[h_number])
+            ax.set_xlim(min_xi, max_xi)
+            ax.set_ylim(0, max_y_value)  # Set consistent y-range
+            ax.set_ylabel('Count')
+            ax.legend([f'H{h_number}'])
+        
+        # Adjust layout and save the figure
+        deepest_folder_name = os.path.basename(os.path.dirname(file_path))
+        plt.suptitle(f'Xi values for true count {true_count} in {deepest_folder_name}')
+        plt.tight_layout()
+        plt.savefig(f'xi hist per h for true count {true_count}.png')
+        plt.close(fig)  # Close the figure to free memory
+        print(f'saved: xi hist per h for true count {true_count}.png')
+
 if __name__ == '__main__':
+    make_metrics_histograms()
     # main()
     # items = [1]
     # for item in items:
