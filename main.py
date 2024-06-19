@@ -207,7 +207,7 @@ def generate_test_images(dataset_name,  code_version, maximum_number_of_particle
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
     print(f'Total number of images generated from this config is {number_of_images_per_count * number_of_counts}. Note that this number may be slightly higher than the total number of images requested.')
-    print(f'Saving dataset to: ./image_dataset/{dataset_name}.')
+    print(f'Saving dataset to: ./image_dataset/{dataset_name}_{code_version}.')
 
     # Create the folder to store the images
     image_folder_path = os.path.join("image_dataset", f"{dataset_name}_{code_version}")
@@ -219,8 +219,12 @@ def generate_test_images(dataset_name,  code_version, maximum_number_of_particle
             chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
                 # [ToDo] Refine the following ranges.
-                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
-                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2
+                # x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # x = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
+                # y = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
+                x = np.random.rand() * (sz - 1)
+                y = np.random.rand() * (sz - 1)
                 relative_intensity = np.random.normal(1, amp_sd)
                 if relative_intensity < relative_intensity_min:
                     relative_intensity = relative_intensity_min
@@ -649,7 +653,7 @@ def main():
         process(config_files_dir)
 
     batchjobendtime = datetime.now()
-    print(f'\n\nBatch job completed in {batchjobendtime - batchjobstarttime}')
+    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
 def combine_log_files(log_folder, dataset_name, code_version_date, delete_individual_files=False):
     '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
