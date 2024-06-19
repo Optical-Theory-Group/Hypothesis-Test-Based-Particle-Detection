@@ -219,12 +219,8 @@ def generate_test_images(dataset_name,  code_version, maximum_number_of_particle
             chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
                 # [ToDo] Refine the following ranges.
-                # x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                # y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                # x = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
-                # y = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
-                x = np.random.rand() * (sz - 1)
-                y = np.random.rand() * (sz - 1)
+                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
                 relative_intensity = np.random.normal(1, amp_sd)
                 if relative_intensity < relative_intensity_min:
                     relative_intensity = relative_intensity_min
