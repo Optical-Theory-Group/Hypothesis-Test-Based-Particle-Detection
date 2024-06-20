@@ -9,7 +9,6 @@ from PIL import Image as im
 import os
 import pandas as pd
 import seaborn as sns
-from process_algorithms import generalized_likelihood_ratio_test, fdr_bh, generalized_maximum_likelihood_rule
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from process_algorithms import generalized_likelihood_ratio_test, generalized_maximum_likelihood_rule
@@ -221,6 +220,10 @@ def generate_test_images(dataset_name,  code_version, maximum_number_of_particle
                 # [ToDo] Refine the following ranges.
                 x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
                 y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # x = np.random.rand() * (sz - 1) #+ psf_sd * 2 - 0.5
+                # y = np.random.rand() * (sz - 1) #+ psf_sd * 2 - 0.5
+                # x = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
+                # y = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
                 relative_intensity = np.random.normal(1, amp_sd)
                 if relative_intensity < relative_intensity_min:
                     relative_intensity = relative_intensity_min
@@ -232,7 +235,7 @@ def generate_test_images(dataset_name,  code_version, maximum_number_of_particle
             image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
             img_filename = f"count{n_particles}-index{img_idx}.tiff"
             pil_image = im.fromarray(image.astype(np.uint16))
-            pil_image.save(os.path.join("image_dataset", dataset_name, img_filename))
+            pil_image.save(os.path.join(image_folder_path, img_filename))
     
     # Save the content of the config file
     config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
@@ -347,7 +350,7 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
-    images_folder = os.path.join('./image_dataset', dataset_name)
+    images_folder = os.path.join('./image_dataset', dataset_name + '_' + code_version_date)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
     print(f"Images loaded (total of {len(image_files)}):")
@@ -592,12 +595,12 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
     mae = mean_absolute_error(actual_repeats, estimated_repeats)
     rmse = np.sqrt(mean_squared_error(actual_repeats, estimated_repeats))
 
-    print(f"Accuracy: {accuracy}")
-    print(f"Overestimation Rate: {overestimation_rate}")
-    print(f"Underestimation Rate: {underestimation_rate}")
-    print(f"Miss-by-One Rate: {miss_by_one_rate}")
-    print(f"Mean Absolute Error: {mae}")
-    print(f"Root Mean Squared Error: {rmse}")
+    print(f"Accuracy: {accuracy:.3f}")
+    print(f"Overestimation Rate: {overestimation_rate:.3f}")
+    print(f"Underestimation Rate: {underestimation_rate:.3f}")
+    print(f"Miss-by-One Rate: {miss_by_one_rate:.3f}")
+    print(f"Mean Absolute Error: {mae:.3f}")
+    print(f"Root Mean Squared Error: {rmse:.3f}")
 
     # Prepare metrics for saving
     scores = {
@@ -665,7 +668,7 @@ def combine_log_files(log_folder, dataset_name, code_version_date, delete_indivi
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
 
         # Iterate over the fittings_files
         for log_file in individual_image_log_files:
@@ -684,6 +687,7 @@ def combine_log_files(log_folder, dataset_name, code_version_date, delete_indivi
         dir_path = os.path.join(log_folder, 'image_log')
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
+            print('Deleting individual image log files.')
 
 def process(config_files_dir, parallel=True):
     '''Process the config files in the config_files_dir directory.'''
@@ -772,8 +776,9 @@ def process(config_files_dir, parallel=True):
 
         # Delete the dataset after analysis
         if config['analysis_delete_the_dataset_after_analysis']:
-            dir_path =os.path.join("image_dataset", config['dataset_name'])
+            dir_path =os.path.join("image_dataset", f"{config['dataset_name']}_{config['code_version_date']}")
             shutil.rmtree(dir_path)
+            print('Deleting image data.')
 
 def quick_analysis():
     config_files_dir = './config_files/300524'
@@ -902,6 +907,8 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
 
 if __name__ == '__main__':
     # make_metrics_histograms()
+    sys.argv = ['main.py', '-c', './config_files/030524-new_format']
+    print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # items = [1]
     # for item in items:
