@@ -522,43 +522,6 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
     matrix = confusion_matrix(actual, estimated)
     # if matrix[-1].sum == 0:
     #     matrix = matrix[:-1, :]
-    normalized_matrix = np.zeros(matrix.shape)
-    
-    row_sums = matrix.sum(axis=1)
-    if display or savefig:
-        _, ax = plt.subplots(figsize=(8, 5))  # Increase the size of the figure.
-
-        # Debugging output
-        print("Original matrix:\n", matrix)
-        print("Row sums before normalization:", row_sums)
-
-        # Adjusted normalization with debugging
-        for row in range(matrix.shape[0]):
-            normalized_matrix[row] = matrix[row] / row_sums[row] if row_sums[row] != 0 else np.zeros(matrix.shape[1])
-
-        # Debugging output to check if normalization is as expected
-        print("Normalized matrix:\n", normalized_matrix)
-
-        # normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
-        folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
-        sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
-        ax.set_title(f'{folder_name}')
-        ax.set_xlabel('Estimated Particle Count')
-        ax.set_ylabel('Actual Particle Count')
-        ytick_labels = [f"{i} (count: {row_sums[i]})" for i in range(len(row_sums))]
-        ax.set_yticklabels(ytick_labels, rotation=0)
-        
-        # Draw lines between rows
-        for i in range(matrix.shape[0]+1):
-            ax.axhline(i, color='black', linewidth=1)
-        plt.tight_layout()
-        if display:
-            plt.show(block=False)
-        if savefig:
-            png_file_path = os.path.dirname(label_pred_log_file_path)
-            png_file_name = f'/{dataset_name}_{code_version_date}_confusion_mat.png'
-            png_file_path += png_file_name
-            plt.savefig(png_file_path, dpi=300)
     
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
@@ -617,6 +580,60 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
     csv_file_name = f'/{dataset_name}_{code_version_date}_scores.csv'
     csv_file_path += csv_file_name
     metrics_df.to_csv(csv_file_path, index=False)
+
+    normalized_matrix = np.zeros(matrix.shape)
+    
+    row_sums = matrix.sum(axis=1)
+    if display or savefig:
+        _, axs = plt.subplots(2, 1, figsize=(8, 8), gridspec_kw={'height_ratios': [4,1]})  # Increase the size of the figure.
+
+        # Debugging output
+        print("Original matrix:\n", matrix)
+        print("Row sums before normalization:", row_sums)
+
+        # Adjusted normalization with debugging
+        for row in range(matrix.shape[0]):
+            normalized_matrix[row] = matrix[row] / row_sums[row] if row_sums[row] != 0 else np.zeros(matrix.shape[1])
+
+        # Debugging output to check if normalization is as expected
+        print("Normalized matrix:\n", normalized_matrix)
+
+        # normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
+        folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
+        ax = axs[0]
+        sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
+        ax.set_title(f'{folder_name}')
+        ax.set_xlabel('Estimated Particle Count')
+        ax.set_ylabel('Actual Particle Count')
+        ytick_labels = [f"{i} (count: {row_sums[i]})" for i in range(len(row_sums))]
+        ax.set_yticklabels(ytick_labels, rotation=0)
+        
+        # Draw lines between rows
+        for i in range(matrix.shape[0]+1):
+            ax.axhline(i, color='black', linewidth=1)
+        
+        # Text messages
+        text_message = f"Accuracy: {accuracy:.3f}\n"+ \
+            f"Overestimation Rate: {overestimation_rate:.3f}\n"+ \
+            f"Underestimation Rate: {underestimation_rate:.3f}\n"+ \
+            f"Miss-by-One Rate: {miss_by_one_rate:.3f}\n"+ \
+            f"Mean Absolute Error: {mae:.3f}\n"+ \
+            f"Root Mean Squared Error: {rmse:.3f}"
+        ax = axs[1]
+        ax.axis('off')
+        # Add text messages to the figure
+        ax.text(0.01, 0.5, text_message, ha='left', va='center')  # Adjust x, y values as needed
+    
+        plt.tight_layout()
+        pass
+        if display:
+            plt.show(block=False)
+
+        if savefig:
+            png_file_path = os.path.dirname(label_pred_log_file_path)
+            png_file_name = f'/{dataset_name}_{code_version_date}_confusion_mat.png'
+            png_file_path += png_file_name
+            plt.savefig(png_file_path, dpi=300)
 
 def main():
     # Start the batch job timer
@@ -772,7 +789,7 @@ def process(config_files_dir, parallel=True):
             
             # Generate confusion matrix
             label_prediction_log_file_path = os.path.join(log_folder_path, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
-            generate_confusion_matrix(label_prediction_log_file_path, dataset_name, code_version_date, display=False, savefig=True)
+            generate_confusion_matrix(label_prediction_log_file_path, dataset_name, code_version_date, display=True, savefig=True)
 
         # Delete the dataset after analysis
         if config['analysis_delete_the_dataset_after_analysis']:
