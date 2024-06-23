@@ -195,7 +195,7 @@ def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1
 
     return t_g, p_value
 
-def generate_test_images(dataset_name,  code_version, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
+def generate_test_images(image_folder_namebase,  code_version, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -206,10 +206,10 @@ def generate_test_images(dataset_name,  code_version, maximum_number_of_particle
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
     print(f'Total number of images generated from this config is {number_of_images_per_count * number_of_counts}. Note that this number may be slightly higher than the total number of images requested.')
-    print(f'Saving dataset to: ./image_dataset/{dataset_name}_{code_version}.')
+    print(f'Saving dataset to: ./image_dataset/{image_folder_namebase}_code_ver{code_version}.')
 
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{dataset_name}_{code_version}")
+    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}_code_ver{code_version}")
     os.makedirs(image_folder_path, exist_ok=True)
 
     for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
@@ -344,29 +344,29 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.write(text)
         # sys.stdout.flush()
 
-def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
+def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
     '''Analyzes all the images in the dataset folder.'''
     # Set random seed
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
-    images_folder = os.path.join('./image_dataset', dataset_name + '_' + code_version_date)
+    images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
     print(f"Images loaded (total of {len(image_files)}):")
 
     # Create a folder to store the logs
-    log_folder = os.path.join('./runs', dataset_name + '_' + code_version_date)
+    log_folder = os.path.join('./runs', image_folder_namebase + '_code_ver' + code_version_date)
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
     if config_content:
-        config_file_save_path = os.path.join(log_folder, f'{dataset_name}_{code_version_date}_config_used.json')
+        config_file_save_path = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_config_used.json')
         with open(config_file_save_path, 'w') as f:
             json.dump(json.loads(config_content), f, indent=4)
 
     # Prepare the label (actual count) prediction (estimated count) log file
-    label_prediction_log_file_path = os.path.join(log_folder, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
+    label_prediction_log_file_path = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
     with open(label_prediction_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count'])
@@ -438,7 +438,7 @@ def analyze_whole_folder(dataset_name, code_version_date, use_exit_condi=True, l
                 writer = csv.writer(f)
                 writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
 
-                statusmsg = f'{dataset_name} '
+                statusmsg = f'{image_folder_namebase} '
                 if actual_num_particles == estimated_num_particles:
                     statusmsg += f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
@@ -505,7 +505,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     
     return image_analysis_results
 
-def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_version_date, display=False, savefig=True):
+def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
     # Extract the actual and estimated particle numbers
@@ -526,7 +526,7 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
     csv_file_path = os.path.dirname(label_pred_log_file_path)
-    csv_file_name = f'/{dataset_name}_{code_version_date}_confusion_mat.csv'
+    csv_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_confusion_mat.csv'
     csv_file_path += csv_file_name
     matrix_df.to_csv(csv_file_path, index=False)
 
@@ -577,7 +577,7 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
 
     metrics_df = pd.DataFrame(scores, index=[0])
     csv_file_path = os.path.dirname(label_pred_log_file_path)
-    csv_file_name = f'/{dataset_name}_{code_version_date}_scores.csv'
+    csv_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_scores.csv'
     csv_file_path += csv_file_name
     metrics_df.to_csv(csv_file_path, index=False)
 
@@ -631,7 +631,7 @@ def generate_confusion_matrix(label_pred_log_file_path, dataset_name, code_versi
 
         if savefig:
             png_file_path = os.path.dirname(label_pred_log_file_path)
-            png_file_name = f'/{dataset_name}_{code_version_date}_confusion_mat.png'
+            png_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_confusion_mat.png'
             png_file_path += png_file_name
             plt.savefig(png_file_path, dpi=300)
 
@@ -671,10 +671,10 @@ def main():
     batchjobendtime = datetime.now()
     print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
 
-def combine_log_files(log_folder, dataset_name, code_version_date, delete_individual_files=False):
+def combine_log_files(log_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
     '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
     # Create the fitting_results.csv file
-    whole_metrics_log_filename = os.path.join(log_folder, f'{dataset_name}_{code_version_date}_metrics_log_per_image_hypothesis.csv')
+    whole_metrics_log_filename = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
     print(f"{whole_metrics_log_filename=}")
     
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
@@ -725,12 +725,11 @@ def process(config_files_dir, parallel=True):
                 pprint.pprint(config)
 
                 # Check if the required fields are present in the config file
-                required_fields = ['dataset_name', 'code_version_date',\
+                required_fields = ['image_folder_namebase', 'code_version_date',\
                                     'generate_the_dataset', 'gen_random_seed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
                                     "gen_minimum_particle_count",
                                     "gen_maximum_particle_count",
                                     'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
-                                    'analysis_delete_the_dataset_after_analysis',\
                                     'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
 
                 # Modify field values with '.'
@@ -746,11 +745,11 @@ def process(config_files_dir, parallel=True):
                     if field not in config:
                         # If config['generate_the_dataset'] is True, then all fields starting with 'gen' are required.
                         if config['generate_the_dataset'] and field.startswith('gen'):
-                            print(f"Error: '{field}' is not a valid field when 'generate_the_dataset' is True")
+                            print(f"Error: '{field}' should be set for image generation.")
                             exit()
                         # If config['analyze_the_dataset'] is True, then all fields starting with 'analysis' are required.
                         if config['analyze_the_dataset'] and field.startswith('analysis'):
-                            print(f"Error: '{field}' is not a valid field when 'analyze_the_dataset' is True")
+                            print(f"Error: '{field}' should be set for image analysis.")
                             exit()
         # If the config file is not found or invalid, print an error message and continue to the next config file
         except (FileNotFoundError, json.JSONDecodeError):
@@ -759,7 +758,7 @@ def process(config_files_dir, parallel=True):
 
         # Generate the dataset 
         if config['generate_the_dataset']:
-            generate_test_images(dataset_name=config['dataset_name'], 
+            generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                 code_version=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
                                 minimum_number_of_particles=config['gen_minimum_particle_count'], 
@@ -774,28 +773,28 @@ def process(config_files_dir, parallel=True):
                                 config_content=json.dumps(config))
         # Analyze the dataset
         if config['analyze_the_dataset']:
-            log_folder_path = analyze_whole_folder(dataset_name=config['dataset_name'], 
+            log_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
                                                 code_version_date=config['code_version_date'], 
                                                 use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
                                                 last_h_index=config['analysis_maximum_hypothesis_index'], 
                                                 analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
                                                 config_content=json.dumps(config), parallel=parallel)
             # Get the dataset name and code version date
-            dataset_name = config['dataset_name']
+            image_folder_namebase = config['image_folder_namebase']
             code_version_date = config['code_version_date']
 
             # Combine analysis log files into one.
-            combine_log_files(log_folder_path, dataset_name, code_version_date, delete_individual_files=True)
+            combine_log_files(log_folder_path, image_folder_namebase, code_version_date, delete_individual_files=True)
             
             # Generate confusion matrix
-            label_prediction_log_file_path = os.path.join(log_folder_path, f'{dataset_name}_{code_version_date}_label_prediction_log.csv')
-            generate_confusion_matrix(label_prediction_log_file_path, dataset_name, code_version_date, display=True, savefig=True)
+            label_prediction_log_file_path = os.path.join(log_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
+            generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=True, savefig=True)
 
-        # Delete the dataset after analysis
-        if config['analysis_delete_the_dataset_after_analysis']:
-            dir_path =os.path.join("image_dataset", f"{config['dataset_name']}_{config['code_version_date']}")
-            shutil.rmtree(dir_path)
-            print('Deleting image data.')
+            # Delete the dataset after analysis
+            if config['analysis_delete_the_dataset_after_analysis']:
+                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_{config['code_version_date']}")
+                shutil.rmtree(dir_path)
+                print('Deleting image data.')
 
 def quick_analysis():
     config_files_dir = './config_files/300524'
@@ -807,14 +806,14 @@ def quick_analysis():
         pprint.pprint(config)
         analysis_rand_seed_per_image = 7258
         filename = "./image_dataset/PSF 1.1/count1-index88.tiff"
-        # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
+        # log_folder = analyze_whole_folder(image_folder_name=config['image_folder_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
         #                     analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
         psf_sd = config['analysis_predefined_psf_sd']
         last_h_index = config['analysis_maximum_hypothesis_index']
         use_exit_condi = config['analysis_use_premature_hypothesis_choice']
-        dataset_name = config['dataset_name']
+        image_folder_namebase = config['image_folder_namebase']
         code_version_date = config['code_version_date']
-        log_folder = os.path.join('./runs', dataset_name + '_' + code_version_date)
+        log_folder = os.path.join('./runs', image_folder_namebase + '_code_ver' + code_version_date)
         analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
     pass
 
