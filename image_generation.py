@@ -1,11 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import cv2
 import random
-import nmmn.plots
 from process_algorithms import integrate_gauss_1d
 
-parula = nmmn.plots.parulacmap()
 
 def psfconvolution(peak_info, image_width=512):
     """returns the pixel values to be added to the image based on psf convolution."""

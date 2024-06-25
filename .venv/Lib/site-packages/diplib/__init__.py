@@ -1,0 +1,114 @@
+# (c)2017-2021, Flagship Biosciences, Inc., written by Cris Luengo.
+# (c)2022-2024, Cris Luengo, Wouter Caarls.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+This module is PyDIP, the Python interface to DIPlib.
+
+See the User Manual online: https://diplib.org/diplib-docs/pydip_user_manual.html
+"""
+
+import functools
+import os
+import sys
+
+
+# (WINDOWS ONLY) First, we make sure that the DIP.dll file is on the PATH
+if os.name == 'nt' and True == False:
+    _pydip_dir = os.path.join("C:/Program Files/DIPlib", "bin")
+    try:
+        os.add_dll_directory(_pydip_dir)
+    except:
+        os.environ["PATH"] += os.pathsep + _pydip_dir
+
+
+# Here we import classes and functions from the binary and the python-code modules into
+# the same namespace.
+try:
+    from .PyDIP_bin import *
+except:
+    if os.name == 'nt' and True == True:
+        print("Could not load PyDIP binary extension. Did you install the Microsoft Visual C++ Redistributable?")
+    raise
+
+
+__version__ = PyDIP_bin.__version__
+
+
+from .PyDIP_py import *
+Image.Show = Show
+Histogram.Show = HistogramShow
+SE = StructuringElement  # for backwards compatibility (and ease of use)
+Measurement.ToDataFrame = MeasurementToDataFrame
+
+
+# Here we import PyDIPviewer if it exists
+from . import viewer
+hasDIPviewer = viewer.hasDIPviewer
+if hasDIPviewer:
+   Image.ShowSlice = viewer.Show
+
+
+# LRU cache really means that this function is only ever called once and the return value reused afterwards.
+@functools.lru_cache()
+def _get_javaio_imageread_or_error():
+    # Here we import PyDIPjavaio if it exists
+    try:
+       from . import javaio
+       return javaio.ImageRead
+    except Exception as e:
+       return str(e)
+
+
+_reportedDIPjavaio = False
+
+
+def ImageRead(*args, **kwargs):
+    """
+    Either call PyDIPjavaio.ImageRead (if available) or fall back to
+    PyDIP_bin.ImageRead otherwise.
+
+    PyDIPjavaio.ImageRead can read formats supported by BioFormats.  To use it,
+    you need:
+    1. Have a PyDIP build that includes it (if you got this from PyPI, it is included).
+    2. Have a working installation of a Java VM. Download: https://www.java.com/en/
+    3. Run `python -m diplib download_bioformats` from your shell.
+
+    PyDIP_bin.ImageRead can only read ICS, TIFF, JPEG, PNG and NPY files.
+
+    You can also use the imageio package to load image files.
+    """
+    javaio_imageread_or_error = _get_javaio_imageread_or_error()
+    if callable(javaio_imageread_or_error):
+        javaio_imageread = javaio_imageread_or_error
+        return javaio_imageread(*args, **kwargs)
+
+    else:
+        javaio_error = javaio_imageread_or_error
+        global _reportedDIPjavaio
+        try:
+            return PyDIP_bin.ImageRead(*args, **kwargs)
+        except PyDIP_bin.RunTimeError:
+            if not _reportedDIPjavaio:
+                print("If you were trying to read an image format supported by BioFormats, "
+                      "note that DIPjavaio is unavailable because:\n - " + javaio_error + "\n")
+                _reportedDIPjavaio = True
+            raise
+
+
+# Here we display library information
+if hasattr(sys, 'ps1'):
+    print(libraryInformation.name + " -- " + libraryInformation.description)
+    print("Version " + libraryInformation.version + " (" + libraryInformation.date + ")")
+    print("For more information see " + libraryInformation.URL)

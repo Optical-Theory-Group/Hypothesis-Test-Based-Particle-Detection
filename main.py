@@ -3,7 +3,6 @@ import json
 import argparse
 from image_generation import psfconvolution
 import csv
-from PIL import Image as im
 import os
 import pandas as pd
 import seaborn as sns
@@ -12,6 +11,7 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from process_algorithms import generalized_likelihood_ratio_test, generalized_maximum_likelihood_rule
 from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks
+from PIL import Image as im
 import math
 import numpy as np
 import diplib as dip
@@ -354,7 +354,8 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     print(f"Images loaded (total of {len(image_files)}):")
 
     # Create a folder to store the logs
-    log_folder = os.path.join('./runs', dataset_name + '_' + analysis_name)
+    
+    log_folder = os.path.join('./runs', os.path.basename(images_folder) + '_hi_accuracy_ver')
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
@@ -412,10 +413,12 @@ def analyze_whole_folder(dataset_name, analysis_name, use_exit_condi=True, last_
     else:
         progress = 0
         for seed, filename in enumerate(image_files):
+            rand_seed = 0
+            seed = 0
             analysis_result = analyze_image(filename, psf_sd, last_h_index, rand_seed, use_exit_condi, log_folder, seed)
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
-            input_image_file = analysis_result['input_image_file']
+            input_image_file = analysis_result['image_filename']
 
             with open(main_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
@@ -595,7 +598,7 @@ def main():
     args = parser.parse_args()
 
     print('Overriding arguments for testing purposes - remove lines in main() to restore correct behaviour')
-    args.config_file_folder = './config_files/jupiter_run_140524'
+    args.config_file_folder = './config_files/hi_accuracy_ver'
     args.profile = False
 
     # Check if config-file-folder is provided
@@ -662,8 +665,10 @@ def process(config_files_dir, parallel=True):
                                 n_images_per_count=config['gen_n_img_per_count'], psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], bg=config['gen_bg_level'], random_seed=config['gen_randseed'], config_content=json.dumps(config))
 
         if config['analyze_dataset']:
-            log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
-                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
+            temp_dataset_name = 'common_stock_for_comparison_code_ver2024-06-23'
+            # log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
+            log_folder = analyze_whole_folder(dataset_name=temp_dataset_name, analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
+                                rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=False)
 
             combine_log_files(log_folder, 'common_stock_for_comparison', '2024-06-23', delete_individual_files=True)
 
