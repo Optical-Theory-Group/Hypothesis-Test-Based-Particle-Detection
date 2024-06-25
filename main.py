@@ -455,46 +455,35 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
     estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
                                                         psf_sd=psf_sd, last_h_index=last_h_index, random_seed=rand_seed, use_exit_condi=use_exit_condi) 
 
-    # Get the input image file name
-    input_image_file = os.path.splitext(os.path.basename(image_filename))[0]
-    scores_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_scores.csv"
-    fits_csv_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_fittings.csv"
-
     # Extract xi, lli, and penalty from test_metrics
     xi = test_metrics['xi']
     lli = test_metrics['lli']
     penalty = test_metrics['penalty']
     fisher_info = test_metrics['fisher_info']
-    # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-    metric_data = list(zip(range(len(xi)), xi, lli, penalty, fisher_info))
-    # metric_data = list(zip(range(len(xi)), xi, lli, penalty, ))
+    fit_parameters = [result['theta'] for result in fit_results]
 
-    # Create a list of tuples containing fit_results_for_max_xi
-    fitted_theta = fit_results[estimated_num_particles]['theta']
-    fitting_data = [[fitted_theta]]  # Convert fitted_theta to a list
+    # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
+    file_h_info = [f"{image_filename} (h{h_index})" for h_index in range(len(xi))]
+    true_counts = [actual_num_particles for _ in range(len(xi))]
+    h_numbers = [h_index for h_index in range(len(xi))]
+    selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+    metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
 
     # Write the data to the CSV files
-    os.makedirs(os.path.dirname(scores_csv_filename), exist_ok=True)
-    os.makedirs(os.path.dirname(fits_csv_filename), exist_ok=True)
+    image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))}_log.csv"
+    os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
 
-    with open(scores_csv_filename, 'w', newline='') as file:
+    with open(image_analysis_log_filename, 'w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['hypothesis_index', 'xi', 'lli', 'penalty, fisher_info'])
+        # writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
         writer.writerows(metric_data)
 
-    with open(fits_csv_filename, 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['theta'])
-        writer.writerows(fitting_data)
-
-    image_analysis_results = {'scores_csv_file': scores_csv_filename,
-                              'csv_files2': fits_csv_filename,
+    image_analysis_results = {
                               'actual_num_particles': actual_num_particles,
                               'estimated_num_particles': estimated_num_particles,
-                              'input_image_file': input_image_file,
                               'image_filename': image_filename,
                               }
-    
     
     return image_analysis_results
 
