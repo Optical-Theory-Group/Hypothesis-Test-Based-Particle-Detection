@@ -561,6 +561,41 @@ def plot_confusion_matrices_from_all_folders_inside_run_folder():
         generate_confusion_matrix(csv_file_path, display=True, save_path=None)
 
 
+def combine_log_files(log_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
+    '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
+    # Create the fitting_results.csv file
+    whole_metrics_log_filename = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
+    print(f"{whole_metrics_log_filename=}")
+    
+    os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
+
+    # Get all the *_fittings.csv files in the image_log folder
+    individual_image_log_files = glob.glob(os.path.join(log_folder, 'image_log', '*_analysis_log.csv'))
+
+    # Open the fitting_results.csv file in write mode
+    with open(whole_metrics_log_filename, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+
+        # Iterate over the fittings_files
+        for log_file in individual_image_log_files:
+            # Get the image file name without the extension
+            # image_file_name = os.path.splitext(os.path.basename(log_file))[0].split('_analysis_log')[0] + ".tiff"
+            # Read the fitting file
+            with open(log_file, 'r') as f_ind:
+                reader = csv.reader(f_ind)
+                # Skip the first row (header)
+                next(reader)
+                rows = list(reader)
+                writer.writerows(rows)
+
+    # Delete the image_log directory and all its contents
+    if delete_individual_files:
+        dir_path = os.path.join(log_folder, 'image_log')
+        if os.path.exists(dir_path):
+            shutil.rmtree(dir_path)
+            print('Deleting individual image log files.')
+
 def main():
     batchjobstarttime = datetime.now()
 
@@ -641,8 +676,10 @@ def process(config_files_dir, parallel=True):
             log_folder = analyze_whole_folder(dataset_name=config['dataset_name'], analysis_name=config['analysis_name'], use_exit_condi=config['analysis_use_exit_condition'], last_h_index=config['analysis_max_h_number'], \
                                 rand_seed=config['analysis_randseed'], psf_sd=config['analysis_psf_sd'], config_content=json.dumps(config), parallel=parallel)
 
-        if config['generated_img_folder_removal_after_counting']:
-            shutil.rmtree(config['dataset_name'])
+            combine_log_files(log_folder, 'common_stock_for_comparison', '2024-06-23', delete_individual_files=True)
+
+            if config['generated_img_folder_removal_after_counting']:
+                shutil.rmtree(config['dataset_name'])
         
         # Generate confusion matrix
         main_log_file_path = os.path.join(log_folder, 'actual_vs_counted.csv')
