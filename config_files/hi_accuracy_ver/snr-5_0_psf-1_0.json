@@ -1,0 +1,11 @@
+{
+    "dataset_name": "common_stock_for_comparison",
+    "generate_dataset": false,
+    "generated_img_folder_removal_after_counting": false,
+    "analyze_dataset": true,
+    "analysis_name": "2024-06-23",
+    "analysis_randseed": 0,
+    "analysis_psf_sd": 1.0,
+    "analysis_use_exit_condition": false,
+    "analysis_max_h_number": 5
+}
