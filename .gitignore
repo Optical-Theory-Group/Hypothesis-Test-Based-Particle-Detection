@@ -1,7 +1,7 @@
-image_dataset/*
-runs/*
-*.pyc
-.downloads/*
-downloads/*
-config_files/*
-config_files/code_test/psf-1_5.json
+__pycache__/
+.downloads/
+.lprof/
+.venv/
+image_dataset/
+runs/
+config_files/

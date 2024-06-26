@@ -16,27 +16,27 @@ or
 >python tests.py -c config file folder name"
 
 ## Config file format example (.json)
-
-{
-    "dataset_name": "Uniform Intensity",
-    "generate_dataset": true,
-    "gen_randseed": 0,
-    "gen_n_img_per_count": 200,
-    "gen_mean_area_per_particle": 100,
-    "gen_psf_sd": 1.4,
-    "gen_img_width": 20,
-    "gen_bg_level": 500,
-    "gen_particle_int_to_bg_level": 20,
-    "gen_particle_int_sd_to_mean_int": 0.0,
-    "generated_img_folder_removal_after_counting": false,
-    "analyze_dataset": true,
-    "analysis_name": "r20240425",
-    "analysis_randseed": 0,
-    "analysis_psf_sd": 1.4,
-    "analysis_use_exit_condition": false,
-    "analysis_max_h_number": 5
-}
-
+{ </br>
+    "image_folder_namebase": "example_folder",</br>
+    "code_version_date": "2024-06-26",</br>
+    "generate_the_dataset": true,</br>
+    "gen_random_seed": 0,</br>
+    "gen_total_image_count": 500,</br>
+    "gen_minimum_particle_count": 0,</br>
+    "gen_maximum_particle_count": 4,</br>
+    "gen_psf_sd": 1.0,</br>
+    "gen_img_width": 20,</br>
+    "gen_bg_level": 500,</br>
+    "gen_intensity_prefactor_to_bg_level_ratio_min": 5,</br>
+    "gen_intensity_prefactor_to_bg_level_ratio_max": 5,</br>
+    "gen_intensity_prefactor_coefficient_of_variation": 0.0,</br>
+    "analyze_the_dataset": true,</br>
+    "analysis_random_seed": 0,</br>
+    "analysis_predefined_psf_sd": 1.0,</br>
+    "analysis_use_premature_hypothesis_choice": false,</br>
+    "analysis_maximum_hypothesis_index": 5,</br>
+    "analysis_delete_the_dataset_after_analysis": true
+</br>}
 
 ## Outputs
 
