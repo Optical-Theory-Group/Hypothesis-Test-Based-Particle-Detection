@@ -5,3 +5,4 @@ __pycache__/
 image_dataset/
 runs/
 config_files/
+*.prof
