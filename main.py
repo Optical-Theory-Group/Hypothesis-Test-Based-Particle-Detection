@@ -347,6 +347,7 @@ def update_progress(progress, status='', barlength=20):
 def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
     '''Analyzes all the images in the dataset folder.'''
     # Set random seed
+    analysis_rand_seed = 0
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
@@ -383,6 +384,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     # Create a list of random seeds for each image
     image_rand_seeds = list(range(len(image_files)))
     np.random.shuffle(image_rand_seeds)
+    # Create a list of random seeds for each image
+    image_rand_seeds = [0] * len(image_files)
 
     # Analyze the images in parallel or sequentially
     if parallel:
@@ -923,7 +926,7 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
 
 if __name__ == '__main__':
     # make_metrics_histograms()
-    sys.argv = ['main.py', '-c', './config_files/030524-new_format']
+    sys.argv = ['main.py', '-c', './config_files/main_test']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # items = [1]
