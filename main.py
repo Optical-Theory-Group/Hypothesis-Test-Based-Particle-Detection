@@ -508,12 +508,6 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
 def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
-    if os.path.isfile(label_pred_log_file_path):
-        # Read the CSV file
-        df = pd.read_csv(label_pred_log_file_path)
-        # Rest of the code...
-    else:
-        print("File not found.")
     # Extract the actual and estimated particle numbers
     try:
         actual = df['Actual Particle Count']
@@ -784,7 +778,7 @@ def process(config_files_dir, parallel=True):
                                                 use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
                                                 last_h_index=config['analysis_maximum_hypothesis_index'], 
                                                 analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
-                                                config_content=json.dumps(config), parallel=True)
+                                                config_content=json.dumps(config), parallel=parallel)
             # Get the dataset name and code version date
             image_folder_namebase = config['image_folder_namebase']
             code_version_date = config['code_version_date']
@@ -798,7 +792,7 @@ def process(config_files_dir, parallel=True):
 
             # Delete the dataset after analysis
             if config['analysis_delete_the_dataset_after_analysis']:
-                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
+                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_{config['code_version_date']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
@@ -929,7 +923,7 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
 
 if __name__ == '__main__':
     # make_metrics_histograms()
-    sys.argv = ['main.py', '-c', './config_files/hi_accu_new']
+    sys.argv = ['main.py', '-c', './config_files/030524-new_format']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # items = [1]
