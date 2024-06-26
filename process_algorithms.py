@@ -925,6 +925,9 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     fit_results = [] 
 
     for hypothesis_index in range(last_h_index + 1): # hypothesis_index is also the number of particles. 
+        if hypothesis_index == 2:
+            print("hypothesis_index = 2")
+            pass
 
         # print('Testing: Hypothesis Index ', hypothesis_index)
         # Initialization
@@ -939,7 +942,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         if hypothesis_index == 0:
             # initialize theta as a scalar value for background intensity.
             theta = 0.0
-        else:
+        
             theta = np.zeros((hypothesis_index + 1, n_hk_params_per_particle)) 
 
         # Starting values
