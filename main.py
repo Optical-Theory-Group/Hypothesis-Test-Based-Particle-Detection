@@ -473,7 +473,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, rand_seed, use_exit_cond
     metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
 
     # Write the data to the CSV files
-    image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))}_log.csv"
+    image_analysis_log_filename = f"{log_folder}/image_log/{os.path.basename(image_filename)}_log.csv"
     os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
 
     with open(image_analysis_log_filename, 'w', newline='') as file:
@@ -531,8 +531,9 @@ def generate_confusion_matrix(csv_file, save_path, display=False, ):
             ax.axhline(i, color='black', linewidth=1)
         
         plt.tight_layout()
+        plt.savefig('plot.png')
         plt.show()
-    
+
     # Save the confusion matrix as a CSV file
     matrix_df = pd.DataFrame(matrix)
     matrix_df.to_csv(save_path, index=False)
@@ -562,7 +563,7 @@ def combine_log_files(log_folder, image_folder_namebase, code_version_date, dele
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
 
     # Get all the *_fittings.csv files in the image_log folder
-    individual_image_log_files = glob.glob(os.path.join(log_folder, 'image_log', '*_analysis_log.csv'))
+    individual_image_log_files = glob.glob(os.path.join(log_folder, 'image_log', '*.csv'))
 
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
