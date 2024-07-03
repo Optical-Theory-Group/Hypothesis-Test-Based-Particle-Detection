@@ -37,6 +37,60 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
         th[particle_index][2] = n_th[particle_index][2] * szy
     return th
 
+def cup_function(t, width, scale=5):
+    """ Returns the value of the cup function at t."""
+    return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
+
+def out_of_bounds_particle_penalty(theta, szx, szy, scale=5, penalty_maximum=1e4):
+    """ Returns a penalty for particles that are out of bounds."""
+    penalty = 0
+    for i in range(1, len(theta)):
+        if len(theta[i]) == 3:
+            x_term = cup_function(theta[i][1], szx, scale=scale)
+            y_term = cup_function(theta[i][2], szy, scale=scale)
+            penalty += theta[i][0] * (x_term + y_term)
+    penalty = min(penalty, penalty_maximum)
+    return penalty
+
+def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, sigma, scale=5, max_value=1e4):
+    """ Returns the derivative of the out of bounds penalty."""
+    scale = 5
+    ddt_oob = np.zeros((len(theta), 3))
+    ddt_oob[0][1] = ddt_oob[0][2] = np.nan
+    for i in range(1, len(theta)):
+        if len(theta[i]) == 3:
+            ddt_oob[i][0] = min(cup_function(theta[i][1], szx), max_value) + min(cup_function(theta[i][2], szy) * (roi_max - roi_min) * 2 * np.pi * sigma**2, max_value)
+            ddt_oob[i][1] = min(theta[i][0] * (- scale) * cup_function(theta[i][1], szx, scale=5) * szx, max_value)
+            ddt_oob[i][2] = min(theta[i][0] * (- scale) * cup_function(theta[i][2], szx, scale=5) * szy, max_value)
+        
+
+    return ddt_oob 
+
+def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, sigma, scale=5, max_value=1e4):
+    d2dt2_oob_2d = np.zeros((len(theta)* 3 - 2, len(theta)* 3 - 2))
+    d2dt2_oob_2d[0, :] = d2dt2_oob_2d[:, 0] = 0 # No penalty for the background
+            
+    for pidx in range(1, len(theta)):
+        # i0, i0
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0 # No penalty for the background
+        # i0, i1
+        d2dt2 = min(- scale * cup_function(theta[pidx][1], szx, scale=scale) * (roi_max - roi_min) * 2 * np.pi * sigma**2 * szx, max_value)
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2
+        # i0, i2
+        d2dt2 = min(- scale * cup_function(theta[pidx][2], szy, scale=scale) * (roi_max - roi_min) * 2 * np.pi * sigma**2 * szy, max_value)
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2
+        # i1, i1
+        d2dt2 = min(scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2, max_value)
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
+        # i1, i2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
+        # i2, i2
+        d2dt2 = min(scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2, max_value)
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2
+
+    return d2dt2_oob_2d
 
 # Maximum Likelihood Estimation of Hk                       
 def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy):
@@ -49,7 +103,9 @@ def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi
     # Calculate the model value at each pixel position
     model_xy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy), hypothesis_index, min_model_xy, psf_sd)
     modified_neg_loglikelihood = np.sum(model_xy - roi_image * np.log(model_xy))
-    return modified_neg_loglikelihood
+    modified_neg_loglikelihood += out_of_bounds_particle_penalty(theta, szx, szy, scale=5) # newly added line (2nd July 2024)
+
+    return modified_neg_loglikelihood 
 
 
 def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy, psf_sd):
@@ -126,14 +182,6 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         None
 
     """
-    # Jacobian needed is the derivatives of modified_neg_loglikelihood function.
-    # modified_neg_loglikelihood = (sum over xx and yy) [ model - pixel_val * log(model) ], where model == theta[0][0] + (sum over i) theta[i][0] * integrated_psf_x[i] * integrated_psf_x[i] d
-    # ddt(negloglikelihood) [t == norm_t00] = d(nll)/d(norm_t00) = d(nll)/d(model) * d(model)/d(t00) * d(norm_t00)/d(t00)
-    #                            = (sum over xx and yy) [ (1 - pixel_val / model) * 1 * max 
-    # ddt(negloglikelihood) [t == norm_ti0] = (sum over xx and yy) (1 - pixel_val / model) * (Ix[i] * Iy[i]) * ((max - min) * 2 * np.pi * psf_sd**2)
-    # ddt(negloglikelihood) [t == norm_ti1] = (sum over xx and yy) (1 - pixel_val / model) * (ti0 * d(Ix)/d(ti1) * Iy[i]) * szx
-    #                                       = (sum over xx and yy) (1 - pixel_val / model) * (ddt_integrated_psf_x(xx, theta[i][1], psf_sd) * theta[i][0] * Iy[i]) * szx
-    # ddt(negloglikelihood) [t == norm_t12] = (sum over xx and yy) (1 - pixel_val / model) * (ddt_integrated_psf_x(yy, theta[i][2], psf_sd) * theta[i][0] * Ix[i]) * szy
     theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy)
     # nll: negloglikelihood
     ddt_nll = np.zeros((hypothesis_index + 1, 3)) # 3 --> 1 for intensity, 2 for coordinates
@@ -163,27 +211,13 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         print("Warning: the shape of the jacobian is not the same as the shape of the parameters. Check required")
         # Reshape the gradient to have the same shape as norm_flat_trimmed_theta
         jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
-    # print(f'Jacobian new {jacobian}')
 
-    # ddt_nll = np.zeros((hypothesis_index + 1, 3)) # 3 --> 1 for intensity, 2 for coordinates
-    # for yy in range(szy):
-    #     for xx in range(szx):
-    #         pixel_val = roi_image[yy, xx]
-    #         model_xy, integrated_psf_x, integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy, psf_sd)
-    #         ddt_nll[0][0] += (1 - pixel_val / model_xy) * roi_max 
-    #         ddt_nll[0][1] = ddt_nll[0][2] = np.nan
-    #         for p_idx in range(1, hypothesis_index + 1):
-    #             ddt_nll[p_idx][0] += (1 - pixel_val / model_xy) * (integrated_psf_x[p_idx] * integrated_psf_y[p_idx]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2
-    #             ddt_nll[p_idx][1] += (1 - pixel_val / model_xy) * ddt_integrated_psf_1d(xx, theta[p_idx][1], psf_sd) * theta[p_idx][0] * integrated_psf_y[p_idx] * szx
-    #             ddt_nll[p_idx][2] += (1 - pixel_val / model_xy) * ddt_integrated_psf_1d(yy, theta[p_idx][2], psf_sd) * theta[p_idx][0] * integrated_psf_x[p_idx] * szy
-    # jacobian = ddt_nll.flatten()
-    # jacobian = jacobian[~np.isnan(jacobian)]
-    # # Check the shape of the gradient
-    # if jacobian.shape != norm_flat_trimmed_theta.shape:
-    #     print("Warning: the shape of the jacobian is not the same as the shape of the parameters. Check required")
-    #     # Reshape the gradient to have the same shape as norm_flat_trimmed_theta
-    #     jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
-    # print(f'Jacobian orig {jacobian}')
+    # newly added line (2nd July 2024)
+    ddt_oob = jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=5) 
+    jac_oob = ddt_oob.flatten()
+    jac_oob = jac_oob[~np.isnan(jac_oob)]
+    jacobian += jac_oob
+
     return jacobian
 
 
@@ -267,6 +301,8 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
         d2dt2_nll_i2_i2 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Ddt_integrated_psf_1d_y[pidx]** 2, Integrated_psf_x[pidx]**2) \
                                   + (1 - roi_image / Model_xy) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]))   * theta[pidx][0] * szy**2  )
         d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2
+
+    d2dt2_nll_2d += hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=5) # newly added line (2nd July 2024)
 
     return d2dt2_nll_2d
 
@@ -886,9 +922,6 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     # MLE estimation of H1, H2, ... (where should it end?) 
     n_hk_params_per_particle = 3
     n_h0_params = 1
-
-    # Test up to H4 for now (1/14/2024 Mo, temporary)
-    last_h_index = last_h_index
     
     # Initialize test scores
     xi = [] # Which will be lli - penalty

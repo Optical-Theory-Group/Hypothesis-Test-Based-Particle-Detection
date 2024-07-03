@@ -218,8 +218,12 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
             chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
                 # [ToDo] Refine the following ranges.
-                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+
+                x = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
+                y = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
+
                 # x = np.random.rand() * (sz - 1) #+ psf_sd * 2 - 0.5
                 # y = np.random.rand() * (sz - 1) #+ psf_sd * 2 - 0.5
                 # x = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
@@ -344,7 +348,7 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.write(text)
         # sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False):
+def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False, timeout=120):
     '''Analyzes all the images in the dataset folder.'''
     # Set random seed
     np.random.seed(analysis_rand_seed)
@@ -405,7 +409,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                             print("Proceeding without addressing the exception.")
                     # Get the result of the future and write the results to the main log file
                     try:
-                        analysis_result = cfresult.result()
+                        analysis_result = cfresult.result(timeout=timeout)
                         actual_num_particles = analysis_result['actual_num_particles']
                         estimated_num_particles = analysis_result['estimated_num_particles']
                         input_image_file = analysis_result['image_filename']
@@ -419,6 +423,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                             statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}'
                         else:
                             statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}'
+                    except concurrent.futures.TimeoutError:
+                        print(f"Task exceeded the maximum allowed time of {timeout} seconds and was cancelled.")
+                        cfresult.cancel()  # Attempt to cancel the future
+                        statusmsg = 'Task cancelled due to timeout.'
                     except Exception as e:
                         print(f"Error in cfresult.result(): {e}")
                         statusmsg = f'Error: {e}'
@@ -657,7 +665,7 @@ def main():
     
     if args.profile is True:
         with Profile() as profile:
-            process(parallel=True, config_files_dir=config_files_dir)
+            process(config_files_dir=config_files_dir, parallel=True, timeout=30)
             (
                 Stats(profile)
                 .strip_dirs()
@@ -666,7 +674,7 @@ def main():
             )
             # os.system('snakeviz profile_results.prof &')
     else:
-        process(config_files_dir)
+        process(config_files_dir, parallel=False)
 
     batchjobendtime = datetime.now()
     print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
@@ -706,7 +714,7 @@ def combine_log_files(log_folder, image_folder_namebase, code_version_date, dele
             shutil.rmtree(dir_path)
             print('Deleting individual image log files.')
 
-def process(config_files_dir, parallel=True):
+def process(config_files_dir, parallel=False, timeout=120):
     '''Process the config files in the config_files_dir directory.'''
     config_files = os.listdir(config_files_dir)
 
@@ -778,7 +786,7 @@ def process(config_files_dir, parallel=True):
                                                 use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
                                                 last_h_index=config['analysis_maximum_hypothesis_index'], 
                                                 analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
-                                                config_content=json.dumps(config), parallel=parallel)
+                                                config_content=json.dumps(config), parallel=parallel, timeout=timeout)
             # Get the dataset name and code version date
             image_folder_namebase = config['image_folder_namebase']
             code_version_date = config['code_version_date']
@@ -792,7 +800,7 @@ def process(config_files_dir, parallel=True):
 
             # Delete the dataset after analysis
             if config['analysis_delete_the_dataset_after_analysis']:
-                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_{config['code_version_date']}")
+                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_ver{config['code_version_date']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
@@ -923,7 +931,8 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
 
 if __name__ == '__main__':
     # make_metrics_histograms()
-    sys.argv = ['main.py', '-c', './config_files/030524-new_format']
+    # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
+    sys.argv = ['main.py', '-c', './config/', '-p', 'True']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # items = [1]
