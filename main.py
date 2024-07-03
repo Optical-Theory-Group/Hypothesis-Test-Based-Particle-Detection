@@ -217,17 +217,15 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
             image = np.ones((sz, sz), dtype=float) * bg
             chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
             for _ in range(n_particles):
-                # [ToDo] Refine the following ranges.
-                # x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                # y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
 
-                x = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
-                y = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
+                # This is setting for wider possible area. 
+                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
 
-                # x = np.random.rand() * (sz - 1) #+ psf_sd * 2 - 0.5
-                # y = np.random.rand() * (sz - 1) #+ psf_sd * 2 - 0.5
-                # x = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
-                # y = np.random.rand() * (sz - psf_sd * 6 - 1) + psf_sd * 3 - .5
+                # This is setting for narrower possible area.
+                # x = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
+                # y = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
+
                 relative_intensity = np.random.normal(1, amp_sd)
                 if relative_intensity < relative_intensity_min:
                     relative_intensity = relative_intensity_min
@@ -933,6 +931,7 @@ if __name__ == '__main__':
     # make_metrics_histograms()
     # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
     sys.argv = ['main.py', '-c', './config/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './config/']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # items = [1]
