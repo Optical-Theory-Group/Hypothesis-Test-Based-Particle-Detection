@@ -1,3 +1,4 @@
+import ast
 import matplotlib
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pprint
@@ -371,7 +372,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     label_prediction_log_file_path = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
     with open(label_prediction_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count'])
+        writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
 
     # Create the "runs" folder if it doesn't exist
     runs_folder = './runs'
@@ -411,9 +412,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                         actual_num_particles = analysis_result['actual_num_particles']
                         estimated_num_particles = analysis_result['estimated_num_particles']
                         input_image_file = analysis_result['image_filename']
+                        determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                         writer = csv.writer(f)
-                        writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+                        writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                         if actual_num_particles == estimated_num_particles:
                             statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
@@ -439,10 +441,11 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['image_filename']
+            # determined_particle_intensities = analysis_result['determined_particle_intensities'])
 
             with open(label_prediction_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
-                writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles])
+                writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                 statusmsg = f'{image_folder_namebase} '
                 if actual_num_particles == estimated_num_particles:
@@ -455,7 +458,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             report_progress(progress, len(image_files), starttime, statusmsg)
             progress += 1
             
-    return log_folder
+    return log_folder #, determined_particle_intensities
 
 def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=False, display_xi_graph=False):
     # Print the name of the image file
@@ -492,6 +495,14 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     true_counts = [actual_num_particles for _ in range(len(xi))]
     h_numbers = [h_index for h_index in range(len(xi))]
     selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+    determined_particle_intensities = []
+    if estimated_num_particles > 0:
+        for i in range(1, estimated_num_particles + 1):
+            determined_particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
+    determined_particle_intensities
+    pass
+    # selected_particle_intensities = 
+
     metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
 
     # Write the data to the CSV files
@@ -507,9 +518,36 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
                               'actual_num_particles': actual_num_particles,
                               'estimated_num_particles': estimated_num_particles,
                               'image_filename': image_filename,
+                              'determined_particle_intensities': determined_particle_intensities,
                               }
     
     return image_analysis_results
+
+def generate_intensity_histogram(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
+    # Read the CSV file
+    df = pd.read_csv(label_pred_log_file_path)
+    try:
+        intensities = df[ "Determined Particle Intensities"]
+    except KeyError:
+        intensities = df[ "Determined Particle Intensities"]
+
+    all_intensities = []
+    for entry in intensities:
+        all_intensities.extend(ast.literal_eval(entry))
+
+    # Generate intensity histogram
+    fig, ax = plt.subplots()
+    ax.hist(all_intensities, bins=20)
+    ax.set_xlabel('Particle Intensity')
+    ax.set_ylabel('Frequency')
+    ax.set_title('Intensity Histogram')
+    if display:
+        plt.show(block=False)
+    if savefig:
+        png_file_path = os.path.dirname(label_pred_log_file_path)
+        png_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_particle_intensities_hist.png'
+        png_file_path += png_file_name
+        plt.savefig(png_file_path, dpi=300)
 
 def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
     # Read the CSV file
@@ -795,6 +833,7 @@ def process(config_files_dir, parallel=False, timeout=120):
             # Generate confusion matrix
             label_prediction_log_file_path = os.path.join(log_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
             generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=True, savefig=True)
+            generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=True, savefig=True)
 
             # Delete the dataset after analysis
             if config['analysis_delete_the_dataset_after_analysis']:
@@ -823,8 +862,7 @@ def quick_analysis():
         analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
     pass
 
-def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", ):
-    metric_of_interest = 'penalty'
+def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", metric_of_interest='penalty'):
     # metric_of_interest = 'lli'
     # metric_of_interest = 'xi'
     # Fix legacy formats: 
@@ -928,6 +966,12 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
 if __name__ == '__main__':
+    filepath = "runs/500-2 size 40_code_ver2024-07-02/500-2 size 40_code_ver2024-07-02_metrics_log_per_image_hypothesis.csv"
+    # filepath = "./runs/2500-4 size 20_code_ver2024-07-03/2500-4 size 20_code_ver2024-07-03_metrics_log_per_image_hypothesis.csv"
+    make_metrics_histograms(file_path=filepath, metric_of_interest='penalty')
+    make_metrics_histograms(file_path=filepath, metric_of_interest='lli')
+    make_metrics_histograms(file_path=filepath, metric_of_interest='xi')
+    pass
     # make_metrics_histograms()
     # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
     sys.argv = ['main.py', '-c', './config/', '-p', 'True']
