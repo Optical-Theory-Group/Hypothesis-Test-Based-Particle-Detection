@@ -347,7 +347,7 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.write(text)
         # sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=True, display_fit_results=False, display_xi_graph=False, timeout=120):
+def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content='', parallel=False, display_fit_results=False, display_xi_graph=False, timeout=120):
     '''Analyzes all the images in the dataset folder.'''
     # Set random seed
     np.random.seed(analysis_rand_seed)
@@ -355,6 +355,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
+    if len(image_files) == 0:
+        raise ValueError("There are no images in this folder.")
 
     print(f"Images loaded (total of {len(image_files)}):")
 
@@ -396,7 +398,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
             progress = 0
             # Write the results to the main log file
-            with open(label_prediction_log_file_path, 'a', newline='') as f: 
+            with open(label_prediction_log_file_path, 'a', newline='') as f:  #####
                 # Iterate over the futures that are completed. 
                 for cfresult in concurrent.futures.as_completed(futures):
                     # If an exception is raised, print the exception and continue to the next image
@@ -406,7 +408,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                         else:
                             print("Encountered an Exception:", cfresult._exception)
                             print("Proceeding without addressing the exception.")
-                    # Get the result of the future and write the results to the main log file
+                    # Get the result of the future and write the results to the main log file??k
                     try:
                         analysis_result = cfresult.result(timeout=timeout)
                         actual_num_particles = analysis_result['actual_num_particles']
@@ -441,7 +443,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['image_filename']
-            # determined_particle_intensities = analysis_result['determined_particle_intensities'])
+            determined_particle_intensities = analysis_result['determined_particle_intensities']
 
             with open(label_prediction_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
@@ -629,7 +631,7 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
     
     row_sums = matrix.sum(axis=1)
     if display or savefig:
-        _, axs = plt.subplots(2, 1, figsize=(8, 8), gridspec_kw={'height_ratios': [4,1]})  # Increase the size of the figure.
+        _, axs = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={'height_ratios': [4,1]})  # Increase the size of the figure.
 
         # Debugging output
         print("Original matrix:\n", matrix)
@@ -645,7 +647,7 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
         # normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
         folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
         ax = axs[0]
-        sns.heatmap(normalized_matrix, annot=True, fmt='.2f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
+        sns.heatmap(normalized_matrix, annot=True, fmt='.3f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
         ax.set_title(f'{folder_name}')
         ax.set_xlabel('Estimated Particle Count')
         ax.set_ylabel('Actual Particle Count')
@@ -701,7 +703,7 @@ def main():
     
     if args.profile is True:
         with Profile() as profile:
-            process(config_files_dir=config_files_dir, parallel=True, timeout=30)
+            process(config_files_dir=config_files_dir, parallel=False)
             (
                 Stats(profile)
                 .strip_dirs()
@@ -710,7 +712,7 @@ def main():
             )
             # os.system('snakeviz profile_results.prof &')
     else:
-        process(config_files_dir, parallel=False)
+        process(config_files_dir, parallel=True)
 
     batchjobendtime = datetime.now()
     print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
@@ -966,18 +968,20 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
 if __name__ == '__main__':
-    filepath = "runs/500-2 size 40_code_ver2024-07-02/500-2 size 40_code_ver2024-07-02_metrics_log_per_image_hypothesis.csv"
+    # filepath = "runs/500-2 size 40_code_ver2024-07-02/500-2 size 40_code_ver2024-07-02_metrics_log_per_image_hypothesis.csv"
     # filepath = "./runs/2500-4 size 20_code_ver2024-07-03/2500-4 size 20_code_ver2024-07-03_metrics_log_per_image_hypothesis.csv"
-    make_metrics_histograms(file_path=filepath, metric_of_interest='penalty')
-    make_metrics_histograms(file_path=filepath, metric_of_interest='lli')
-    make_metrics_histograms(file_path=filepath, metric_of_interest='xi')
-    pass
+    # pass
     # make_metrics_histograms()
     # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
-    sys.argv = ['main.py', '-c', './config/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './config/', '-p', 'True']
+    sys.argv = ['main.py', '-c', './config/'] 
     # sys.argv = ['main.py', '-c', './config/']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
+    # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
+    # make_metrics_histograms(file_path=filepath, metric_of_interest='penalty')
+    # make_metrics_histograms(file_path=filepath, metric_of_interest='lli')
+    # make_metrics_histograms(file_path=filepath, metric_of_interest='xi')
     # items = [1]
     # for item in items:
     #     if item == 1 or item == 1.1:

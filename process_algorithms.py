@@ -7,6 +7,8 @@ from scipy.stats import norm
 from skimage.feature import peak_local_max
 import diplib as dip
 
+np.set_printoptions(precision=5, formatter={'float': '{:0.5f}'.format}, linewidth=np.inf)
+
 ## moved to top-level functions for better efficiency
 def normalize(th, hypothesis_index, n_hk_params_per_particle, roi_min, roi_max, psf_sd, szx, szy):
     nt_th = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
@@ -513,9 +515,20 @@ def integrate_gauss_1d(i, x, sigma):
     return 0.5*(erf((i-x+0.5)*np.sqrt(norm))-erf((i-x-0.5)*np.sqrt(norm)))
 
 def ddt_integrated_psf_1d(i, t, sigma):
-    a = np.exp(-0.5 * ((i + 0.5 - t) / sigma)**2)
-    b = np.exp(-0.5 * ((i - 0.5 - t) / sigma)**2)
-    return -1 / np.sqrt(2 * np.pi) / sigma * (a - b)
+    '''
+    Calculate the derivative of the integrated PSF with respect to the (estimated) particle location t.
+
+    Parameters:
+    i (float or numpy array): The x or y coordinate (or an array of coordinates) to evaluate derivative of integrated PSF.
+    t (float): The (estimated) particle location.
+    sigma (float): The width of the PSF.
+
+    Returns:
+        - The derivative of integrated PSF x or y coordinate (or an array of values at x or y coordinate, given i is an array).
+    '''
+    a = np.exp(-(i + 0.5 - t)**2 / (2 * sigma**2))
+    b = np.exp(-(i - 0.5 - t)**2 / (2 * sigma**2))
+    return -1 / (np.sqrt(2 * np.pi) * sigma) * (a - b)
 
 def d2dt2_integrated_psf_1d(i, t, sigma):
     a = np.exp(-0.5 * ((i + 0.5 - t) / sigma)**2)
@@ -933,7 +946,6 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     # print('Analyzing image using the Generalized Maximum Likelihood Rule.')
     np.random.seed(random_seed)
 
-    np.set_printoptions(precision=3, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
     assert roi_image.ndim == 2
     szy, szx = roi_image.shape 
@@ -989,7 +1001,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         # print('Testing: Hypothesis Index ', hypothesis_index)
         # Initialization
         n_hk_params = n_h0_params + hypothesis_index * (n_hk_params_per_particle) #H0: 1, H1: 5, H2: 8, ...
-        fisher_mat = np.zeros((n_hk_params, n_hk_params)) # Fisher Information Matrix
+        
 
         # Initialize the theta (parameter) vector
         # theta[1][0] will be the estimated center-pixel intensity of particle 1.
@@ -1123,20 +1135,76 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             plt.show(block=False)
             pass
 
+        ## -- One attempt at vectorization. Didn't work. Need checking. -- ##
+        # norm_fisher_mat = np.zeros((n_hk_params, n_hk_params))
+        # norm_flat_trimmed_theta = normalize(theta)
+        # if hypothesis_index == 0:
+        #     fisher_mat[0,0] = 1 / max(norm_flat_trimmed_theta, min_model_xy / roi_max) # theta (which is model_h0) is the constant background across the image (thus independent of x and y coordinates)
+        #     assert fisher_mat.shape == (1,1)
+        # else:
+        #     Modelhk, Integrated_psf_x, Integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, range(szx), range(szy), hypothesis_index, min_model_xy, psf_sd)
+        #     # Calculate the first derivatives of the model (row: particle index (0 means background), col: [intensity, x, y])
+        #     Ddt_modelhk = np.zeros((hypothesis_index + 1, n_hk_params_per_particle, szy, szx))
+        #     # Ddt_modelhk_at_xxyy[0][0] = 1.0 # differentiation w.r.t. background intensity is 1.0.
+        #     Ddt_modelhk[0][0] = np.ones((szy, szx), dtype=float) # differentiation w.r.t. background intensity is 1.0.
+        #     # Ddt_modelhk_at_xxyy[0][1] = Ddt_modelhk_at_xxyy[0][2] = np.nan  # No x and y coordinates for background intensity.
+        #     Ddt_modelhk[0, :] = np.full((szy, szx), np.nan) # differentiation w.r.t. x and y coordinates are 0.0.
+        #     # Calculate the first derivatives of the model w.r.t intensity, x, and y coordinates for each particle.
+        #     Ddt_integrated_psf_1d_x = np.append(np.array(np.nan), np.array([ddt_integrated_psf_1d(np.arange(szx), theta[p_idx][1], psf_sd) for p_idx in range(1, hypothesis_index + 1)]))
+        #     Ddt_integrated_psf_1d_y = np.append(np.array(np.nan), np.array([ddt_integrated_psf_1d(np.arange(szy), theta[p_idx][2], psf_sd) for p_idx in range(1, hypothesis_index + 1)]))
+
+        fisher_mat = np.zeros((n_hk_params, n_hk_params)) # Fisher Information Matrix
+        fisher_mat_original = np.zeros(fisher_mat.shape) # Fisher Information Matrix
         # All iterations finished. Now, let's calculate the Fisher Information Matrix (FIM) under Hk.
         if hypothesis_index == 0:
-            model_h0 = theta # model_h0 is the constant background across the image (thus independent of x and y coordinates)
-            if model_h0 == 0:
-                fisher_mat[0,0] = 1 / min_model_xy
-            else:
-                fisher_mat[0,0] = 1 / model_h0
-            assert fisher_mat.shape == (1,1)
-        else:
+            fisher_mat_original[0,0] = 1 / max(theta, min_model_xy) # theta (which is model_h0) is the constant background across the image (thus independent of x and y coordinates)
+            assert fisher_mat_original.shape == (1,1)
+            visualize_fim = False
+            if visualize_fim:
+                cmap = plt.cm.viridis
+                cmap.set_bad(color='red')
+                fig, axs = plt.subplots(1,1, figsize=(5,4))
+                ax = axs
+                cax2= ax.imshow(fisher_mat_original, cmap=cmap, interpolation='none')
+                ax.text(0, 0, f'{fisher_mat_original[0,0]:.5f}', ha='center', va='center', color='white')
+                ax.set_title(f'Fisher Information Matrix (fisher_mat)')
+                plt.savefig(f'figure_hypothesis_{hypothesis_index}.png')
+        else: # hypothesis_index > 0
+            #####--------Below vectorization didn't work. Will fix later. (2024.07.09, Neil) --------#####
+            # # # Ddt_modelhk_at_xxyy is a 2D array with row: particle_index, col: param_type_index
+            # Modelhk, Integrated_psf_x, Integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, range(szx), range(szy), hypothesis_index, min_model_xy, psf_sd)
+            # # Create the 2D array for x-position
+            # # # Calculate the first derivatives of the model w.r.t. x, y, N, and bg
+            # Ddt_modelhk = np.zeros((hypothesis_index + 1, n_hk_params_per_particle, szy, szx))
+            # # Ddt_modelhk_at_xxyy[0][0] = 1.0 # differentiation w.r.t. background intensity is 1.0.
+            # Ddt_modelhk[0][0] = np.ones((szy, szx), dtype=float) # differentiation w.r.t. background intensity is 1.0.
+            # # Ddt_modelhk_at_xxyy[0][1] = Ddt_modelhk_at_xxyy[0][2] = np.nan  # No x and y coordinates for background intensity.
+            # Ddt_modelhk[0, :] = np.full((szy, szx), np.nan) # differentiation w.r.t. x and y coordinates are 0.0.
+            # # Calculate the first derivatives of the model w.r.t intensity, x, and y coordinates for each particle.
+            # Ddt_integrated_psf_1d_x = np.append(np.array(np.nan), np.array([ddt_integrated_psf_1d(np.arange(szx), theta[p_idx][1], psf_sd) for p_idx in range(1, hypothesis_index + 1)]))
+            # Ddt_integrated_psf_1d_y = np.append(np.array(np.nan), np.array([ddt_integrated_psf_1d(np.arange(szy), theta[p_idx][2], psf_sd) for p_idx in range(1, hypothesis_index + 1)]))
+            # for particle_index in range(1, hypothesis_index + 1):
+            #     Ddt_modelhk[particle_index][0] = np.outer(Integrated_psf_x[particle_index], Integrated_psf_y[particle_index])
+            #     Ddt_modelhk[particle_index][1] = theta[particle_index][0] * np.outer(Integrated_psf_y[particle_index], Ddt_integrated_psf_1d_x[particle_index])
+            #     Ddt_modelhk[particle_index][2] = theta[particle_index][0] * np.outer(Ddt_integrated_psf_1d_y[particle_index], Integrated_psf_x[particle_index])
+            # assert fisher_mat.shape == (n_hk_params, n_hk_params)
+            # fisher_mat[0,0] = np.sum(1 / Modelhk_at_xxyy) # this is np.sum(ddt_modelhk_at_xxyy[0][0] / Modelhk_at_xx_yy), and we know that ddt_modelhk_at_xxyy[0][0] == 1.0, becuase differentiation w.r.t. background intensity is 1.0.
+            # for p_index1 in range(1, hypothesis_index + 1):
+            #     for param_type1 in range(n_hk_params_per_particle):
+            #         for p_index2 in range(1, hypothesis_index + 1):
+            #             for param_type2 in range(n_hk_params_per_particle):
+            #                 element = np.sum(1 / Modelhk * Ddt_modelhk[p_index1][param_type1] * Ddt_modelhk[p_index2][param_type2])
+            #                 row = (p_index1 - 1) * n_hk_params_per_particle + param_type1 + 1
+            #                 col = (p_index2 - 1) * n_hk_params_per_particle + param_type2 + 1
+            #                 if element == 0 and row == col:
+            #                     print(f"element is zero at row == col, where p_index1: {p_index1}, param_type1: {param_type1}, p_index2: {p_index2}, param_type2: {param_type2}")
+            #                     pass
+            #                 fisher_mat[row, col] = element
+            #                 fisher_mat[col, row] = element
+
             for xx in range(szy):
                 for yy in range(szy):
-                    # # Let's get the actual pixel value, again.
                     # pixel_val = roi_image[yy, xx]
-                    
                     # Initialize the first derivatives (for calulculating FIM, there is no need for second derivatives)
                     ddt_modelhk_at_xxyy = np.zeros((hypothesis_index + 1, n_hk_params_per_particle))
                     modelhk_at_xxyy, integrated_psf_x, integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy, psf_sd)
@@ -1162,68 +1230,117 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                         print(f"Error occurred during the calculation of derivatives inside gmlr(): {e}")
                         
                     # Calculate the Fisher Information Matrix (FIM) under Hk.
-                    assert fisher_mat.shape == (n_hk_params, n_hk_params)
+                    assert fisher_mat_original.shape == (n_hk_params, n_hk_params)
 
                     # Building the Fisher Information Matrix regarding Hk.
                     # - Calculation with regards to the background 
-                    fisher_mat[0, 0] += ddt_modelhk_at_xxyy[0][0] ** 2 / modelhk_at_xxyy
-                    try:
+                    fisher_mat_original[0, 0] += ddt_modelhk_at_xxyy[0][0] ** 2 / modelhk_at_xxyy * 1 * 1 ####################### 
 
-                        for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
+                    # - Calculation with regards to the background and the particles
+                    for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
+                        # convert kk to particle_index and param_type
+                        particle_index = (kk - 1) // n_hk_params_per_particle + 1
+                        param_type = (kk - 1) % n_hk_params_per_particle
+                        # Using Poisson pdf for likelihood function, the following formula is derived. (Ref: Smith et al. 2010, nmeth, SI eq (9)).
+                        fisher_mat_original[0, kk] += ddt_modelhk_at_xxyy[0][0] * ddt_modelhk_at_xxyy[particle_index][param_type] / modelhk_at_xxyy  * 1 * 1
+                        fisher_mat_original[kk, 0] = fisher_mat_original[0, kk] # The FIM is symmetric.
+
+                    # - Calculation with regards to the particles
+                    for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
+                        # convert kk to particle_index and param_type
+                        particle_index_kk = (kk - 1) // n_hk_params_per_particle + 1
+                        param_type_kk = (kk - 1) % n_hk_params_per_particle
+                        for ll in range(kk, hypothesis_index * n_hk_params_per_particle + 1):
                             # convert kk to particle_index and param_type
-                            particle_index = (kk - 1) // n_hk_params_per_particle + 1
-                            param_type = (kk - 1) % n_hk_params_per_particle
-                            scaling1 = roi_max
-                            if param_type == 0:
-                                scaling2 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
-                            elif param_type == 1:
-                                scaling2 = szx
-                            elif param_type == 2:
-                                scaling2 = szy
-                            else:
-                                print("Warning: param_type is not recognized. Check the param_type value.")
-                                
-                            # Using Poisson pdf for likelihood function, the following formula is derived. (Ref: Smith et al. 2010, nmeth, SI eq (9)).
-                            fisher_mat[0, kk] += ddt_modelhk_at_xxyy[0][0] * ddt_modelhk_at_xxyy[particle_index][param_type] / modelhk_at_xxyy * scaling1 * scaling2
-                            fisher_mat[kk, 0] = fisher_mat[0, kk] # The FIM is symmetric.
+                            particle_index_ll = (ll - 1) // n_hk_params_per_particle  + 1
+                            param_type_ll = (ll - 1) % n_hk_params_per_particle
+                            fisher_mat_original[kk, ll] += ddt_modelhk_at_xxyy[particle_index_kk][param_type_kk] * ddt_modelhk_at_xxyy[particle_index_ll][param_type_ll] / modelhk_at_xxyy * 1 * 1 #######################
+                            fisher_mat_original[ll, kk] = fisher_mat_original[kk, ll] # The FIM is symmetric.
 
-                        # - Calculation with regards to the particles
-                        for kk in range(1, hypothesis_index * n_hk_params_per_particle + 1):
-                            # convert kk to particle_index and param_type
-                            particle_index_kk = (kk - 1) // n_hk_params_per_particle + 1
-                            param_type_kk = (kk - 1) % n_hk_params_per_particle
-                            if param_type == 0:
-                                scaling1 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
-                            elif param_type == 1:
-                                scaling1 = szx
-                            elif param_type == 2:
-                                scaling1 = szy
-                            else:
-                                print("Warning: param_type is not recognized. Check the param_type value.")
-                            for ll in range(kk, hypothesis_index * n_hk_params_per_particle + 1):
-                                # convert kk to particle_index and param_type
-                                particle_index_ll = (ll - 1) // n_hk_params_per_particle  + 1
-                                param_type_ll = (ll - 1) % n_hk_params_per_particle
-                                if param_type == 0:
-                                    scaling2 = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
-                                elif param_type == 1:
-                                    scaling2 = szx
-                                elif param_type == 2:
-                                    scaling2 = szy
-                                else:
-                                    print("Warning: param_type is not recognized. Check the param_type value.")
-                                fisher_mat[kk, ll] += ddt_modelhk_at_xxyy[particle_index_kk][param_type_kk] * ddt_modelhk_at_xxyy[particle_index_ll][param_type_ll] / modelhk_at_xxyy * scaling1 * scaling2
-                                fisher_mat[ll, kk] = fisher_mat[kk, ll] # The FIM is symmetric.
+            # Check diagonal zeros
+            non_zero_diag_count = np.sum(np.diag(fisher_mat_original) == 0) 
+            if non_zero_diag_count > 0:
+                print(" ******************* Warning: Diagonal zeros detected in the FIM. ******************* ")
+                print(f"fisher_mat_original: \n{fisher_mat_original}")
+                # print(f"fisher_mat: \n{fisher_mat}")
+                fisher_mat = fisher_mat_original.copy()
+                        
+            # print(f"fisher_mat_original: \n{fisher_mat_original}")
+            # Compare fisher_mat with fisher_mat_original
+            # visualize_fim = True
+            # if visualize_fim:
+            #     cmap = plt.cm.viridis
+            #     cmap.set_bad(color='red')
 
-                    except Exception as e:
-                        print(f"Error occurred during the calculation of FIM regarding the background inside gmlr(): {e}")
-        
+            #     masked_fisher_mat_original = np.ma.masked_where(fisher_mat_original == 0, fisher_mat_original)
+
+            #     fig, axs = plt.subplots(1,1, figsize=(5,4))
+            #     ax = axs
+            #     cax2= ax.imshow(masked_fisher_mat_original, cmap=cmap, interpolation='none')
+            #     ax.set_title(f'Original Fisher Information Matrix (fisher_mat_original)\n{non_zero_diag_count=}')
+            #     ax.set_xlabel('param_idx1')
+            #     ax.set_ylabel('param_idx2')
+            #     fig.colorbar(cax2, ax=ax, label='Value')
+            #     plt.savefig(f'figure_hypothesis_{hypothesis_index}.png')
+            #     pass
+            #     plt.close(fig)
+            #     if hypothesis_index == 5:
+            #         plt.subplots()
+            #         plt.imshow(roi_image)
+            #         pass
+                    
+                
+        weighted_fisher_mat = fisher_mat_original.copy()
+        if hypothesis_index == 0:
+            weighted_fisher_mat *= roi_max**2
+            # weighted_fisher_mat *= theta**2
+        else:
+            # norm_norm_fisher_mat = np.zeros(norm_fisher_mat.shape)
+            scales = np.array([(roi_max - roi_min) * 2 * np.pi * psf_sd**2, szx, szy])
+            for row in range(weighted_fisher_mat.shape[0]):
+                if row == 0:
+                    weighted_fisher_mat[row,:] *= roi_max
+                    # weighted_fisher_mat[row,:] *= theta[0][0]
+                else:
+                    # particle_index = (row - 1) // n_hk_params_per_particle
+                    param_type = (row - 1) % n_hk_params_per_particle
+                    # weighted_fisher_mat[row,:] *= theta[particle_index][param_type]
+                    weighted_fisher_mat[row,:] *= scales[param_type]
+            for col in range(weighted_fisher_mat.shape[1]):
+                if col == 0:
+                    weighted_fisher_mat[:,col] *= roi_max
+                    # weighted_fisher_mat[:,col] *= theta[0][0]
+                else:
+                    # particle_index = (col - 1) // n_hk_params_per_particle
+                    param_type = (col - 1) % n_hk_params_per_particle
+                    # weighted_fisher_mat[row,:] *= theta[particle_index][param_type]
+                    weighted_fisher_mat[:,col] *= scales[param_type]
+
+        # visualize_fim = False
+        # if visualize_fim:
+        #     cmap = plt.cm.viridis
+        #     cmap.set_bad(color='red')
+        #     masked_weighted_fisher_mat = np.ma.masked_where(weighted_fisher_mat== 0, weighted_fisher_mat)
+        #     fig, axs = plt.subplots(1,1, figsize=(5,4))
+        #     ax = axs
+        #     cax2= ax.imshow(masked_weighted_fisher_mat, cmap=cmap, interpolation='none')
+        #     non_zero_diag_count = np.sum(np.diag(weighted_fisher_mat) == 0) 
+        #     ax.set_title(f'Weighted Fisher Information Matrix\n{non_zero_diag_count=}')
+        #     if hypothesis_index == 0:
+        #         ax.text(0, 0, f'{weighted_fisher_mat[0,0]:.5f}', ha='center', va='center', color='white')
+        #     ax.set_xlabel('param_idx1')
+        #     ax.set_ylabel('param_idx2')
+        #     fig.colorbar(cax2, ax=ax, label='Value')
+        #     plt.savefig(f'weighted_figure_hypothesis_{hypothesis_index}.png')
+        #     plt.close(fig)
+        fisher_mat = weighted_fisher_mat.copy()
+
         # Now I got the FIM under Hk. Let's use this to calculate the Xi_k (GMLR criterion)
         # Xi[k] = log(likelihood(data; MLE params under Hk)) - 1/2 * log(det(FIM under Hk))
 
         # -- Let's calculate the first term of the Xi_k (GMLR criterion)
         # sum_loglikelihood is the sum of loglikelihoods of all pixels
-        sum_loglikelihood = 0.0 
+        sum_loglikelihood = 0.0
         Modelhk_at_xxyy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, range(szx), range(szy), hypothesis_index, min_model_xy, psf_sd)
         sum_loglikelihood = np.sum(roi_image * np.log(np.maximum(Modelhk_at_xxyy, 1e-2)) - Modelhk_at_xxyy - gammaln(roi_image + 1))
         
@@ -1238,6 +1355,11 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         #         sum_loglikelihood += loglikelihood
         
         # Let's calculate the second term of the Xi_k (GMLR criterion), which is -1/2 * log(det(FIM under Hk))
+        if hypothesis_index == 0:
+            # weighted_fisher_mat = fisher_mat * roi_max**2
+            weighted_fisher_mat = fisher_mat * theta**2
+            fisher_mat = weighted_fisher_mat.copy()
+
         _, log_det_fisher_mat = np.linalg.slogdet(fisher_mat)
 
         prev_xi_assigned = False
@@ -1276,6 +1398,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         'fisher_info': fisher_info,
     }
 
+    # display_xi_graph = True
     if display_xi_graph:
         max_xi_index = np.nanargmax(xi)
         _, axs = plt.subplots(3,1, figsize=(4.2,3.9))
@@ -1295,6 +1418,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         ax.set_xlabel('hypothesis_index')
         plt.tight_layout()
         plt.show(block=False)
+        plt.savefig(f'scores.png')
         pass
 
     # Determine the most likely hypothesis
