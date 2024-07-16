@@ -251,9 +251,9 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{subfolder_name}{separation}")
+    image_folder_path = os.path.join("image_dataset", f"{subfolder_name}sep{str(separation).replace('.','_')}psf{str(psf_sd).replace('.','_')}")
     os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Generating {n_images_per_separation} images with separation {separation} in folder {image_folder_path}.')
+    print(f'Generating {n_images_per_separation} images with separation {separation} and psf {psf} in folder {image_folder_path}.')
     # Generate the images
     for img_idx in range(n_images_per_separation):
         image = np.ones((sz, sz), dtype=float) * bg
@@ -277,6 +277,8 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
         img_filename = f"separation{separation}-index{img_idx}.tiff"
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
+
+    return image_folder_path
 
 def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=''):
     """
@@ -353,7 +355,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
-    images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
+    if code_version_date == '':
+        images_folder = os.path.join('./image_dataset', image_folder_namebase)
+    else:
+        images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
@@ -968,13 +973,38 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
 if __name__ == '__main__':
-    # filepath = "runs/500-2 size 40_code_ver2024-07-02/500-2 size 40_code_ver2024-07-02_metrics_log_per_image_hypothesis.csv"
-    # filepath = "./runs/2500-4 size 20_code_ver2024-07-03/2500-4 size 20_code_ver2024-07-03_metrics_log_per_image_hypothesis.csv"
+    # separations = [0, .5, 1, 1.5, 2, 2.3, 2.5, 2.7, 2.9, 3, 3.2, 3.4, 3.6, 3.8, 4, 4.5, 5, 10]
+    # psfs = [0.5, 1, 1.5, 2]
+    # for psf in psfs:
+    #     for sep in separations:
+    #         image_folder_path = generate_separation_test_images(separation=sep, n_images_per_separation=100, amp_to_bg=5, psf_sd=psf)
+    #         # Define the source and destination paths
+    #         source_path = './config_sep/sep_psf2_sep10.json'
+    #         dest_path = f"./config_sep/sep_psf{str(psf).replace('.','_')}_sep{str(sep).replace('.','_')}.json"
+    #         # Read the JSON file
+    #         with open(source_path, 'r') as file:
+    #             config_data = json.load(file)
+    #         # Modify the fields
+    #         config_data['image_folder_namebase'] = f'separation_testsep{str(sep).replace(".", "_")}psf{str(psf).replace(".", "_")}'
+    #         config_data['code_version_date'] = ""
+    #         config_data['analysis_predefined_psf_sd'] = psf
+    #         # Save the modified JSON to the new file
+    #         with open(dest_path, 'w') as file:
+    #             json.dump(config_data, file, indent=4)
+    #         print(f'Saved modified config to {dest_path}')
+
+    # sys.argv = ['main.py', '-c', './config_sep/'] 
+    # main()
+
     # pass
+
+    # # filepath = "runs/500-2 size 40_code_ver2024-07-02/500-2 size 40_code_ver2024-07-02_metrics_log_per_image_hypothesis.csv"
+    # # filepath = "./runs/2500-4 size 20_code_ver2024-07-03/2500-4 size 20_code_ver2024-07-03_metrics_log_per_image_hypothesis.csv"
+    # # pass
     # make_metrics_histograms()
     # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
-    # sys.argv = ['main.py', '-c', './config/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './config/'] 
+    sys.argv = ['main.py', '-c', './config/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './config/'] 
     # sys.argv = ['main.py', '-c', './config/']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()

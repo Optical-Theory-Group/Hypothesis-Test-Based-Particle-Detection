@@ -1159,16 +1159,6 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         if hypothesis_index == 0:
             fisher_mat_original[0,0] = 1 / max(theta, min_model_xy) # theta (which is model_h0) is the constant background across the image (thus independent of x and y coordinates)
             assert fisher_mat_original.shape == (1,1)
-            visualize_fim = False
-            if visualize_fim:
-                cmap = plt.cm.viridis
-                cmap.set_bad(color='red')
-                fig, axs = plt.subplots(1,1, figsize=(5,4))
-                ax = axs
-                cax2= ax.imshow(fisher_mat_original, cmap=cmap, interpolation='none')
-                ax.text(0, 0, f'{fisher_mat_original[0,0]:.5f}', ha='center', va='center', color='white')
-                ax.set_title(f'Fisher Information Matrix (fisher_mat)')
-                plt.savefig(f'figure_hypothesis_{hypothesis_index}.png')
         else: # hypothesis_index > 0
             #####--------Below vectorization didn't work. Will fix later. (2024.07.09, Neil) --------#####
             # # # Ddt_modelhk_at_xxyy is a 2D array with row: particle_index, col: param_type_index
@@ -1315,6 +1305,44 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                     param_type = (col - 1) % n_hk_params_per_particle
                     # weighted_fisher_mat[row,:] *= theta[particle_index][param_type]
                     weighted_fisher_mat[:,col] *= scales[param_type]
+
+            # Compare fisher_mat with fisher_mat_original
+        visualize_fim = True
+        if visualize_fim:
+            cmap = plt.cm.viridis
+            cmap.set_bad(color='red')
+
+            masked_fisher_mat_original = np.ma.masked_where(fisher_mat_original == 0, fisher_mat_original)
+            masked_fisher_mat_weighted = np.ma.masked_where(weighted_fisher_mat == 0, weighted_fisher_mat)
+
+            fig, axs = plt.subplots(1,2, figsize=(10,4))
+            ax = axs[0]
+            cax= ax.imshow(masked_fisher_mat_original, cmap=cmap, interpolation='none')
+            if hypothesis_index == 0:
+                ax.text(0, 0, f'{fisher_mat_original[0,0]:.5f}', ha='center', va='center', color='white')
+            non_zero_diag_count = np.sum(np.diag(fisher_mat_original) == 0) 
+            ax.set_title(f'Fisher Information Matrix\n{non_zero_diag_count=}')
+            ax.set_xlabel('param_idx1')
+            ax.set_ylabel('param_idx2')
+            fig.colorbar(cax, ax=ax, label='Value')
+
+            ax = axs[1]
+            cax = ax.imshow(masked_fisher_mat_weighted, cmap=cmap, interpolation='none')
+            if hypothesis_index == 0:
+                ax.text(0, 0, f'{weighted_fisher_mat[0,0]:.5f}', ha='center', va='center', color='white')
+            non_zero_diag_count = np.sum(np.diag(weighted_fisher_mat) == 0) 
+            ax.set_title(f'Weighted Fisher Information Matrix\n{non_zero_diag_count=}')
+            ax.set_xlabel('param_idx1')
+            ax.set_ylabel('param_idx2')
+            fig.colorbar(cax, ax=ax, label='Value')
+            
+            plt.savefig(f'normal vs weighted FIM hypothesis_{hypothesis_index}.png')
+            pass
+            plt.close(fig)
+            if hypothesis_index == 5:
+                plt.subplots()
+                plt.imshow(roi_image)
+                pass
 
         # visualize_fim = False
         # if visualize_fim:

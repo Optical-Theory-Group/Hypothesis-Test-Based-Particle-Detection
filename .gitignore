@@ -6,3 +6,6 @@ image_dataset/
 runs/
 config_files/
 *.prof
+profile_results.prof
+*.png
+config*/
