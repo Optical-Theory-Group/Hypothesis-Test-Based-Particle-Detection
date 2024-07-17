@@ -55,9 +55,9 @@ def cup_function(t, width, scale=1):
     """
     # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
     # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
-    if t < 0:
+    if t < -.5:
         return -scale * (t + .5)**3
-    elif t < width:
+    elif t < width - .5:
         return 0
     else:
         return scale * (t - width + .5)**3
@@ -74,9 +74,9 @@ def ddt_cup_function(t, width, scale=1):
         float: The derivative of the cup function at t.
     """
     # return -scale * np.exp(-scale * t) + scale * np.exp(scale * (t - width + 1))
-    if t < 0:
+    if t < -.5:
         return -3 * scale * (t + .5)**2
-    elif t < width:
+    elif t < width -.5:
         return 0
     else:
         return 3 * scale * (t - width + .5)**2
@@ -93,9 +93,9 @@ def d2dt2_cup_function(t, width, scale=1):
         float: The second derivative of the cup function at t.
     """
     # return scale**2 * np.exp(-scale * t) + scale**2 * np.exp(scale * (t - width + 1))
-    if t < 0:
+    if t < -.5:
         return -6 * scale * (t + .5)
-    elif t < width:
+    elif t < width -.5:
         return 0
     else:
         return 6 * scale * (t - width + .5)

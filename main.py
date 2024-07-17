@@ -253,13 +253,13 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Create the folder to store the images
-    psf_str = f"{psf:.1f}".replace('.', '_')
-    sep_str = f"{sep:.1f}".replace('.', '_')
+    psf_str = f"{psf_sd:.1f}".replace('.', '_')
+    sep_str = f"{separation:.1f}".replace('.', '_')
     dest_path = f"./image_dataset/{subfolder_name}_psf{psf_str}_sep{sep_str}"
     # image_folder_path = os.path.join("image_dataset", f"{subfolder_name}_psf{psf_str}_sep{sep_str}")
     image_folder_path = dest_path
     os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Generating {n_images_per_separation} images with separation {sep_str} and psf {psf} in folder {image_folder_path}.')
+    print(f'Generating {n_images_per_separation} images with separation {sep_str} and psf {psf_sd} in folder {image_folder_path}.')
 
     # Generate the images
     sz_original = sz
@@ -486,7 +486,8 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     # Extract the number of particles from image_filename
     basename = os.path.basename(image_filename)
     count_part = basename.split('-')[0]
-    if count_part.startswith("separation"):
+    foldername = os.path.basename(os.path.dirname(image_filename))
+    if count_part.startswith("separation") or os.path.basename(foldername).startswith("separation"):
         num_particles = 2
     else:
         num_particles = count_part.split('count')[1]
@@ -988,15 +989,16 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
 if __name__ == '__main__':
-    # # separations = np.arange(0.5, 7.1, 0.3)
-    # separations = [5.3, 5.6, 5.9, 6.2, 6.5, 6.8]
-    # # psfs = [0.5, 1, 1.5, 2]
-    # psfs = [2]
+    # separations = np.arange(0.0, 7.1, 0.3)
+    # # # separations = [5.3, 5.6, 5.9, 6.2, 6.5, 6.8]
+    # psfs = [0.5, 1, 1.5, 2]
+    # # psfs = [1.0, 1.5, 2.0]
+    # # # psfs = [2]
     # for psf in psfs:
     #     for sep in separations:
-    #         image_folder_path = generate_separation_test_images(separation=sep*psf, n_images_per_separation=2500, amp_to_bg=5, psf_sd=psf)
+    #         image_folder_path = generate_separation_test_images(separation=sep*psf, n_images_per_separation=1024, amp_to_bg=5, psf_sd=psf)
     #         # Define the source and destination paths
-    #         source_path = './config_sep/psf2_sep10.json'
+    #         source_path = './config_sep/reference.json'
     #         psf_str = f"{psf:.1f}".replace('.', '_')
     #         sep_str = f"{sep:.1f}".replace('.', '_')
     #         dest_path = f"./config_sep/psf{psf_str}_sep{sep_str}.json"
@@ -1004,8 +1006,11 @@ if __name__ == '__main__':
     #         with open(source_path, 'r') as file:
     #             config_data = json.load(file)
     #         # Modify the fields
-    #         config_data['image_folder_namebase'] = f'separation_test_psf{str(psf).replace(".", "_")}_sep{str(sep).replace(".", "_")}'
+    #         psf_str = f"{psf:.1f}".replace('.', '_')
+    #         sep_str = f"{sep:.1f}".replace('.', '_')
+    #         config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
     #         config_data['analysis_predefined_psf_sd'] = psf
+    #         config_data['analyze_the_dataset'] = True
     #         # Save the modified JSON to the new file
     #         with open(dest_path, 'w') as file:
     #             json.dump(config_data, file, indent=4)
@@ -1022,8 +1027,8 @@ if __name__ == '__main__':
     # make_metrics_histograms()
     # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
     # sys.argv = ['main.py', '-c', './config_sep/', '-p', 'True']
-    # sys.argv = ['main.py', '-c', './config_sep/'] 
-    sys.argv = ['main.py', '-c', './config/']
+    sys.argv = ['main.py', '-c', './config_sep/'] 
+    # sys.argv = ['main.py', '-c', './config/']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
