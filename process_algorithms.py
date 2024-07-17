@@ -53,14 +53,14 @@ def cup_function(t, width, scale=1):
     Note:
         The cup function was exponential in the previous implementation. This implementation uses a cubic function.
     """
-    return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
     # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
-    # if t < 0:
-    #     return -scale * (t + .5)**3
-    # elif t < width:
-    #     return 0
-    # else:
-    #     return scale * (t - width + .5)**3
+    # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
+    if t < 0:
+        return -scale * (t + .5)**3
+    elif t < width:
+        return 0
+    else:
+        return scale * (t - width + .5)**3
     
 def ddt_cup_function(t, width, scale=1):
     """ Returns the derivative of the cup function at t.
@@ -73,13 +73,13 @@ def ddt_cup_function(t, width, scale=1):
     Returns:
         float: The derivative of the cup function at t.
     """
-    return -scale * np.exp(-scale * t) + scale * np.exp(scale * (t - width + 1))
-    # if t < 0:
-    #     return -3 * scale * (t + .5)**2
-    # elif t < width:
-    #     return 0
-    # else:
-    #     return 3 * scale * (t - width + .5)**2
+    # return -scale * np.exp(-scale * t) + scale * np.exp(scale * (t - width + 1))
+    if t < 0:
+        return -3 * scale * (t + .5)**2
+    elif t < width:
+        return 0
+    else:
+        return 3 * scale * (t - width + .5)**2
     
 def d2dt2_cup_function(t, width, scale=1):
     """ Returns the second derivative of the cup function at t.
@@ -92,13 +92,13 @@ def d2dt2_cup_function(t, width, scale=1):
     Returns:
         float: The second derivative of the cup function at t.
     """
-    return scale**2 * np.exp(-scale * t) + scale**2 * np.exp(scale * (t - width + 1))
-    # if t < 0:
-    #     return -6 * scale * (t + .5)
-    # elif t < width:
-    #     return 0
-    # else:
-    #     return 6 * scale * (t - width + .5)
+    # return scale**2 * np.exp(-scale * t) + scale**2 * np.exp(scale * (t - width + 1))
+    if t < 0:
+        return -6 * scale * (t + .5)
+    elif t < width:
+        return 0
+    else:
+        return 6 * scale * (t - width + .5)
 
 def intensity_penalty_function(t, scale=1):
     if t < 0:
@@ -134,8 +134,8 @@ def out_of_bounds_particle_penalty(theta, szx, szy, scale=1, ):
     penalty = 0
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
-            intensity_term = 0
-            # intensity_term = intensity_penalty_function(theta[i][0], scale=scale)
+            # intensity_term = 0
+            intensity_term = intensity_penalty_function(theta[i][0], scale=scale)
             x_term = cup_function(theta[i][1], szx, scale=scale)
             y_term = cup_function(theta[i][2], szy, scale=scale)
 
@@ -149,12 +149,12 @@ def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
     ddt_oob[0][1] = ddt_oob[0][2] = np.nan
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
-            ddt_oob[i][0] = 0
-            ddt_oob[i][1] = ((- scale) * cup_function(theta[i][1], szx, scale=5) * szx)
-            ddt_oob[i][2] = ((- scale) * cup_function(theta[i][2], szx, scale=5) * szy)
-            # ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0], scale=scale) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
-            # ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
-            # ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
+            # ddt_oob[i][0] = 0
+            # ddt_oob[i][1] = scale * np.exp(scale * (theta[i][1] - szx + 1)) - scale * np.exp(-scale * theta[i][1]) * szx
+            # ddt_oob[i][2] = scale * np.exp(scale * (theta[i][2] - szy + 1)) - scale * np.exp(-scale * theta[i][2]) * szy
+            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0], scale=scale) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
+            ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
+            ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
             # ddt_oob[i][0] = 0
             # ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
             # ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
@@ -168,8 +168,8 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
             
     for pidx in range(1, len(theta)):
         # i0, i0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
-        # d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0], scale=scale) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity 
+        # d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0], scale=scale) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity 
         # i0, i1
         d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = 0
@@ -178,17 +178,17 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
         d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = 0
         # i1, i1
         # d2dt2 = (scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2)
-        d2dt2 = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
-        # d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
+        # d2dt2 = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
+        # d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
         # i1, i2
         d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
         # i2, i2
-        d2dt2 = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szy**2
+        # d2dt2 = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szy**2
         # d2dt2 = (scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2)
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2
-        # d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szx**2 
+        # d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szx**2 
 
     return d2dt2_oob_2d
 

@@ -220,10 +220,10 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
             for _ in range(n_particles):
 
                 # This is setting for wider possible area. 
-                # x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                # y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                x = np.random.rand() * sz - 0.5 # The center of the leftmost pixel is 0. Thus, the possible position starts from -0.5. The center of the rightmost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
-                y = np.random.rand() * sz - 0.5 # The center of the topmost pixel is 0. Thus, the possible position starts from -0.5. The center of the bottommost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
+                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # x = np.random.rand() * sz - 0.5 # The center of the leftmost pixel is 0. Thus, the possible position starts from -0.5. The center of the rightmost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
+                # y = np.random.rand() * sz - 0.5 # The center of the topmost pixel is 0. Thus, the possible position starts from -0.5. The center of the bottommost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
 
                 # This is setting for narrower possible area.
                 # x = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
