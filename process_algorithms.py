@@ -7,7 +7,7 @@ from scipy.stats import norm
 from skimage.feature import peak_local_max
 import diplib as dip
 
-np.set_printoptions(precision=5, formatter={'float': '{:0.5f}'.format}, linewidth=np.inf)
+np.set_printoptions(precision=4, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
 ## moved to top-level functions for better efficiency
 def normalize(th, hypothesis_index, n_hk_params_per_particle, roi_min, roi_max, psf_sd, szx, szy):
@@ -40,84 +40,155 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
     return th
 
 def cup_function(t, width, scale=1):
-    """ Returns the value of the cup function at t."""
+    """ Returns the value of the cup function at t.
+    
+    Args:
+        t (float): The input value.
+        width (float): The width of the boundary where there is no penalty (i.e., the image's x/y width depending on the context).
+        scale (float): The scale factor to multiply the cup function by.
+        
+    Returns:
+        float: The value of the cup function at t.
+
+    Note:
+        The cup function was exponential in the previous implementation. This implementation uses a cubic function.
+    """
     return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
+    # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
+    # if t < 0:
+    #     return -scale * (t + .5)**3
+    # elif t < width:
+    #     return 0
+    # else:
+    #     return scale * (t - width + .5)**3
+    
+def ddt_cup_function(t, width, scale=1):
+    """ Returns the derivative of the cup function at t.
+    
+    Args:
+        t (float): The input value.
+        width (float): The width of the boundary where there is no penalty (i.e., the image's x/y width depending on the context).
+        scale (float): The scale factor to multiply the cup function by.
+        
+    Returns:
+        float: The derivative of the cup function at t.
+    """
+    return -scale * np.exp(-scale * t) + scale * np.exp(scale * (t - width + 1))
+    # if t < 0:
+    #     return -3 * scale * (t + .5)**2
+    # elif t < width:
+    #     return 0
+    # else:
+    #     return 3 * scale * (t - width + .5)**2
+    
+def d2dt2_cup_function(t, width, scale=1):
+    """ Returns the second derivative of the cup function at t.
+    
+    Args:
+        t (float): The input value.
+        width (float): The width of the boundary where there is no penalty (i.e., the image's x/y width depending on the context).
+        scale (float): The scale factor to multiply the cup function by.
+        
+    Returns:
+        float: The second derivative of the cup function at t.
+    """
+    return scale**2 * np.exp(-scale * t) + scale**2 * np.exp(scale * (t - width + 1))
+    # if t < 0:
+    #     return -6 * scale * (t + .5)
+    # elif t < width:
+    #     return 0
+    # else:
+    #     return 6 * scale * (t - width + .5)
+
+def intensity_penalty_function(t, scale=1):
+    if t < 0:
+        return -scale * (t)**3
+    else:
+        return 0
+
+def ddt_intensity_penalty_function(t, scale=1):
+    if t < 0:
+        return -3 * scale * (t)**2
+    else:
+        return 0
+
+def d2dt2_intensity_penalty_function(t, scale=1):
+    if t < 0:
+        return -6 * scale * (t)
+    else:
+        return 0
 
 
 def out_of_bounds_particle_penalty(theta, szx, szy, scale=1, ):
-    """ Returns a penalty for particles that are out of bounds."""
+    """ Returns a penalty for particles that are out of bounds.
+    
+    Args:
+        theta (list): The list of particle parameters.
+        szx (int): The size of the x-axis.
+        szy (int): The size of the y-axis.
+        scale (float): The scale factor to multiply the cup function by.
+        
+    Returns:
+        float: The summed penalties for particles that are out of bounds.
+    """
     penalty = 0
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
+            intensity_term = 0
+            # intensity_term = intensity_penalty_function(theta[i][0], scale=scale)
             x_term = cup_function(theta[i][1], szx, scale=scale)
             y_term = cup_function(theta[i][2], szy, scale=scale)
 
-            # if -.5 < theta[i][1] < szx-.5:
-            #     x_term = 0
-            # elif theta[i][1] < -.5:
-            #     x_term = -(theta[i][1]+.5)**3
-            # else:
-            #     x_term = (theta[i][1]-szx+.5)**3
+            penalty += intensity_term + x_term + y_term
 
-            # if -.5 < theta[i][2] < szx-.5:
-            #     y_term = 0
-            # elif theta[i][2] < -.5:
-            #     y_term = -(theta[i][2]+.5)**3
-            # else:
-            #     y_term = (theta[i][2]-szx+.5)**3
-            
-            # penalty += theta[i][0] * (x_term + y_term)
-            penalty += (x_term + y_term)
-
-    # penalty = min(penalty, penalty_maximum)
     return penalty
 
-def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, sigma, scale=1, ):
+def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
     """ Returns the derivative of the out of bounds penalty."""
-    scale = 1
     ddt_oob = np.zeros((len(theta), 3))
     ddt_oob[0][1] = ddt_oob[0][2] = np.nan
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
-            # ddt_oob[i][0] = min((cup_function(theta[i][1], szx) + cup_function(theta[i][2], szy)) * (roi_max - roi_min) * 2 * np.pi * sigma**2, max_value)
-            # ddt_oob[i][1] = min(theta[i][0] * (- scale) * cup_function(theta[i][1], szx, scale=5) * szx, max_value)
-            # ddt_oob[i][2] = min(theta[i][0] * (- scale) * cup_function(theta[i][2], szx, scale=5) * szy, max_value)
             ddt_oob[i][0] = 0
-            # ddt_oob[i][1] = min((- scale) * cup_function(theta[i][1], szx, scale=5) * szx, max_value)
-            # ddt_oob[i][2] = min((- scale) * cup_function(theta[i][2], szx, scale=5) * szy, max_value)
             ddt_oob[i][1] = ((- scale) * cup_function(theta[i][1], szx, scale=5) * szx)
             ddt_oob[i][2] = ((- scale) * cup_function(theta[i][2], szx, scale=5) * szy)
+            # ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0], scale=scale) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
+            # ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
+            # ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
+            # ddt_oob[i][0] = 0
+            # ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
+            # ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
 
     return ddt_oob 
 
-def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, sigma, scale=1, ):
+def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
+    """ Returns the Hessian of the out of bounds penalty."""
     d2dt2_oob_2d = np.zeros((len(theta)* 3 - 2, len(theta)* 3 - 2))
     d2dt2_oob_2d[0, :] = d2dt2_oob_2d[:, 0] = 0 # No penalty for the background
             
     for pidx in range(1, len(theta)):
         # i0, i0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0 # No penalty for the background
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
+        # d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0], scale=scale) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity 
         # i0, i1
-        # d2dt2 = (- scale * cup_function(theta[pidx][1], szx, scale=scale) * (roi_max - roi_min) * 2 * np.pi * sigma**2 * szx)
-        d2dt2 = 0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = 0
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = 0
         # i0, i2
-        # d2dt2 = min(- scale * cup_function(theta[pidx][2], szy, scale=scale) * (roi_max - roi_min) * 2 * np.pi * sigma**2 * szy, max_value)
-        d2dt2 = 0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = 0
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = 0
         # i1, i1
-        # d2dt2 = min(scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2, max_value)
-        d2dt2 = (scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2)
-        # d2dt2 = 0
+        # d2dt2 = (scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2)
+        d2dt2 = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
         d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
+        # d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
         # i1, i2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = 0
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
         # i2, i2
-        # d2dt2 = min(scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2, max_value)
-        d2dt2 = (scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2)
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2
+        d2dt2 = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szy**2
+        # d2dt2 = (scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2)
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2
+        # d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szx**2 
 
     return d2dt2_oob_2d
 
@@ -224,13 +295,15 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
     Ddt_integrated_psf_1d_x.insert(0, None)
     Ddt_integrated_psf_1d_y.insert(0, None)
 
-    ddt_nll[0][0] = np.sum(1 - roi_image / Model_xy) * roi_max
+    # We need to calculate the derivatives of the modified negative log-likelihood function with respect to the normalized parameters 
+    # - These derivative will be the derivatives with respect to unnormalized parameters times the normalization factor
+    ddt_nll[0][0] = np.sum(1 - roi_image / Model_xy) * roi_max # roi_max is the normalization factor for the intensity
     ddt_nll[0][1] = ddt_nll[0][2] = np.nan
     one_minus_image_over_model = (1 - roi_image / Model_xy)
     for p_idx in range(1, hypothesis_index + 1):
-        ddt_nll[p_idx][0] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2)
-        ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta[p_idx][0] * szx)
-        ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta[p_idx][0] * szy)
+        ddt_nll[p_idx][0] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2) # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
+        ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta[p_idx][0] * szx) # szx is the normalization factor for the x-coordinate
+        ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta[p_idx][0] * szy) # szy is the normalization factor for the y-coordinate
 
     jacobian = ddt_nll.flatten()
     jacobian = jacobian[~np.isnan(jacobian)]
@@ -1307,7 +1380,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                     weighted_fisher_mat[:,col] *= scales[param_type]
 
             # Compare fisher_mat with fisher_mat_original
-        visualize_fim = True
+        visualize_fim = False 
         if visualize_fim:
             cmap = plt.cm.viridis
             cmap.set_bad(color='red')
@@ -1426,7 +1499,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         'fisher_info': fisher_info,
     }
 
-    # display_xi_graph = True
+    display_xi_graph = False 
     if display_xi_graph:
         max_xi_index = np.nanargmax(xi)
         _, axs = plt.subplots(3,1, figsize=(4.2,3.9))

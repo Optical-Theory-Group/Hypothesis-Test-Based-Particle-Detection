@@ -220,8 +220,10 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
             for _ in range(n_particles):
 
                 # This is setting for wider possible area. 
-                x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
-                y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                # y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+                x = np.random.rand() * sz - 0.5 # The center of the leftmost pixel is 0. Thus, the possible position starts from -0.5. The center of the rightmost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
+                y = np.random.rand() * sz - 0.5 # The center of the topmost pixel is 0. Thus, the possible position starts from -0.5. The center of the bottommost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
 
                 # This is setting for narrower possible area.
                 # x = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
@@ -251,21 +253,31 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{subfolder_name}sep{str(separation).replace('.','_')}psf{str(psf_sd).replace('.','_')}")
+    psf_str = f"{psf:.1f}".replace('.', '_')
+    sep_str = f"{sep:.1f}".replace('.', '_')
+    dest_path = f"./image_dataset/{subfolder_name}_psf{psf_str}_sep{sep_str}"
+    # image_folder_path = os.path.join("image_dataset", f"{subfolder_name}_psf{psf_str}_sep{sep_str}")
+    image_folder_path = dest_path
     os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Generating {n_images_per_separation} images with separation {separation} and psf {psf} in folder {image_folder_path}.')
+    print(f'Generating {n_images_per_separation} images with separation {sep_str} and psf {psf} in folder {image_folder_path}.')
+
     # Generate the images
+    sz_original = sz
     for img_idx in range(n_images_per_separation):
-        image = np.ones((sz, sz), dtype=float) * bg
+        sz = sz_original
         particle_intensity = bg * amp_to_bg
         angle = np.random.uniform(0, 2*np.pi)
         # Particle 1
-        while True:
+        x1 = sz / 2 + separation / 2 * np.cos(angle)
+        y1 = sz / 2 + separation / 2 * np.sin(angle)
+
+        while not (2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1) or not (2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1):
+            sz += 2
             x1 = sz / 2 + separation / 2 * np.cos(angle)
             y1 = sz / 2 + separation / 2 * np.sin(angle)
-            if 2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1 and 2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1:
-                break
+
         peak_info = [{'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
+        image = np.ones((sz, sz), dtype=float) * bg
         image += psfconvolution(peak_info, sz)
         # Particle 2
         x2 = sz / 2 - separation / 2 * np.cos(angle)
@@ -274,7 +286,7 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
         image += psfconvolution(peak_info, sz)
         # Add Poisson noise
         image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-        img_filename = f"separation{separation}-index{img_idx}.tiff"
+        img_filename = f"psf{psf_str}_sep{sep_str}_index{img_idx}.tiff"
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
 
@@ -839,12 +851,15 @@ def process(config_files_dir, parallel=False, timeout=120):
             
             # Generate confusion matrix
             label_prediction_log_file_path = os.path.join(log_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
-            generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=True, savefig=True)
-            generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=True, savefig=True)
+            generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
+            generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
 
             # Delete the dataset after analysis
             if config['analysis_delete_the_dataset_after_analysis']:
-                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_ver{config['code_version_date']}")
+                if config['code_version_date'] == '':
+                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}")
+                else:
+                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
@@ -973,20 +988,23 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
 if __name__ == '__main__':
-    # separations = [0, .5, 1, 1.5, 2, 2.3, 2.5, 2.7, 2.9, 3, 3.2, 3.4, 3.6, 3.8, 4, 4.5, 5, 10]
-    # psfs = [0.5, 1, 1.5, 2]
+    # # separations = np.arange(0.5, 7.1, 0.3)
+    # separations = [5.3, 5.6, 5.9, 6.2, 6.5, 6.8]
+    # # psfs = [0.5, 1, 1.5, 2]
+    # psfs = [2]
     # for psf in psfs:
     #     for sep in separations:
-    #         image_folder_path = generate_separation_test_images(separation=sep, n_images_per_separation=100, amp_to_bg=5, psf_sd=psf)
+    #         image_folder_path = generate_separation_test_images(separation=sep*psf, n_images_per_separation=2500, amp_to_bg=5, psf_sd=psf)
     #         # Define the source and destination paths
-    #         source_path = './config_sep/sep_psf2_sep10.json'
-    #         dest_path = f"./config_sep/sep_psf{str(psf).replace('.','_')}_sep{str(sep).replace('.','_')}.json"
+    #         source_path = './config_sep/psf2_sep10.json'
+    #         psf_str = f"{psf:.1f}".replace('.', '_')
+    #         sep_str = f"{sep:.1f}".replace('.', '_')
+    #         dest_path = f"./config_sep/psf{psf_str}_sep{sep_str}.json"
     #         # Read the JSON file
     #         with open(source_path, 'r') as file:
     #             config_data = json.load(file)
     #         # Modify the fields
-    #         config_data['image_folder_namebase'] = f'separation_testsep{str(sep).replace(".", "_")}psf{str(psf).replace(".", "_")}'
-    #         config_data['code_version_date'] = ""
+    #         config_data['image_folder_namebase'] = f'separation_test_psf{str(psf).replace(".", "_")}_sep{str(sep).replace(".", "_")}'
     #         config_data['analysis_predefined_psf_sd'] = psf
     #         # Save the modified JSON to the new file
     #         with open(dest_path, 'w') as file:
@@ -1003,9 +1021,9 @@ if __name__ == '__main__':
     # # pass
     # make_metrics_histograms()
     # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
-    sys.argv = ['main.py', '-c', './config/', '-p', 'True']
-    # sys.argv = ['main.py', '-c', './config/'] 
-    # sys.argv = ['main.py', '-c', './config/']
+    # sys.argv = ['main.py', '-c', './config_sep/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './config_sep/'] 
+    sys.argv = ['main.py', '-c', './config/']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
