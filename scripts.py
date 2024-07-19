@@ -255,6 +255,7 @@ def create_config_files_for_separation_tests(ref_json_path='./config_sep/referen
 			config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
 			config_data['analysis_predefined_psf_sd'] = psf
 			config_data['analyze_the_dataset'] = True
+			config_data['separation_test?'] = True
 
 			# Save the modified JSON to the new file
 			with open(dest_path, 'w') as file:

@@ -210,7 +210,7 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
     print(f'Saving dataset to: ./image_dataset/{image_folder_namebase}_code_ver{code_version}.')
 
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}_code_ver{code_version}")
+    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}_code_ver{code_version}") 
     os.makedirs(image_folder_path, exist_ok=True)
 
     for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
@@ -247,41 +247,42 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
     with open(config_file_save_path, 'w') as f:
         json.dump(json.loads(config_content), f, indent=4)
 
-def generate_separation_test_images(subfolder_name='separation_test', separation=3, n_images_per_separation=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, ):
-    if separation > sz:
-        raise ValueError(f"Separation {separation} is greater than the size of the image {sz}.")
+    return image_folder_path
+
+def generate_separation_test_images(image_folder_namebase='separation_test', code_ver='', separation_distance=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
+
+    if separation_distance > sz:
+        raise ValueError(f"Separation {separation_distance} is greater than the size of the image {sz}.")
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Create the folder to store the images
     psf_str = f"{psf_sd:.1f}".replace('.', '_')
-    sep_str = f"{separation:.1f}".replace('.', '_')
-    dest_path = f"./image_dataset/{subfolder_name}_psf{psf_str}_sep{sep_str}"
-    # image_folder_path = os.path.join("image_dataset", f"{subfolder_name}_psf{psf_str}_sep{sep_str}")
-    image_folder_path = dest_path
+    sep_str = f"{separation_distance:.1f}".replace('.', '_')
+    image_folder_path = f"./image_dataset/{image_folder_namebase}_code_ver{code_ver}"
     os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Generating {n_images_per_separation} images with separation {sep_str} and psf {psf_sd} in folder {image_folder_path}.')
+    print(f'Generating {n_total_image_count} images with separation {sep_str} and psf {psf_sd} in folder {image_folder_path}.')
 
     # Generate the images
     sz_original = sz
-    for img_idx in range(n_images_per_separation):
+    for img_idx in range(n_total_image_count):
         sz = sz_original
         particle_intensity = bg * amp_to_bg
         angle = np.random.uniform(0, 2*np.pi)
         # Particle 1
-        x1 = sz / 2 + separation / 2 * np.cos(angle)
-        y1 = sz / 2 + separation / 2 * np.sin(angle)
+        x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
+        y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
 
         while not (2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1) or not (2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1):
             sz += 2
-            x1 = sz / 2 + separation / 2 * np.cos(angle)
-            y1 = sz / 2 + separation / 2 * np.sin(angle)
+            x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
+            y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
 
         peak_info = [{'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
         image = np.ones((sz, sz), dtype=float) * bg
         image += psfconvolution(peak_info, sz)
         # Particle 2
-        x2 = sz / 2 - separation / 2 * np.cos(angle)
-        y2 = sz / 2 - separation / 2 * np.sin(angle)
+        x2 = sz / 2 - separation_distance / 2 * np.cos(angle)
+        y2 = sz / 2 - separation_distance / 2 * np.sin(angle)
         peak_info = [{'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
         image += psfconvolution(peak_info, sz)
         # Add Poisson noise
@@ -289,6 +290,11 @@ def generate_separation_test_images(subfolder_name='separation_test', separation
         img_filename = f"psf{psf_str}_sep{sep_str}_index{img_idx}.tiff"
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
+
+    # Save the content of the config file
+    config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
+    with open(config_file_save_path, 'w') as f:
+        json.dump(json.loads(config_content), f, indent=4)
 
     return image_folder_path
 
@@ -367,10 +373,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
-    if code_version_date == '':
-        images_folder = os.path.join('./image_dataset', image_folder_namebase)
-    else:
-        images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
+    images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
@@ -891,40 +894,97 @@ def process(config_files_dir, parallel=False, timeout=120):
                 # Pretty print the config file
                 pprint.pprint(config)
 
-                # Check if the required fields are present in the config file
-                required_fields = ['image_folder_namebase', 'code_version_date',\
-                                    'generate_the_dataset', 'gen_random_seed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
-                                    "gen_minimum_particle_count",
-                                    "gen_maximum_particle_count",
-                                    'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
-                                    'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
+                required_fields_common = ['image_folder_namebase', 'code_version_date']
 
-                # Modify field values with '.'
-                for field in required_fields:
-                    if field in config and isinstance(config[field], str):
-                        if '.' in config[field]:
-                            before_change = config[field]
-                            config[field] = config[field].replace('.', '_')
-                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
+                required_fields_for_separation_test = ['separation_test_image_generation?', 
+                                                       'sep_distance', 
+                                                       'sep_image_count', 
+                                                       'sep_intensity_prefactor_to_bg_level', 
+                                                       'sep_psf_sd', 
+                                                       'sep_img_width', 
+                                                       'sep_bg_level', 
+                                                       'sep_random_seed']
+
+                required_fields_for_generation = ['generate_the_dataset?', 
+                                                  'gen_random_seed', 
+                                                  'gen_total_image_count', 
+                                                  'gen_psf_sd', 
+                                                  'gen_img_width', 
+                                                  'gen_minimum_particle_count', 
+                                                  'gen_maximum_particle_count', 
+                                                  'gen_bg_level', 
+                                                  'gen_intensity_prefactor_to_bg_level_ratio_min', 
+                                                  'gen_intensity_prefactor_to_bg_level_ratio_max', 
+                                                  'gen_intensity_prefactor_coefficient_of_variation']
+
+                required_fields_for_analysis = ['analyze_the_dataset?', 
+                                                'ana_random_seed', 
+                                                'ana_predefined_psf_sd', 
+                                                'ana_use_premature_hypothesis_choice?', 
+                                                'ana_maximum_hypothesis_index?']
+
+                # Check if the required_fields_common are strings
+                for field in required_fields_common:
+                    if field in config and not isinstance(config[field], str):
+                        print(f"Error: '{field}' should be a string.")
+                        exit()
+                    else:
+                        # Replace '.' with '_' in the field value
+                        before_change = config[field]
+                        config[field] = config[field].replace('.', '_')
+                        print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
                 
+                # Check if all fields ending with '?' are boolean
+                for field in config:
+                    if field.endswith('?') and not isinstance(config[field], bool):
+                        print(f"Error: '{field}' should be a boolean.")
+                        exit()
+                        
                 # Check if the required fields are present in the config file
+                required_fields = required_fields_common
+
+                if config['separation_test_image_generation?']:
+                    required_fields += required_fields_for_separation_test
+                elif config['generate_the_dataset?']:
+                    required_fields += required_fields_for_generation
+                elif config['analyze_the_dataset?']:
+                    required_fields += required_fields_for_analysis
+
                 for field in required_fields:
                     if field not in config:
-                        # If config['generate_the_dataset'] is True, then all fields starting with 'gen' are required.
-                        if config['generate_the_dataset'] and field.startswith('gen'):
+                        # If config['separation_test_image_generation?'] is True, then all fields starting with 'sep' are required.
+                        if config['separation_test_image_generation?'] and field.startswith('sep'):
+                            print(f"Error: '{field}' should be set for separation test image generation.")
+                            exit()
+                        # If config['generate_the_dataset?'] is True, then all fields starting with 'gen' are required.
+                        if config['generate_the_dataset?'] and field.startswith('gen'):
                             print(f"Error: '{field}' should be set for image generation.")
                             exit()
-                        # If config['analyze_the_dataset'] is True, then all fields starting with 'analysis' are required.
-                        if config['analyze_the_dataset'] and field.startswith('analysis'):
+                        # If config['analyze_the_dataset?'] is True, then all fields starting with 'analysis' are required.
+                        if config['analyze_the_dataset?'] and field.startswith('ana'):
                             print(f"Error: '{field}' should be set for image analysis.")
                             exit()
+                
         # If the config file is not found or invalid, print an error message and continue to the next config file
         except (FileNotFoundError, json.JSONDecodeError):
             print(f"Error: {config_file} file not found or invalid")
             continue
 
+        # Generate separation test images
+        if config['separation_test_image_generation?']:
+            generate_separation_test_images(image_folder_namebase=config['image_folder_namebase'], 
+                                            code_ver=config['code_version_date'],
+                                            separation_distance=config['sep_distance'],
+                                            n_total_image_count=config['sep_image_count'],
+                                            amp_to_bg=config['sep_intensity_prefactor_to_bg_level'], 
+                                            psf_sd=config['sep_psf_sd'], 
+                                            sz=config['sep_img_width'], 
+                                            bg=config['sep_bg_level'], 
+                                            generation_random_seed=config['sep_random_seed'], 
+                                            config_content=json.dumps(config)
+                                            )
         # Generate the dataset 
-        if config['generate_the_dataset']:
+        elif config['generate_the_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                 code_version=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
@@ -939,13 +999,16 @@ def process(config_files_dir, parallel=False, timeout=120):
                                 generation_random_seed=config['gen_random_seed'], 
                                 config_content=json.dumps(config))
         # Analyze the dataset
-        if config['analyze_the_dataset']:
+        if config['analyze_the_dataset?']:
             log_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
                                                 code_version_date=config['code_version_date'], 
-                                                use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
-                                                last_h_index=config['analysis_maximum_hypothesis_index'], 
-                                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
-                                                config_content=json.dumps(config), parallel=parallel, timeout=timeout)
+                                                use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
+                                                last_h_index=config['ana_maximum_hypothesis_index'], 
+                                                analysis_rand_seed=config['ana_random_seed'], 
+                                                psf_sd=config['ana_predefined_psf_sd'], 
+                                                config_content=json.dumps(config), 
+                                                parallel=parallel, 
+                                                timeout=timeout)
             # Get the dataset name and code version date
             image_folder_namebase = config['image_folder_namebase']
             code_version_date = config['code_version_date']
@@ -959,72 +1022,19 @@ def process(config_files_dir, parallel=False, timeout=120):
             # generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
 
             # Delete the dataset after analysis
-            if config['analysis_delete_the_dataset_after_analysis']:
-                if config['code_version_date'] == '':
-                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}")
-                else:
-                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
+            if config['ana_delete_the_dataset_after_analysis?']:
+                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
 if __name__ == '__main__':
-    # separations = np.arange(0.0, 7.1, 0.3)
-    # # # separations = [5.3, 5.6, 5.9, 6.2, 6.5, 6.8]
-    # psfs = [0.5, 1, 1.5, 2]
-    # # psfs = [1.0, 1.5, 2.0]
-    # # # psfs = [2]
-    # for psf in psfs:
-    #     for sep in separations:
-    #         image_folder_path = generate_separation_test_images(separation=sep*psf, n_images_per_separation=1024, amp_to_bg=5, psf_sd=psf)
-    #         # Define the source and destination paths
-    #         source_path = './config_sep/reference.json'
-    #         psf_str = f"{psf:.1f}".replace('.', '_')
-    #         sep_str = f"{sep:.1f}".replace('.', '_')
-    #         dest_path = f"./config_sep/psf{psf_str}_sep{sep_str}.json"
-    #         # Read the JSON file
-    #         with open(source_path, 'r') as file:
-    #             config_data = json.load(file)
-    #         # Modify the fields
-    #         psf_str = f"{psf:.1f}".replace('.', '_')
-    #         sep_str = f"{sep:.1f}".replace('.', '_')
-    #         config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
-    #         config_data['analysis_predefined_psf_sd'] = psf
-    #         config_data['analyze_the_dataset'] = True
-    #         # Save the modified JSON to the new file
-    #         with open(dest_path, 'w') as file:
-    #             json.dump(config_data, file, indent=4)
-    #         print(f'Saved modified config to {dest_path}')
-
-    # sys.argv = ['main.py', '-c', './config_sep/'] 
-    # main()
-
-    # pass
-
-    # # filepath = "runs/500-2 size 40_code_ver2024-07-02/500-2 size 40_code_ver2024-07-02_metrics_log_per_image_hypothesis.csv"
-    # # filepath = "./runs/2500-4 size 20_code_ver2024-07-03/2500-4 size 20_code_ver2024-07-03_metrics_log_per_image_hypothesis.csv"
-    # # pass
-    # make_metrics_histograms()
-    # sys.argv = ['main.py', '-c', './config_files/030524-new_format']
-    # sys.argv = ['main.py', '-c', './config_sep/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './config_sep/'] 
-    # sys.argv = ['main.py', '-c', './config/']
+    # sys.argv = ['main.py', '-c', './config_test/', '-p', 'True']
+    sys.argv = ['main.py', '-c', './config_test/'] 
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
     # make_metrics_histograms(file_path=filepath, metric_of_interest='penalty')
     # make_metrics_histograms(file_path=filepath, metric_of_interest='lli')
     # make_metrics_histograms(file_path=filepath, metric_of_interest='xi')
-    # items = [1]
-    # for item in items:
-    #     if item == 1 or item == 1.1:
-    #         numstr = f'{item:.1f}'.replace('.', '_')
-    #         # label_prediction_log_filepath = f'./runs/PSF {numstr}_2024-06-13/label_prediction_log.csv'
-    #         label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF {numstr}_2024-06-13/label_prediction_log.csv"
-    #         # save_path = os.path.dirname(label_prediction_log_filepath)
-    #     else:
-    #         numstr = f'{item:.1f}'
-    #         # label_prediction_log_filepath = f'./runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv'
-    #         label_prediction_log_filepath = f"C:/github_repos/Generalized-Likelihood-Ratio-Particle-Counting/runs/PSF_{numstr}_2024-05-29/actual_vs_counted.csv"
-    #         # save_path = os.path.dirname(label_prediction_log_filepath)
-    #     generate_confusion_matrix(label_prediction_log_filepath, 'PSF_1.0', '2024-06-13', display=False, savefig=True)
+    # items
     pass
