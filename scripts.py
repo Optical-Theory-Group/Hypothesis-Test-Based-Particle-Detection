@@ -1,3 +1,4 @@
+from generate_images import generate_separation_test_images
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
@@ -121,7 +122,7 @@ def extract_counting_results(prefix="separation_test_psf0_5"):
 	
 	# Set Seaborn style
 	sns.set_theme(style="whitegrid")
-	palette = sns.color_palette("husl", 6)  # Using 'husl' colormap with 6 distinct colors
+	palette = sns.color_palette("turbo", 6)  # Using 'viridis' colormap with 6 distinct colors
 
 	percentage_data = {'separation': separations}
 	for est in range(6):
@@ -135,6 +136,8 @@ def extract_counting_results(prefix="separation_test_psf0_5"):
 	plt.figure(figsize=(12, 6))
 	for estimation in range(6):
 		plt.plot(separations, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', color=palette[estimation])
+	
+	psf_float = float(prefix.split("psf")[-1].replace('_', '.'))
 
 	plt.xlabel('Separation/Psf', fontsize=14)
 	plt.ylabel('Count', fontsize=14)
@@ -142,7 +145,7 @@ def extract_counting_results(prefix="separation_test_psf0_5"):
 	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
 	plt.grid(True)
 	plt.tight_layout()
-	plt.show(block=False)
+	# plt.show(block=False)
 	plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation.png')
 
 	# Plotting the percentage of each estimated particle count as a function of separation
@@ -156,34 +159,104 @@ def extract_counting_results(prefix="separation_test_psf0_5"):
 	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
 	plt.grid(True)
 	plt.tight_layout()
-	plt.show(block=False)
+	# plt.show(block=False)
 	plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_percentage_vs_separation.png')
-	  
-	# # Print the results
-	# print("Count of each Estimated particle count as a function of separation:")
-	# for estimation in range(6):
-	#     print(f"separation\t{estimation=}\t{estimation=}")
-	#     for separation, occurence in counts[estimation].items():
-	#         print(f"{separation}\t{occurence}\t{occurence/sum(counts[estimation].values()):.5f}")
-		
-	# for est, separation_dict in counts.items():
-	#     print(f"Estimated Particle Count {est}:")
-	#     for separation, count in separation_dict.items():
-	#         print(f"{separation}\t{count}")
-  
-	# print("Percentage of each Estimated particle count as a function of separation:")
-	# for est, separation_dict in counts.items():
-	#     print(f"Estimated Particle Count {est}:")
-	#     for separation, count in separation_dict.items():
-	#         print(f"{separation}\t{count/sum(separation_dict.values())}")
-	# print("Percentage of each estimated particle count as a function of separation:")
-	# for i, row in enumerate(counts):
-	#     print(f"Estimated Particle Count {i} Percentage: {row/sum(row)}")
-  
-# Example usage
-extract_counting_results(prefix="separation_test_psf2_0")
 
-# correct_json_files(directory = './config_sep/')
-# toggle_analysis(psf = 0.5, directory = './config_sep/')
-# delete_images(n_remain = 500)
-pass
+	separation_floats = [float(sep.replace('_', '.')) for sep in separations]
+	surface_densities = np.linspace(0.0, 0.02, 100)
+	p_est_1_per_particle = np.zeros(len(surface_densities))
+	for j, eta in enumerate(surface_densities):
+		prev_r = 0
+		for i, r_over_psf in enumerate(separation_floats):
+			r = r_over_psf * psf_float
+			dr = r - prev_r
+			lam = eta * np.pi * r**2
+			p_est_1_per_particle[j] += percentage_data['estimation==1'][i] / 100 * 2 * np.pi * lam * r * np.exp(-lam*np.pi*r**2) * dr
+			prev_r = r
+	
+	plt.figure(figsize=(8, 4))
+	plt.plot(surface_densities, p_est_1_per_particle, label='p_est_1_per_particle', color='blue')
+	plt.xlabel('Surface Density (num of particle/pixel)', fontsize=14)
+	plt.ylabel('p_est_1_per_particle', fontsize=14)
+	plt.ylim(0, 0.6)
+	plt.title(f'PSF{prefix.split("psf")[-1]} Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
+	plt.legend(fontsize=12)
+	plt.grid(True)
+	plt.tight_layout()
+	# plt.show(block=False)
+	plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density).png')
+
+	p_est_1_per_area = p_est_1_per_particle * surface_densities
+
+	return p_est_1_per_particle, p_est_1_per_area, surface_densities
+
+def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
+
+	p_est1_2_0, p_est1_2_0_per_area, surface_densities = extract_counting_results(prefix="separation_test_psf2_0")
+	p_est1_1_5, p_est1_1_5_per_area, _ = extract_counting_results(prefix="separation_test_psf1_5")
+	p_est1_1_0, p_est1_1_0_per_area, _ = extract_counting_results(prefix="separation_test_psf1_0")
+	p_est1_0_5, p_est1_0_5_per_area, _ = extract_counting_results(prefix="separation_test_psf0_5")
+
+	# Assuming p_est1_* are dictionaries with keys as separations and values as counts
+
+	# Create a viridis palette
+	palette = sns.color_palette("turbo", 4)
+
+	# Plotting all p_est1's on a single plot
+	plt.figure(figsize=(12, 6))
+
+	plt.plot(surface_densities, p_est1_2_0, label='psf2_0', marker='o', markersize=3, color=palette[0])
+	plt.plot(surface_densities, p_est1_1_5, label='psf1_5', marker='o', markersize=3, color=palette[1])
+	plt.plot(surface_densities, p_est1_1_0, label='psf1_0', marker='o', markersize=3, color=palette[2])
+	plt.plot(surface_densities, p_est1_0_5, label='psf0_5', marker='o', markersize=3, color=palette[3])
+
+	plt.xlabel('Surface density (num_particle/pixel)', fontsize=14)
+	plt.ylabel('Probability', fontsize=14)
+	plt.title('Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
+	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
+	plt.grid(True)
+	plt.tight_layout()
+	plt.savefig('p_overlap_per_particle_vs_surface_density_all_psfs.png')
+	plt.show(block=False)
+
+	# Plotting all p_est1's on a single plot
+	plt.figure(figsize=(12, 6))
+
+	plt.plot(surface_densities, p_est1_2_0_per_area, label='psf2_0', marker='o', markersize=3, color=palette[0])
+	plt.plot(surface_densities, p_est1_1_5_per_area, label='psf1_5', marker='o', markersize=3, color=palette[1])
+	plt.plot(surface_densities, p_est1_1_0_per_area, label='psf1_0', marker='o', markersize=3, color=palette[2])
+	plt.plot(surface_densities, p_est1_0_5_per_area, label='psf0_5', marker='o', markersize=3, color=palette[3])
+
+	plt.xlabel('Surface density (num_particle/pixel)', fontsize=14)
+	plt.ylabel('Probability', fontsize=14)
+	plt.title('Expected number of overlaping pairs per Area', fontsize=16)
+	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
+	plt.grid(True)
+	plt.tight_layout()
+	plt.savefig('expected_overlap_pairs_per_area_vs_surface_density_all_psfs.png')
+	plt.show(block=False)
+
+def create_config_files_for_separation_tests(ref_json_path='./config_sep/reference.json', dest_folder_path='./config_sep2/'):
+	
+	separations = np.arange(0.0, 7.1, 0.3)
+	psfs = [0.5, 1.0, 1.5, 2.0, 3.0]
+	for psf in psfs:
+		for sep in separations:
+			# Define the source and destination paths
+			psf_str = f"{psf:.1f}".replace('.', '_')
+			sep_str = f"{sep:.1f}".replace('.', '_')
+			dest_path = os.path.join(dest_folder_path, f"psf{psf_str}_sep{sep_str}.json")
+			# Read the JSON file
+			with open(ref_json_path, 'r') as file:
+				config_data = json.load(file)
+			# Modify the fields
+			psf_str = f"{psf:.1f}".replace('.', '_')
+			sep_str = f"{sep:.1f}".replace('.', '_')
+			config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
+			config_data['analysis_predefined_psf_sd'] = psf
+			config_data['analyze_the_dataset'] = True
+
+			# Save the modified JSON to the new file
+			with open(dest_path, 'w') as file:
+				json.dump(config_data, file, indent=4)
+			print(f'Saved modified config to {dest_path}')

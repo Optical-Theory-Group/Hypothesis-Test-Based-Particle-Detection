@@ -27,174 +27,174 @@ from datetime import datetime, timedelta
 from cProfile import Profile
 from pstats import SortKey, Stats
 
-def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
-    """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
-    Args:
-        input_image: The image to process.
-        psf_sd: The sigma value of the PSF.
-        significance: The maximum p-value to consider a detection significant.
-        consideration_limit_level: The compression reduction factor.
-        fittype: The type of fit to use (0: Bg and Intensity, 1: Bg, Intensity, X, Y).
-    Returns:
-        (nothing)
-    """
-    # Stripping the edges, because the edges are cannot be processed using our strategy.
-    required_box_size = int(np.ceil(3 * (2 * psf_sd + 1)))
-    # required_box_size = 3 * (2 * psf_sd + 1)
-    xbegin = math.ceil(required_box_size / 2) 
-    ybegin = xbegin 
-    # Note that in line with python indexing, the end is not included in the range
-    xend = math.floor(input_image.shape[1] - required_box_size / 2)
-    yend = math.floor(input_image.shape[0] - required_box_size / 2)
-    # Get the inner indices
-    inner_xidxs = np.arange(xbegin, xend) 
-    inner_yidxs = np.arange(ybegin, yend) 
+# def main_glrt_tester(input_image, psf_sd=1.39, significance=0.05, consideration_limit_level=2, fittype=0, ):
+#     """ Performs image processing on the input image, including the preprocessing, detection, and fitting steps.
+#     Args:
+#         input_image: The image to process.
+#         psf_sd: The sigma value of the PSF.
+#         significance: The maximum p-value to consider a detection significant.
+#         consideration_limit_level: The compression reduction factor.
+#         fittype: The type of fit to use (0: Bg and Intensity, 1: Bg, Intensity, X, Y).
+#     Returns:
+#         (nothing)
+#     """
+#     # Stripping the edges, because the edges are cannot be processed using our strategy.
+#     required_box_size = int(np.ceil(3 * (2 * psf_sd + 1)))
+#     # required_box_size = 3 * (2 * psf_sd + 1)
+#     xbegin = math.ceil(required_box_size / 2) 
+#     ybegin = xbegin 
+#     # Note that in line with python indexing, the end is not included in the range
+#     xend = math.floor(input_image.shape[1] - required_box_size / 2)
+#     yend = math.floor(input_image.shape[0] - required_box_size / 2)
+#     # Get the inner indices
+#     inner_xidxs = np.arange(xbegin, xend) 
+#     inner_yidxs = np.arange(ybegin, yend) 
 
-    # Crop the image
-    inner_image = input_image[np.ix_(inner_xidxs, inner_yidxs)]    
+#     # Crop the image
+#     inner_image = input_image[np.ix_(inner_xidxs, inner_yidxs)]    
 
-    # Define the filter
-    h2 = 1/16
-    h1 = 1/4
-    h0 = 3/8
-    g = {}
-    g[0] = [h2, h1, h0, h1, h2]
-    g[1] = [h2, 0, h1, 0, h0, 0, h1, 0, h2]
+#     # Define the filter
+#     h2 = 1/16
+#     h1 = 1/4
+#     h0 = 3/8
+#     g = {}
+#     g[0] = [h2, h1, h0, h1, h2]
+#     g[1] = [h2, 0, h1, 0, h0, 0, h1, 0, h2]
 
-    # ROI location mask initialization. At first, all the inner_image is considered as ROI.
-    consideration_mask = np.ones(inner_image.shape)
+#     # ROI location mask initialization. At first, all the inner_image is considered as ROI.
+#     consideration_mask = np.ones(inner_image.shape)
 
-    # If consideration_limit_level is above 0, 
-    # then we consider only the pixels that are above the mean + std of the difference between V1 and V2  
-    if consideration_limit_level:
-        # Compute V1 and V2
-        k0 = np.array(g[0])
-        adjusted_kernel_0 = create_separable_filter(k0, 3)
-        dip_image = dip.Image(inner_image)
-        v0 = dip.Convolution(dip_image, adjusted_kernel_0, method="best")
-        k1 = np.array(g[1])
-        adjusted_kernel_1 = create_separable_filter(k1, 5)
-        v1 = dip.Convolution(v0, adjusted_kernel_1, method="best")
+#     # If consideration_limit_level is above 0, 
+#     # then we consider only the pixels that are above the mean + std of the difference between V1 and V2  
+#     if consideration_limit_level:
+#         # Compute V1 and V2
+#         k0 = np.array(g[0])
+#         adjusted_kernel_0 = create_separable_filter(k0, 3)
+#         dip_image = dip.Image(inner_image)
+#         v0 = dip.Convolution(dip_image, adjusted_kernel_0, method="best")
+#         k1 = np.array(g[1])
+#         adjusted_kernel_1 = create_separable_filter(k1, 5)
+#         v1 = dip.Convolution(v0, adjusted_kernel_1, method="best")
 
-        # Compute the difference between V1 and V2
-        w = v0 -v1
+#         # Compute the difference between V1 and V2
+#         w = v0 -v1
 
-        # Compute the mean and std of the difference between V1 and V2
-        consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
+#         # Compute the mean and std of the difference between V1 and V2
+#         consideration_mask = w > np.mean(dip.Image(w), axis=(0,1)) + consideration_limit_level * np.std(dip.Image(w), axis=(0,1))
 
-        viz_consideration_mask = True
-        # Visualize the consideration mask
-        if viz_consideration_mask:
-           _,ax=plt.subplots()
-           ax.imshow(consideration_mask), ax.set_title('consideration_mask'), plt.show(block=False)
+#         viz_consideration_mask = True
+#         # Visualize the consideration mask
+#         if viz_consideration_mask:
+#            _,ax=plt.subplots()
+#            ax.imshow(consideration_mask), ax.set_title('consideration_mask'), plt.show(block=False)
 
-    # Get the indices of the pixels that are considered as ROI
-    inner_image_pos_idx = np.array(consideration_mask).nonzero()
-    idxs = np.vstack((inner_image_pos_idx[0] + xbegin, inner_image_pos_idx[1] + ybegin))
+#     # Get the indices of the pixels that are considered as ROI
+#     inner_image_pos_idx = np.array(consideration_mask).nonzero()
+#     idxs = np.vstack((inner_image_pos_idx[0] + xbegin, inner_image_pos_idx[1] + ybegin))
  
-    # Create subregions
-    roi_stack, leftcoords, topcoords = make_subregions(idxs, int(np.ceil(3 * (2 * psf_sd + 1))), input_image.astype('float32'))
+#     # Create subregions
+#     roi_stack, leftcoords, topcoords = make_subregions(idxs, int(np.ceil(3 * (2 * psf_sd + 1))), input_image.astype('float32'))
    
-    # Create a list of tuples of the subregions and their coordinates 
-    roi_infos = [(roi_stack[i], leftcoords[i], topcoords[i]) for i in range(len(roi_stack))]
+#     # Create a list of tuples of the subregions and their coordinates 
+#     roi_infos = [(roi_stack[i], leftcoords[i], topcoords[i]) for i in range(len(roi_stack))]
 
-    # Initialize the pfa and significance_mask arrays
-    pfa_array = np.ones(inner_image.shape)
-    significance_mask = np.zeros(inner_image.shape, dtype=bool)
-    # Perform the generalized likelihood ratio test on each subregion
-    for i in range(len(roi_infos)):
-        if i % 10 == 0:
-            print(f'Processing subregion {i / len(roi_infos) * 100:.3f}%')
-        _, _, _, pfa = generalized_likelihood_ratio_test(roi_image=roi_infos[i][0], psf_sd=psf_sd, iterations=10, fittype=fittype)
-        pfa_array[inner_image_pos_idx[0][i], inner_image_pos_idx[1][i]] = pfa
+#     # Initialize the pfa and significance_mask arrays
+#     pfa_array = np.ones(inner_image.shape)
+#     significance_mask = np.zeros(inner_image.shape, dtype=bool)
+#     # Perform the generalized likelihood ratio test on each subregion
+#     for i in range(len(roi_infos)):
+#         if i % 10 == 0:
+#             print(f'Processing subregion {i / len(roi_infos) * 100:.3f}%')
+#         _, _, _, pfa = generalized_likelihood_ratio_test(roi_image=roi_infos[i][0], psf_sd=psf_sd, iterations=10, fittype=fittype)
+#         pfa_array[inner_image_pos_idx[0][i], inner_image_pos_idx[1][i]] = pfa
 
-    # Create a custom colormap for the pfa image, with red-to-yellow for the values below 'significance', and green-to-blue for the values above.
-    n_colors = 1024
-    # The colormap is divided into three parts: from 0 to significance, from significance to 1, and from 1 to the maximum value in pfa_array
-    q = significance
-    color_list = [plt.cm.autumn(i / (n_colors * q - 1)) for i in range(int(n_colors * q))]
-    color_list += [plt.cm.winter(i / (n_colors * (1 - q) - 1)) for i in range(int(n_colors * q), n_colors)]
-    custom_cmap = mcolors.LinearSegmentedColormap.from_list('custom_cmap', color_list)
-    norm = mcolors.Normalize(vmin=0, vmax=1)
-    # Plotting pfa image 
-    plt.figure(), plt.title('pfa')
-    plt.imshow(pfa_array, cmap=custom_cmap, norm=norm)
-    plt.colorbar(), plt.show(block=False)
+#     # Create a custom colormap for the pfa image, with red-to-yellow for the values below 'significance', and green-to-blue for the values above.
+#     n_colors = 1024
+#     # The colormap is divided into three parts: from 0 to significance, from significance to 1, and from 1 to the maximum value in pfa_array
+#     q = significance
+#     color_list = [plt.cm.autumn(i / (n_colors * q - 1)) for i in range(int(n_colors * q))]
+#     color_list += [plt.cm.winter(i / (n_colors * (1 - q) - 1)) for i in range(int(n_colors * q), n_colors)]
+#     custom_cmap = mcolors.LinearSegmentedColormap.from_list('custom_cmap', color_list)
+#     norm = mcolors.Normalize(vmin=0, vmax=1)
+#     # Plotting pfa image 
+#     plt.figure(), plt.title('pfa')
+#     plt.imshow(pfa_array, cmap=custom_cmap, norm=norm)
+#     plt.colorbar(), plt.show(block=False)
 
-    _, _, pfa_adj = fdr_bh(pfa_array, significance, method='dep')
-    pfa_adj = pfa_adj.flatten()
-    pfa_adj_array = np.ones(inner_image.shape)    
-    for i, p_adj in enumerate(pfa_adj):
-        pfa_adj_array[inner_image_pos_idx[0][i], inner_image_pos_idx[1][i]] = p_adj
+#     _, _, pfa_adj = fdr_bh(pfa_array, significance, method='dep')
+#     pfa_adj = pfa_adj.flatten()
+#     pfa_adj_array = np.ones(inner_image.shape)    
+#     for i, p_adj in enumerate(pfa_adj):
+#         pfa_adj_array[inner_image_pos_idx[0][i], inner_image_pos_idx[1][i]] = p_adj
 
-    # Create a custom colormap for the pfa image, with red-to-yellow for the values below 'significance-val * max-val', and tinted_green-to-blue for the values above.
-    max_pfa_adj = np.max(pfa_adj_array)
-    # The colormap is divided into two parts: from 0 to significance * max_pfa_adj and from significance * max_pfa_adj to 1 
-    q = significance
-    n_colors = int(1024 * max_pfa_adj)
-    color_list = [plt.cm.autumn(i / (n_colors * q - 1)) for i in range(0, int(n_colors * q))]
-    color_list += [plt.cm.winter(i / (n_colors * (1-q) - 1)) for i in range(int(n_colors * q), n_colors)] 
-    color_list += [plt.cm.cool(i / (n_colors * (max_pfa_adj - 1) - 1)) for i in range(int(n_colors), int(n_colors * max_pfa_adj))]
-    custom_cmap = mcolors.LinearSegmentedColormap.from_list('custom_cmap', color_list)
-    norm = mcolors.Normalize(vmin=0, vmax=max_pfa_adj)
-    # Plotting pfa_adj array 
-    plt.figure(), plt.title('pfa_adj')
-    plt.imshow(pfa_adj_array, cmap=custom_cmap, norm=norm)
-    plt.colorbar(), plt.show(block=False)
+#     # Create a custom colormap for the pfa image, with red-to-yellow for the values below 'significance-val * max-val', and tinted_green-to-blue for the values above.
+#     max_pfa_adj = np.max(pfa_adj_array)
+#     # The colormap is divided into two parts: from 0 to significance * max_pfa_adj and from significance * max_pfa_adj to 1 
+#     q = significance
+#     n_colors = int(1024 * max_pfa_adj)
+#     color_list = [plt.cm.autumn(i / (n_colors * q - 1)) for i in range(0, int(n_colors * q))]
+#     color_list += [plt.cm.winter(i / (n_colors * (1-q) - 1)) for i in range(int(n_colors * q), n_colors)] 
+#     color_list += [plt.cm.cool(i / (n_colors * (max_pfa_adj - 1) - 1)) for i in range(int(n_colors), int(n_colors * max_pfa_adj))]
+#     custom_cmap = mcolors.LinearSegmentedColormap.from_list('custom_cmap', color_list)
+#     norm = mcolors.Normalize(vmin=0, vmax=max_pfa_adj)
+#     # Plotting pfa_adj array 
+#     plt.figure(), plt.title('pfa_adj')
+#     plt.imshow(pfa_adj_array, cmap=custom_cmap, norm=norm)
+#     plt.colorbar(), plt.show(block=False)
 
-    significance_mask[inner_image_pos_idx] = (pfa_adj <= significance).flatten()
+#     significance_mask[inner_image_pos_idx] = (pfa_adj <= significance).flatten()
     
-    show_significance_mask = True
-    if show_significance_mask:
-        plt.figure(), plt.imshow(significance_mask), plt.title('significance_mask'), plt.show(block=False)
+#     show_significance_mask = True
+#     if show_significance_mask:
+#         plt.figure(), plt.imshow(significance_mask), plt.title('significance_mask'), plt.show(block=False)
 
-    # Examination of the significance mask might be implemented here. 
+#     # Examination of the significance mask might be implemented here. 
  
-def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1.39, show_fig=False, verbose=False):
+# def make_and_process_image_glrt(x=3.35, y=6.69, sz=12, intensity=10, bg=4, psf=1.39, show_fig=False, verbose=False):
 
-    peaks_info = [{'x': x, 'y': y, 'prefactor': intensity, 'psf_sd': psf}]
-    image = psfconvolution(peaks_info, sz)
-    # Adding background
-    image += np.ones(image.shape)*bg
-    image = np.random.poisson(image, size=(image.shape))
-    if show_fig:    
-        plt.imshow(image)
-        plt.colorbar()
+#     peaks_info = [{'x': x, 'y': y, 'prefactor': intensity, 'psf_sd': psf}]
+#     image = psfconvolution(peaks_info, sz)
+#     # Adding background
+#     image += np.ones(image.shape)*bg
+#     image = np.random.poisson(image, size=(image.shape))
+#     if show_fig:    
+#         plt.imshow(image)
+#         plt.colorbar()
 
-    fittype = 0
-    params,crlb,statistics,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
+#     fittype = 0
+#     params,crlb,statistics,p_value = generalized_likelihood_ratio_test(roi_image=image, psf_sd=1.39, iterations=10, fittype=fittype)
 
-    if verbose:
-        for i, p in enumerate(params):
-            if i == len(params) - 1:
-                print('-----')
-            if i != 1: 
-                print(f"{p:.2f}")
-            else:
-                print(f'{sz-p:.2f}')
-        print('-----') 
+#     if verbose:
+#         for i, p in enumerate(params):
+#             if i == len(params) - 1:
+#                 print('-----')
+#             if i != 1: 
+#                 print(f"{p:.2f}")
+#             else:
+#                 print(f'{sz-p:.2f}')
+#         print('-----') 
 
-    if fittype == 1 and show_fig:
-        plt.plot(x,y,'ro', markersize=15, label='true center')
-        plt.plot(params[0],params[0],'*', markersize=15, label='guessed center', markerfacecolor='aqua')
+#     if fittype == 1 and show_fig:
+#         plt.plot(x,y,'ro', markersize=15, label='true center')
+#         plt.plot(params[0],params[0],'*', markersize=15, label='guessed center', markerfacecolor='aqua')
 
-    if show_fig:
-        plt.legend()
-    crlbs = []
-    for i, v in enumerate(crlb):
-        crlbs += np.sqrt(v)
-        if verbose:
-            print(f'{np.sqrt(v):.2f}\n----\n{p_value=}')
+#     if show_fig:
+#         plt.legend()
+#     crlbs = []
+#     for i, v in enumerate(crlb):
+#         crlbs += np.sqrt(v)
+#         if verbose:
+#             print(f'{np.sqrt(v):.2f}\n----\n{p_value=}')
 
-    if show_fig:
-        titlestr = f"Ground truth: x={x:.2f}, y={y:.2f}, intensity={intensity}, bg={bg}\n"\
-            f"Fitted: {params[0]:.2f}, {params[1]:.2f}, {params[2]:.2f}, {params[3]:.2f}\n"\
-            f"p-value: {p_value:.15f}"
-        plt.title(titlestr), plt.tight_layout(), plt.show(block=False)
+#     if show_fig:
+#         titlestr = f"Ground truth: x={x:.2f}, y={y:.2f}, intensity={intensity}, bg={bg}\n"\
+#             f"Fitted: {params[0]:.2f}, {params[1]:.2f}, {params[2]:.2f}, {params[3]:.2f}\n"\
+#             f"p-value: {p_value:.15f}"
+#         plt.title(titlestr), plt.tight_layout(), plt.show(block=False)
         
-    t_g = statistics[0]
+#     t_g = statistics[0]
 
-    return t_g, p_value
+#     return t_g, p_value
 
 def generate_test_images(image_folder_namebase,  code_version, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
     # Set the random seed
@@ -699,42 +699,6 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
             png_file_path += png_file_name
             plt.savefig(png_file_path, dpi=300)
 
-def main():
-    # Start the batch job timer
-    batchjobstarttime = datetime.now()
-
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Process config files.')
-    parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
-    parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
-    args = parser.parse_args()
-
-    # Override config file folder argument for testing purposes
-    # print('Forcing the config file folder to ./config_files/300524 for testing purposes - remove the line below this code in main() to restore correct behaviour.')
-    # args.config_file_folder = './config_files/300524'
-
-    # Check if config-file-folder is provided
-    if (args.config_file_folder is None):
-        print("Please provide the folder name for config files using --config-file-folder or -c option.")
-        exit()
-    config_files_dir = args.config_file_folder
-    
-    if args.profile is True:
-        with Profile() as profile:
-            process(config_files_dir=config_files_dir, parallel=False)
-            (
-                Stats(profile)
-                .strip_dirs()
-                .sort_stats(SortKey.TIME)
-                .dump_stats('profile_results.prof')
-            )
-            # os.system('snakeviz profile_results.prof &')
-    else:
-        process(config_files_dir, parallel=True)
-
-    batchjobendtime = datetime.now()
-    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
-
 def combine_log_files(log_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
     '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
     # Create the fitting_results.csv file
@@ -769,121 +733,6 @@ def combine_log_files(log_folder, image_folder_namebase, code_version_date, dele
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
             print('Deleting individual image log files.')
-
-def process(config_files_dir, parallel=False, timeout=120):
-    '''Process the config files in the config_files_dir directory.'''
-    config_files = os.listdir(config_files_dir)
-
-    print(f"Config files loaded (total of {len(config_files)}):")
-    for config_file in config_files:
-        print("> " + config_file)
-
-    for i, config_file in enumerate(config_files):
-        print(f"Processing {config_file} ({i+1}/{len(config_files)})")
-        print(config_file)
-        try:
-            with open(os.path.join(config_files_dir, config_file), 'r') as f:
-                config = json.load(f)
-                
-                # Pretty print the config file
-                pprint.pprint(config)
-
-                # Check if the required fields are present in the config file
-                required_fields = ['image_folder_namebase', 'code_version_date',\
-                                    'generate_the_dataset', 'gen_random_seed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
-                                    "gen_minimum_particle_count",
-                                    "gen_maximum_particle_count",
-                                    'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
-                                    'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
-
-                # Modify field values with '.'
-                for field in required_fields:
-                    if field in config and isinstance(config[field], str):
-                        if '.' in config[field]:
-                            before_change = config[field]
-                            config[field] = config[field].replace('.', '_')
-                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
-                
-                # Check if the required fields are present in the config file
-                for field in required_fields:
-                    if field not in config:
-                        # If config['generate_the_dataset'] is True, then all fields starting with 'gen' are required.
-                        if config['generate_the_dataset'] and field.startswith('gen'):
-                            print(f"Error: '{field}' should be set for image generation.")
-                            exit()
-                        # If config['analyze_the_dataset'] is True, then all fields starting with 'analysis' are required.
-                        if config['analyze_the_dataset'] and field.startswith('analysis'):
-                            print(f"Error: '{field}' should be set for image analysis.")
-                            exit()
-        # If the config file is not found or invalid, print an error message and continue to the next config file
-        except (FileNotFoundError, json.JSONDecodeError):
-            print(f"Error: {config_file} file not found or invalid")
-            continue
-
-        # Generate the dataset 
-        if config['generate_the_dataset']:
-            generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
-                                code_version=config['code_version_date'],
-                                n_total_image_count=config['gen_total_image_count'],
-                                minimum_number_of_particles=config['gen_minimum_particle_count'], 
-                                maximum_number_of_particles=config['gen_maximum_particle_count'], 
-                                amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], 
-                                amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], 
-                                amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], 
-                                
-                                psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], 
-                                bg=config['gen_bg_level'], 
-                                generation_random_seed=config['gen_random_seed'], 
-                                config_content=json.dumps(config))
-        # Analyze the dataset
-        if config['analyze_the_dataset']:
-            log_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
-                                                code_version_date=config['code_version_date'], 
-                                                use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
-                                                last_h_index=config['analysis_maximum_hypothesis_index'], 
-                                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
-                                                config_content=json.dumps(config), parallel=parallel, timeout=timeout)
-            # Get the dataset name and code version date
-            image_folder_namebase = config['image_folder_namebase']
-            code_version_date = config['code_version_date']
-
-            # Combine analysis log files into one.
-            combine_log_files(log_folder_path, image_folder_namebase, code_version_date, delete_individual_files=True)
-            
-            # Generate confusion matrix
-            label_prediction_log_file_path = os.path.join(log_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
-            generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
-            generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
-
-            # Delete the dataset after analysis
-            if config['analysis_delete_the_dataset_after_analysis']:
-                if config['code_version_date'] == '':
-                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}")
-                else:
-                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
-                shutil.rmtree(dir_path)
-                print('Deleting image data.')
-
-def quick_analysis():
-    config_files_dir = './config_files/300524'
-    config_files = os.listdir(config_files_dir)
-    config_file = config_files[0]
-    with open(os.path.join(config_files_dir, config_file), 'r') as f:
-        config = json.load(f)
-        # Pretty print the config file
-        pprint.pprint(config)
-        analysis_rand_seed_per_image = 7258
-        filename = "./image_dataset/PSF 1.1/count1-index88.tiff"
-        # log_folder = analyze_whole_folder(image_folder_name=config['image_folder_name'], code_version_date=config['code_version_date'], use_exit_condi=config['analysis_use_premature_hypothesis_choice'], last_h_index=config['analysis_maximum_hypothesis_index'], \
-        #                     analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], config_content=json.dumps(config), parallel=parallel)
-        psf_sd = config['analysis_predefined_psf_sd']
-        last_h_index = config['analysis_maximum_hypothesis_index']
-        use_exit_condi = config['analysis_use_premature_hypothesis_choice']
-        image_folder_namebase = config['image_folder_namebase']
-        code_version_date = config['code_version_date']
-        log_folder = os.path.join('./runs', image_folder_namebase + '_code_ver' + code_version_date)
-        analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=True, display_xi_graph=True)
-    pass
 
 def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", metric_of_interest='penalty'):
     # metric_of_interest = 'lli'
@@ -987,6 +836,136 @@ def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-
         plt.savefig(fig_path)
         plt.close(fig)  # Close the figure to free memory
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
+
+def main():
+    # Start the batch job timer
+    batchjobstarttime = datetime.now()
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Process config files.')
+    parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
+    parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
+    args = parser.parse_args()
+
+    # Override config file folder argument for testing purposes
+    # print('Forcing the config file folder to ./config_files/300524 for testing purposes - remove the line below this code in main() to restore correct behaviour.')
+    # args.config_file_folder = './config_files/300524'
+
+    # Check if config-file-folder is provided
+    if (args.config_file_folder is None):
+        print("Please provide the folder name for config files using --config-file-folder or -c option.")
+        exit()
+    config_files_dir = args.config_file_folder
+    
+    if args.profile is True:
+        with Profile() as profile:
+            process(config_files_dir=config_files_dir, parallel=False)
+            (
+                Stats(profile)
+                .strip_dirs()
+                .sort_stats(SortKey.TIME)
+                .dump_stats('profile_results.prof')
+            )
+            # os.system('snakeviz profile_results.prof &')
+    else:
+        process(config_files_dir, parallel=True)
+
+    batchjobendtime = datetime.now()
+    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
+
+def process(config_files_dir, parallel=False, timeout=120):
+    '''Process the config files in the config_files_dir directory.'''
+    config_files = os.listdir(config_files_dir)
+
+    print(f"Config files loaded (total of {len(config_files)}):")
+    for config_file in config_files:
+        print("> " + config_file)
+
+    for i, config_file in enumerate(config_files):
+        print(f"Processing {config_file} ({i+1}/{len(config_files)})")
+        print(config_file)
+        try:
+            with open(os.path.join(config_files_dir, config_file), 'r') as f:
+                config = json.load(f)
+                
+                # Pretty print the config file
+                pprint.pprint(config)
+
+                # Check if the required fields are present in the config file
+                required_fields = ['image_folder_namebase', 'code_version_date',\
+                                    'generate_the_dataset', 'gen_random_seed', 'gen_total_image_count', 'gen_psf_sd', 'gen_img_width', 
+                                    "gen_minimum_particle_count",
+                                    "gen_maximum_particle_count",
+                                    'gen_bg_level', 'gen_intensity_prefactor_to_bg_level_ratio_min', 'gen_intensity_prefactor_to_bg_level_ratio_max', 'gen_intensity_prefactor_coefficient_of_variation', 
+                                    'analysis_random_seed', 'analysis_predefined_psf_sd', 'analysis_use_premature_hypothesis_choice', 'analysis_maximum_hypothesis_index',]
+
+                # Modify field values with '.'
+                for field in required_fields:
+                    if field in config and isinstance(config[field], str):
+                        if '.' in config[field]:
+                            before_change = config[field]
+                            config[field] = config[field].replace('.', '_')
+                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
+                
+                # Check if the required fields are present in the config file
+                for field in required_fields:
+                    if field not in config:
+                        # If config['generate_the_dataset'] is True, then all fields starting with 'gen' are required.
+                        if config['generate_the_dataset'] and field.startswith('gen'):
+                            print(f"Error: '{field}' should be set for image generation.")
+                            exit()
+                        # If config['analyze_the_dataset'] is True, then all fields starting with 'analysis' are required.
+                        if config['analyze_the_dataset'] and field.startswith('analysis'):
+                            print(f"Error: '{field}' should be set for image analysis.")
+                            exit()
+        # If the config file is not found or invalid, print an error message and continue to the next config file
+        except (FileNotFoundError, json.JSONDecodeError):
+            print(f"Error: {config_file} file not found or invalid")
+            continue
+
+        # Generate the dataset 
+        if config['generate_the_dataset']:
+            generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
+                                code_version=config['code_version_date'],
+                                n_total_image_count=config['gen_total_image_count'],
+                                minimum_number_of_particles=config['gen_minimum_particle_count'], 
+                                maximum_number_of_particles=config['gen_maximum_particle_count'], 
+                                amp_to_bg_min=config['gen_intensity_prefactor_to_bg_level_ratio_min'], 
+                                amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], 
+                                amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], 
+                                
+                                psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], 
+                                bg=config['gen_bg_level'], 
+                                generation_random_seed=config['gen_random_seed'], 
+                                config_content=json.dumps(config))
+        # Analyze the dataset
+        if config['analyze_the_dataset']:
+            log_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
+                                                code_version_date=config['code_version_date'], 
+                                                use_exit_condi=config['analysis_use_premature_hypothesis_choice'], 
+                                                last_h_index=config['analysis_maximum_hypothesis_index'], 
+                                                analysis_rand_seed=config['analysis_random_seed'], psf_sd=config['analysis_predefined_psf_sd'], 
+                                                config_content=json.dumps(config), parallel=parallel, timeout=timeout)
+            # Get the dataset name and code version date
+            image_folder_namebase = config['image_folder_namebase']
+            code_version_date = config['code_version_date']
+
+            # Combine analysis log files into one.
+            combine_log_files(log_folder_path, image_folder_namebase, code_version_date, delete_individual_files=True)
+            
+            # Generate confusion matrix
+            label_prediction_log_file_path = os.path.join(log_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
+            generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
+            # generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
+
+            # Delete the dataset after analysis
+            if config['analysis_delete_the_dataset_after_analysis']:
+                if config['code_version_date'] == '':
+                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}")
+                else:
+                    dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
+                shutil.rmtree(dir_path)
+                print('Deleting image data.')
 
 if __name__ == '__main__':
     # separations = np.arange(0.0, 7.1, 0.3)
