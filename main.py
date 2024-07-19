@@ -260,7 +260,7 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
     sep_str = f"{separation_distance:.1f}".replace('.', '_')
     image_folder_path = f"./image_dataset/{image_folder_namebase}_code_ver{code_ver}"
     os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Generating {n_total_image_count} images with separation {sep_str} and psf {psf_sd} in folder {image_folder_path}.')
+    print(f'Generating {n_total_image_count} images with separation {separation_distance} and psf {psf_sd} in folder {image_folder_path}.')
 
     # Generate the images
     sz_original = sz
@@ -272,10 +272,17 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
         x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
         y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
 
-        while not (2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1) or not (2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1):
-            sz += 2
+        retry_count = 0
+        # while not (2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1) or not (2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1):
+        while retry_count < 1000 and (x1 < -.5 * 2 * psf_sd or x1 > sz - .5 - 2 * psf_sd or y1 < -.5 * 2 * psf_sd or y1 > sz - .5 - 2 * psf_sd):
+            angle = np.random.uniform(0, 2*np.pi)
             x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
             y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
+            retry_count += 1
+        
+        if retry_count == 1000:
+            print(f"Warning: Particles could not be fitted inside the image. The separation and the psf are probably too large. {img_idx} will be skipped.")
+            continue
 
         peak_info = [{'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
         image = np.ones((sz, sz), dtype=float) * bg
@@ -287,7 +294,7 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
         image += psfconvolution(peak_info, sz)
         # Add Poisson noise
         image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-        img_filename = f"psf{psf_str}_sep{sep_str}_index{img_idx}.tiff"
+        img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.tiff"
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
 
@@ -494,6 +501,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
         num_particles = 2
     else:
         num_particles = count_part.split('count')[1]
+        num_particles = num_particles.split('_')[0]
     actual_num_particles = int(num_particles)
 
     # Find tentative peaks
@@ -930,9 +938,10 @@ def process(config_files_dir, parallel=False, timeout=120):
                         exit()
                     else:
                         # Replace '.' with '_' in the field value
-                        before_change = config[field]
-                        config[field] = config[field].replace('.', '_')
-                        print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
+                        if '.' in config[field]:
+                            before_change = config[field]
+                            config[field] = config[field].replace('.', '_')
+                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
                 
                 # Check if all fields ending with '?' are boolean
                 for field in config:
@@ -1028,8 +1037,9 @@ def process(config_files_dir, parallel=False, timeout=120):
                 print('Deleting image data.')
 
 if __name__ == '__main__':
-    # sys.argv = ['main.py', '-c', './config_test/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './config_test/'] 
+    # sys.argv = ['main.py', '-c', './config_test/'] 
+    sys.argv = ['main.py', '-c', './config_files/'] 
+    # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"

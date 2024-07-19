@@ -1,4 +1,4 @@
-from generate_images import generate_separation_test_images
+from main import generate_separation_test_images
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
@@ -236,7 +236,7 @@ def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
 	plt.savefig('expected_overlap_pairs_per_area_vs_surface_density_all_psfs.png')
 	plt.show(block=False)
 
-def create_config_files_for_separation_tests(ref_json_path='./config_sep/reference.json', dest_folder_path='./config_sep2/'):
+def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./config_for_remote_exec/'):
 	
 	separations = np.arange(0.0, 7.1, 0.3)
 	psfs = [0.5, 1.0, 1.5, 2.0, 3.0]
@@ -247,17 +247,42 @@ def create_config_files_for_separation_tests(ref_json_path='./config_sep/referen
 			sep_str = f"{sep:.1f}".replace('.', '_')
 			dest_path = os.path.join(dest_folder_path, f"psf{psf_str}_sep{sep_str}.json")
 			# Read the JSON file
-			with open(ref_json_path, 'r') as file:
-				config_data = json.load(file)
-			# Modify the fields
-			psf_str = f"{psf:.1f}".replace('.', '_')
-			sep_str = f"{sep:.1f}".replace('.', '_')
+			if ref_json_path != '':
+				with open(ref_json_path, 'r') as file:
+					config_data = json.load(file)
+			else:
+				config_data = {}
+
+			# set the following fields
 			config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
-			config_data['analysis_predefined_psf_sd'] = psf
-			config_data['analyze_the_dataset'] = True
-			config_data['separation_test?'] = True
+			config_data['code_version_date'] = '2014-07-19'
+
+			# Set the fields for separation test image generation
+			config_data['separation_test_image_generation?'] = True
+			config_data['sep_distance'] = round(sep, 2)
+			config_data['sep_image_count'] = 2500
+			config_data['sep_intensity_prefactor_to_bg_level'] = 5.0
+			config_data['sep_psf_sd'] = psf
+			config_data['sep_img_width'] = 40
+			config_data['sep_bg_level'] = 500
+			config_data['sep_random_seed'] = 0
+
+			# Set the field for dataset generation to False
+			config_data['generate_the_dataset?'] = False
+
+			# Set the field for analysis to True and set the (pre-defined) psf 
+			config_data['analyze_the_dataset?'] = True
+			config_data['ana_predefined_psf_sd'] = psf
+			config_data['ana_random_seed'] = 0	
+			config_data['ana_use_premature_hypothesis_choice?'] = False
+			config_data['ana_maximum_hypothesis_index'] = 5
+			config_data['ana_delete_the_dataset_after_analysis?'] = True 
 
 			# Save the modified JSON to the new file
+			os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 			with open(dest_path, 'w') as file:
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
+
+create_config_files_for_separation_tests()
+pass
