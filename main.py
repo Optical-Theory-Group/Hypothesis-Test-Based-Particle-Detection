@@ -196,7 +196,7 @@ from pstats import SortKey, Stats
 
 #     return t_g, p_value
 
-def generate_test_images(image_folder_namebase,  code_version, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
+def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed, config_content='', minimum_number_of_particles=0):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -207,10 +207,10 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
     print(f'Total number of images generated from this config is {number_of_images_per_count * number_of_counts}. Note that this number may be slightly higher than the total number of images requested.')
-    print(f'Saving dataset to: ./image_dataset/{image_folder_namebase}_code_ver{code_version}.')
+    print(f'Saving dataset to: ./image_dataset/{image_folder_namebase}.')
 
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}_code_ver{code_version}") 
+    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}_code_ver{code_ver}") 
     os.makedirs(image_folder_path, exist_ok=True)
 
     for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
@@ -249,18 +249,19 @@ def generate_test_images(image_folder_namebase,  code_version, maximum_number_of
 
     return image_folder_path
 
-def generate_separation_test_images(image_folder_namebase='separation_test', code_ver='', separation_distance=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
+def generate_separation_test_images(image_folder_namebase='separation_test', code_ver='', sep_psf_ratio=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
 
+    separation_distance = sep_psf_ratio * psf_sd
     if separation_distance > sz:
         raise ValueError(f"Separation {separation_distance} is greater than the size of the image {sz}.")
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Create the folder to store the images
     psf_str = f"{psf_sd:.1f}".replace('.', '_')
-    sep_str = f"{separation_distance:.1f}".replace('.', '_')
+    sep_str = f"{sep_psf_ratio:.1f}".replace('.', '_')
     image_folder_path = f"./image_dataset/{image_folder_namebase}_code_ver{code_ver}"
     os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Generating {n_total_image_count} images with separation {separation_distance} and psf {psf_sd} in folder {image_folder_path}.')
+    print(f'Generating {n_total_image_count} images with psf {psf_sd} and separation {sep_str} times the psf in folder {image_folder_path}.')
 
     # Generate the images
     sz_original = sz
@@ -273,7 +274,6 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
         y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
 
         retry_count = 0
-        # while not (2 * psf_sd + 1 <= x1 <= sz - 2 * psf_sd - 1) or not (2 * psf_sd + 1 <= y1 <= sz - 2 * psf_sd - 1):
         while retry_count < 1000 and (x1 < -.5 * 2 * psf_sd or x1 > sz - .5 - 2 * psf_sd or y1 < -.5 * 2 * psf_sd or y1 > sz - .5 - 2 * psf_sd):
             angle = np.random.uniform(0, 2*np.pi)
             x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
@@ -380,7 +380,24 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
-    images_folder = os.path.join('./image_dataset', image_folder_namebase + '_code_ver' + code_version_date)
+    images_folder = os.path.join('./image_dataset', image_folder_namebase)
+    original_images_folder = images_folder
+    
+    print(f"Looking into the folder {images_folder}")
+
+    # Check if the folder exists
+    if not os.path.exists(images_folder):
+        print(f"Folder {images_folder} does not exist.")
+        # Find another folder that starts with image_folder_namebase
+        base_dir = './image_dataset'
+        matching_folders = [f for f in os.listdir(base_dir) if f.startswith(image_folder_namebase)]
+        if matching_folders:
+            print(f"Found folders starting with '{image_folder_namebase}': {matching_folders}")
+            images_folder = os.path.join(base_dir, matching_folders[0])
+        else:
+            raise ValueError(f"No folder starting with '{image_folder_namebase}' found in '{base_dir}'.")
+
+    print(f"** Note: The probram is working with {images_folder} instead of the user input {original_images_folder}. **")
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
@@ -905,10 +922,10 @@ def process(config_files_dir, parallel=False, timeout=120):
                 required_fields_common = ['image_folder_namebase', 'code_version_date']
 
                 required_fields_for_separation_test = ['separation_test_image_generation?', 
-                                                       'sep_distance', 
                                                        'sep_image_count', 
                                                        'sep_intensity_prefactor_to_bg_level', 
                                                        'sep_psf_sd', 
+                                                       'sep_psf_ratio', 
                                                        'sep_img_width', 
                                                        'sep_bg_level', 
                                                        'sep_random_seed']
@@ -929,7 +946,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                                 'ana_random_seed', 
                                                 'ana_predefined_psf_sd', 
                                                 'ana_use_premature_hypothesis_choice?', 
-                                                'ana_maximum_hypothesis_index?']
+                                                'ana_maximum_hypothesis_index']
 
                 # Check if the required_fields_common are strings
                 for field in required_fields_common:
@@ -983,7 +1000,7 @@ def process(config_files_dir, parallel=False, timeout=120):
         if config['separation_test_image_generation?']:
             generate_separation_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                             code_ver=config['code_version_date'],
-                                            separation_distance=config['sep_distance'],
+                                            sep_psf_ratio = config['sep_psf_ratio'],
                                             n_total_image_count=config['sep_image_count'],
                                             amp_to_bg=config['sep_intensity_prefactor_to_bg_level'], 
                                             psf_sd=config['sep_psf_sd'], 
@@ -995,7 +1012,7 @@ def process(config_files_dir, parallel=False, timeout=120):
         # Generate the dataset 
         elif config['generate_the_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
-                                code_version=config['code_version_date'],
+                                code_ver=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
                                 minimum_number_of_particles=config['gen_minimum_particle_count'], 
                                 maximum_number_of_particles=config['gen_maximum_particle_count'], 

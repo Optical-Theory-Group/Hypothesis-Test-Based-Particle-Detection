@@ -39,13 +39,12 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
         th[particle_index][2] = n_th[particle_index][2] * szy
     return th
 
-def cup_function(t, width, scale=1):
+def cup_function(t, width):
     """ Returns the value of the cup function at t.
     
     Args:
         t (float): The input value.
         width (float): The width of the boundary where there is no penalty (i.e., the image's x/y width depending on the context).
-        scale (float): The scale factor to multiply the cup function by.
         
     Returns:
         float: The value of the cup function at t.
@@ -53,8 +52,7 @@ def cup_function(t, width, scale=1):
     Note:
         The cup function was exponential in the previous implementation. This implementation uses a cubic function.
     """
-    # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
-    # return np.exp(-scale * t) + np.exp(scale * (t - width + 1))
+    scale=100000
     if t < -.5:
         return -scale * (t + .5)**3
     elif t < width - .5:
@@ -62,18 +60,17 @@ def cup_function(t, width, scale=1):
     else:
         return scale * (t - width + .5)**3
     
-def ddt_cup_function(t, width, scale=1):
+def ddt_cup_function(t, width):
     """ Returns the derivative of the cup function at t.
     
     Args:
         t (float): The input value.
         width (float): The width of the boundary where there is no penalty (i.e., the image's x/y width depending on the context).
-        scale (float): The scale factor to multiply the cup function by.
         
     Returns:
         float: The derivative of the cup function at t.
     """
-    # return -scale * np.exp(-scale * t) + scale * np.exp(scale * (t - width + 1))
+    scale=100000
     if t < -.5:
         return -3 * scale * (t + .5)**2
     elif t < width -.5:
@@ -81,18 +78,17 @@ def ddt_cup_function(t, width, scale=1):
     else:
         return 3 * scale * (t - width + .5)**2
     
-def d2dt2_cup_function(t, width, scale=1):
+def d2dt2_cup_function(t, width):
     """ Returns the second derivative of the cup function at t.
     
     Args:
         t (float): The input value.
         width (float): The width of the boundary where there is no penalty (i.e., the image's x/y width depending on the context).
-        scale (float): The scale factor to multiply the cup function by.
         
     Returns:
         float: The second derivative of the cup function at t.
     """
-    # return scale**2 * np.exp(-scale * t) + scale**2 * np.exp(scale * (t - width + 1))
+    scale = 100000
     if t < -.5:
         return -6 * scale * (t + .5)
     elif t < width -.5:
@@ -100,26 +96,29 @@ def d2dt2_cup_function(t, width, scale=1):
     else:
         return 6 * scale * (t - width + .5)
 
-def intensity_penalty_function(t, scale=1):
+def intensity_penalty_function(t):
+    scale = 100000
     if t < 0:
         return -scale * (t)**3
     else:
         return 0
 
-def ddt_intensity_penalty_function(t, scale=1):
+def ddt_intensity_penalty_function(t):
+    scale = 100000
     if t < 0:
         return -3 * scale * (t)**2
     else:
         return 0
 
-def d2dt2_intensity_penalty_function(t, scale=1):
+def d2dt2_intensity_penalty_function(t):
+    scale = 100000
     if t < 0:
         return -6 * scale * (t)
     else:
         return 0
 
 
-def out_of_bounds_particle_penalty(theta, szx, szy, scale=1, ):
+def out_of_bounds_particle_penalty(theta, szx, szy):
     """ Returns a penalty for particles that are out of bounds.
     
     Args:
@@ -135,33 +134,27 @@ def out_of_bounds_particle_penalty(theta, szx, szy, scale=1, ):
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
             # intensity_term = 0
-            intensity_term = intensity_penalty_function(theta[i][0], scale=scale)
-            x_term = cup_function(theta[i][1], szx, scale=scale)
-            y_term = cup_function(theta[i][2], szy, scale=scale)
+            intensity_term = intensity_penalty_function(theta[i][0])
+            x_term = cup_function(theta[i][1], szx)
+            y_term = cup_function(theta[i][2], szy)
 
             penalty += intensity_term + x_term + y_term
 
     return penalty
 
-def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
+def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd):
     """ Returns the derivative of the out of bounds penalty."""
     ddt_oob = np.zeros((len(theta), 3))
     ddt_oob[0][1] = ddt_oob[0][2] = np.nan
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
-            # ddt_oob[i][0] = 0
-            # ddt_oob[i][1] = scale * np.exp(scale * (theta[i][1] - szx + 1)) - scale * np.exp(-scale * theta[i][1]) * szx
-            # ddt_oob[i][2] = scale * np.exp(scale * (theta[i][2] - szy + 1)) - scale * np.exp(-scale * theta[i][2]) * szy
-            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0], scale=scale) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
-            ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
-            ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
-            # ddt_oob[i][0] = 0
-            # ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx, scale=scale) * szx # szx is the normalization factor for the x-coordinate
-            # ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy, scale=scale) * szx # szy is the normalization factor for the y-coordinate
+            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
+            ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx) * szx # szx is the normalization factor for the x-coordinate
+            ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy) * szx # szy is the normalization factor for the y-coordinate
 
     return ddt_oob 
 
-def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
+def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd):
     """ Returns the Hessian of the out of bounds penalty."""
     d2dt2_oob_2d = np.zeros((len(theta)* 3 - 2, len(theta)* 3 - 2))
     d2dt2_oob_2d[0, :] = d2dt2_oob_2d[:, 0] = 0 # No penalty for the background
@@ -169,7 +162,7 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
     for pidx in range(1, len(theta)):
         # i0, i0
         # d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0], scale=scale) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity 
+        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0]) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity 
         # i0, i1
         d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = 0
@@ -180,7 +173,7 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
         # d2dt2 = (scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2)
         # d2dt2 = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
         # d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_cup_function(theta[pidx][1], szx) * szx**2
         # i1, i2
         d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
@@ -188,7 +181,7 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1, ):
         # d2dt2 = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szy**2
         # d2dt2 = (scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2)
         # d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szx**2 
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_cup_function(theta[pidx][2], szy) * szx**2 
 
     return d2dt2_oob_2d
 
@@ -203,7 +196,7 @@ def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi
     # Calculate the model value at each pixel position
     model_xy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy), hypothesis_index, min_model_xy, psf_sd)
     modified_neg_loglikelihood = np.sum(model_xy - roi_image * np.log(model_xy))
-    modified_neg_loglikelihood += out_of_bounds_particle_penalty(theta, szx, szy, scale=1) # newly added line (2nd July 2024)
+    modified_neg_loglikelihood += out_of_bounds_particle_penalty(theta, szx, szy) # newly added line (2nd July 2024)
 
     return modified_neg_loglikelihood 
 
@@ -315,7 +308,7 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
 
     # newly added line (2nd July 2024)
-    ddt_oob = jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1) 
+    ddt_oob = jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd) 
     jac_oob = ddt_oob.flatten()
     jac_oob = jac_oob[~np.isnan(jac_oob)]
     jacobian += jac_oob
@@ -404,7 +397,7 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
                                   + (1 - roi_image / Model_xy) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]))   * theta[pidx][0] * szy**2  )
         d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2
 
-    d2dt2_nll_2d += hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd, scale=1) # newly added line (2nd July 2024)
+    d2dt2_nll_2d += hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd) # newly added line (2nd July 2024)
 
     return d2dt2_nll_2d
 
