@@ -9,3 +9,4 @@ config_files/
 profile_results.prof
 *.png
 config*/
+*.zip

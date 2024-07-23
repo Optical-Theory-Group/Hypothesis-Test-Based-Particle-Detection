@@ -7,6 +7,9 @@ from scipy.stats import norm
 from skimage.feature import peak_local_max
 import diplib as dip
 
+POS_PENALTY_SCALE = 1e5
+INTENSITY_PENALTY_SCALE = 1e5
+
 np.set_printoptions(precision=4, formatter={'float': '{:0.3f}'.format}, linewidth=np.inf)
 
 ## moved to top-level functions for better efficiency
@@ -39,7 +42,7 @@ def denormalize(nft_th, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy):
         th[particle_index][2] = n_th[particle_index][2] * szy
     return th
 
-def cup_function(t, width):
+def position_penalty_function(t, width):
     """ Returns the value of the cup function at t.
     
     Args:
@@ -52,7 +55,7 @@ def cup_function(t, width):
     Note:
         The cup function was exponential in the previous implementation. This implementation uses a cubic function.
     """
-    scale=100000
+    scale = POS_PENALTY_SCALE
     if t < -.5:
         return -scale * (t + .5)**3
     elif t < width - .5:
@@ -60,7 +63,7 @@ def cup_function(t, width):
     else:
         return scale * (t - width + .5)**3
     
-def ddt_cup_function(t, width):
+def ddt_position_penalty_function(t, width):
     """ Returns the derivative of the cup function at t.
     
     Args:
@@ -70,7 +73,7 @@ def ddt_cup_function(t, width):
     Returns:
         float: The derivative of the cup function at t.
     """
-    scale=100000
+    scale = POS_PENALTY_SCALE
     if t < -.5:
         return -3 * scale * (t + .5)**2
     elif t < width -.5:
@@ -78,7 +81,7 @@ def ddt_cup_function(t, width):
     else:
         return 3 * scale * (t - width + .5)**2
     
-def d2dt2_cup_function(t, width):
+def d2dt2_position_penalty_function(t, width):
     """ Returns the second derivative of the cup function at t.
     
     Args:
@@ -88,7 +91,7 @@ def d2dt2_cup_function(t, width):
     Returns:
         float: The second derivative of the cup function at t.
     """
-    scale = 100000
+    scale = POS_PENALTY_SCALE
     if t < -.5:
         return -6 * scale * (t + .5)
     elif t < width -.5:
@@ -97,21 +100,21 @@ def d2dt2_cup_function(t, width):
         return 6 * scale * (t - width + .5)
 
 def intensity_penalty_function(t):
-    scale = 100000
+    scale = INTENSITY_PENALTY_SCALE
     if t < 0:
         return -scale * (t)**3
     else:
         return 0
 
 def ddt_intensity_penalty_function(t):
-    scale = 100000
+    scale = INTENSITY_PENALTY_SCALE
     if t < 0:
         return -3 * scale * (t)**2
     else:
         return 0
 
 def d2dt2_intensity_penalty_function(t):
-    scale = 100000
+    scale = INTENSITY_PENALTY_SCALE
     if t < 0:
         return -6 * scale * (t)
     else:
@@ -135,8 +138,8 @@ def out_of_bounds_particle_penalty(theta, szx, szy):
         if len(theta[i]) == 3:
             # intensity_term = 0
             intensity_term = intensity_penalty_function(theta[i][0])
-            x_term = cup_function(theta[i][1], szx)
-            y_term = cup_function(theta[i][2], szy)
+            x_term = position_penalty_function(theta[i][1], szx)
+            y_term = position_penalty_function(theta[i][2], szy)
 
             penalty += intensity_term + x_term + y_term
 
@@ -149,8 +152,8 @@ def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd):
     for i in range(1, len(theta)):
         if len(theta[i]) == 3:
             ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * (roi_max - roi_min) * 2 * np.pi * psf_sd**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity
-            ddt_oob[i][1] = ddt_cup_function(theta[i][1], szx) * szx # szx is the normalization factor for the x-coordinate
-            ddt_oob[i][2] = ddt_cup_function(theta[i][2], szy) * szx # szy is the normalization factor for the y-coordinate
+            ddt_oob[i][1] = ddt_position_penalty_function(theta[i][1], szx) * szx # szx is the normalization factor for the x-coordinate
+            ddt_oob[i][2] = ddt_position_penalty_function(theta[i][2], szy) * szx # szy is the normalization factor for the y-coordinate
 
     return ddt_oob 
 
@@ -170,18 +173,18 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd):
         d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = 0
         # i1, i1
-        # d2dt2 = (scale**2 * cup_function(theta[pidx][1], szx, scale=scale) * szx**2)
-        # d2dt2 = d2dt2_cup_function(theta[pidx][1], szx, scale=scale) * szx**2
+        # d2dt2 = (scale**2 * position_penalty_function(theta[pidx][1], szx, scale=scale) * szx**2)
+        # d2dt2 = d2dt2_position_penalty_function(theta[pidx][1], szx, scale=scale) * szx**2
         # d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_cup_function(theta[pidx][1], szx) * szx**2
+        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_position_penalty_function(theta[pidx][1], szx) * szx**2
         # i1, i2
         d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
         # i2, i2
-        # d2dt2 = d2dt2_cup_function(theta[pidx][2], szy, scale=scale) * szy**2
-        # d2dt2 = (scale**2 * cup_function(theta[pidx][2], szy, scale=scale) * szy**2)
+        # d2dt2 = d2dt2_position_penalty_function(theta[pidx][2], szy, scale=scale) * szy**2
+        # d2dt2 = (scale**2 * position_penalty_function(theta[pidx][2], szy, scale=scale) * szy**2)
         # d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_cup_function(theta[pidx][2], szy) * szx**2 
+        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_position_penalty_function(theta[pidx][2], szy) * szx**2 
 
     return d2dt2_oob_2d
 

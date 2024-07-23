@@ -266,7 +266,8 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
     # Generate the images
     sz_original = sz
     for img_idx in range(n_total_image_count):
-        sz = sz_original
+        if img_idx % 100 == 0:
+            print(f"{img_idx} images generated")
         particle_intensity = bg * amp_to_bg
         angle = np.random.uniform(0, 2*np.pi)
         # Particle 1
@@ -397,7 +398,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         else:
             raise ValueError(f"No folder starting with '{image_folder_namebase}' found in '{base_dir}'.")
 
-    print(f"** Note: The probram is working with {images_folder} instead of the user input {original_images_folder}. **")
+    print(f"** Note: The program is working with {images_folder} instead of the user input {original_images_folder}. **")
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
@@ -1055,7 +1056,10 @@ def process(config_files_dir, parallel=False, timeout=120):
 
 if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_test/'] 
-    sys.argv = ['main.py', '-c', './config_files/'] 
+    # sys.argv = ['main.py', '-c', './config_files/'] 
+    # sys.argv = ['main.py', '-c', './config_scale1_test/'] 
+    # sys.argv = ['main.py', '-c', './config_3/'] 
+    sys.argv = ['main.py', '-c', './config_scale_img_check/'] 
     # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
