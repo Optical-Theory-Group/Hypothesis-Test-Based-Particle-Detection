@@ -164,26 +164,9 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sd):
             
     for pidx in range(1, len(theta)):
         # i0, i0
-        # d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
         d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0]) * ((roi_max - roi_min) * 2 * np.pi * psf_sd**2)**2 # (roi_max - roi_min) * 2 * np.pi * psf_sd**2 is the normalization factor for particle intensity 
-        # i0, i1
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = 0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = 0
-        # i0, i2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = 0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = 0
-        # i1, i1
-        # d2dt2 = (scale**2 * position_penalty_function(theta[pidx][1], szx, scale=scale) * szx**2)
-        # d2dt2 = d2dt2_position_penalty_function(theta[pidx][1], szx, scale=scale) * szx**2
-        # d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_position_penalty_function(theta[pidx][1], szx) * szx**2
-        # i1, i2
-        d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 3] = 0
-        d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 2] = 0
+        # i0, i1, # i0, i2 # i1, i1 # i1, i2 are all zeros already.
         # i2, i2
-        # d2dt2 = d2dt2_position_penalty_function(theta[pidx][2], szy, scale=scale) * szy**2
-        # d2dt2 = (scale**2 * position_penalty_function(theta[pidx][2], szy, scale=scale) * szy**2)
-        # d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2
         d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_position_penalty_function(theta[pidx][2], szy) * szx**2 
 
     return d2dt2_oob_2d
@@ -557,16 +540,6 @@ def gaussianblur_max_min_2d(data, sigma):
             max_i = max(max_i, filtered_pixel )
             # min_bg is the minimum value of the Gaussian blurred image.
             min_bg = min(min_bg, filtered_pixel )
-
-    # fig, ax = plt.subplots(1,2, figsize=(10,5))
-    # im1 = ax[0].imshow(data)
-    # im2 = ax[1].imshow(filtered_img)
-    # ax[0].set_title('Original Image')
-    # ax[1].set_title('Gaussian Blurred Image')
-    # fig.colorbar(im1, ax=ax[0], orientation='vertical')
-    # fig.colorbar(im2, ax=ax[1], orientation='vertical')
-    # plt.show(block=False)
-    # pass
 
     return max_i, min_bg
 
@@ -1355,7 +1328,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             # weighted_fisher_mat *= theta**2
         else:
             # norm_norm_fisher_mat = np.zeros(norm_fisher_mat.shape)
-            scales = np.array([(roi_max - roi_min) * 2 * np.pi * psf_sd**2, szx, szy])
+            scales = np.array([(roi_max - roi_min) * 2 * np.pi * psf_sd**2, szx, szy]) # 0: particle_intensity, 1: x-coordinate, 2: y-coordinate
             for row in range(weighted_fisher_mat.shape[0]):
                 if row == 0:
                     weighted_fisher_mat[row,:] *= roi_max

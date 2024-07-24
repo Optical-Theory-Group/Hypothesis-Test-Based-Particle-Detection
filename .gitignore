@@ -10,3 +10,5 @@ profile_results.prof
 *.png
 config*/
 *.zip
+*.png
+*.csv

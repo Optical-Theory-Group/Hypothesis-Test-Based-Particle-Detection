@@ -81,7 +81,7 @@ def correct_json_files(directory):
 						json.dump(data, file, indent=4)
 	print("Corrections completed.")
 
-def process_separation_test_results(subdir='', prefix="separation_test_psf0_5", n_random_pick=None):
+def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",):
 	""" Extracts the count of each estimated particle count as a function of separation from the log files in the given directory.
 		Generates a CSV file containing the extracted data and plots the results.
 	
@@ -110,135 +110,207 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5", 
 					file_path = os.path.join(folder_path, filename)
 					df = pd.read_csv(file_path)
 
-					if n_random_pick is not None:
-						# Randomly pick n_random_pick elements from the DataFrame
-						random_indices = random.sample(range(len(df)), n_random_pick)
-						estimates = df['Estimated Particle Count'].iloc[random_indices]
-					else:
-						estimates = df['Estimated Particle Count']
+					estimates = df['Estimated Particle Count']
 					for est in estimates:
 						if separation not in counts[est]:
 							counts[est][separation] = 0
 						counts[est][separation] += 1
 
-	separations = sorted({sep for est_dict in counts.values() for sep in est_dict.keys()})
+	sep_to_psf_ratios = np.array(sorted({float(sep) for est_dict in counts.values() for sep in est_dict.keys()}))
 
-	data = {'separation': separations}
+	data = {'separation': sep_to_psf_ratios}
 
 	for est in range(6):
-		data[f'estimation=={est}'] = [counts[est][sep] if sep in counts[est] else 0 for sep in separations]
+		data[f'estimation=={est}'] = [counts[est][sep] if sep in counts[est] else 0 for sep in sep_to_psf_ratios]
 	
 	df = pd.DataFrame(data)
 	df.to_csv(f'{prefix}_particle_count_vs_separation.csv', index=False)
 	print(df)
 
-	total_counts = {sep: sum(counts[est][sep] for est in range(6)) for sep in separations}
-	percentage_data = {'separation': separations}
-	for est in range(6):
-		percentage_data[f'estimation=={est}'] = [counts[est][sep]/total_counts[sep] if sep in counts[est] else 0 for sep in separations]
-
-	percentage_df = pd.DataFrame(percentage_data)
-	# percentage_df.to_csv(f'{prefix}_particle_count_percentage_vs_separation.csv', index=False)
-	print(percentage_df)
-	
+	total_counts = {sep: sum(counts[est][sep] for est in range(6)) for sep in sep_to_psf_ratios}
 	# Set Seaborn style
+
 	sns.set_theme(style="whitegrid")
 	palette = sns.color_palette("turbo", 6)  # Using 'viridis' colormap with 6 distinct colors
 
-	percentage_data = {'separation': separations}
+	percentage_data = {'separation': sep_to_psf_ratios}
 	for est in range(6):
-		percentage_data[f'estimation=={est}'] = [counts[est][sep] / total_counts[sep] * 100 if sep in counts[est] else 0 for sep in separations]
+		percentage_data[f'estimation=={est}'] = [counts[est][sep] / total_counts[sep] * 100 if sep in counts[est] else 0 for sep in sep_to_psf_ratios]
 
-	percentage_df = pd.DataFrame(percentage_data)
-	# percentage_df.to_csv(f'{prefix}_particle_count_percentage_vs_separation.csv', index=False)
-	print(percentage_df)
+	# percentage_df = pd.DataFrame(percentage_data)
 
-	# Plotting the count of each estimated particle count as a function of separation
-	plt.figure(figsize=(12, 4))
-	for estimation in range(6):
-		plt.plot(separations, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', color=palette[estimation])
-	
+	# # percentage_df.to_csv(f'{prefix}_particle_count_percentage_vs_separation.csv', index=False)
+	# print(percentage_df)
+
 	psf_float = float(prefix.split("psf")[-1].replace('_', '.'))
 
-	plt.xlabel('Separation/Psf', fontsize=14)
+	# Plotting the count of each estimated particle count as a function of separation
+
+	_, axs = plt.subplots(2, 1, figsize=(12, 7))
+	plt.sca(axs[0]) # sca: set current axis
+	for estimation in range(6):
+		plt.plot(sep_to_psf_ratios, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', color=palette[estimation])
+
+	plt.xlabel('Separation/Psf (ratio)', fontsize=14)
 	plt.xticks(fontsize=10)
 	plt.ylabel('Count', fontsize=14)
 	plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
 	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
 	plt.grid(True)
 	plt.tight_layout()
-	plt.show(block=False)
-	if n_random_pick is not None:
-		plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation_randomly_picked.png')
-	else:
-		plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation.png')
+	# plt.show(block=False)
 
-	# Plotting the percentage of each estimated particle count as a function of separation
-	plt.figure(figsize=(12, 4))
+	plt.sca(axs[1]) # sca: set current axis
 	for estimation in range(6):
-		plt.plot(separations, percentage_data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', color=palette[estimation])
-
-	plt.xlabel('Separation/Psf', fontsize=14)
-	plt.ylabel('Percentage', fontsize=14)
-	plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count Percentage vs Separation', fontsize=16)
+		plt.plot(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', markersize=1, color=palette[estimation])
+	plt.xlabel('Separation (px)', fontsize=14)
+	plt.xlim([-.5, 21.5])
+	plt.xticks(fontsize=10)
+	plt.ylabel('Count', fontsize=14)
+	plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
 	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
 	plt.grid(True)
-	plt.tight_layout()
+	# plt.tight_layout()
 	# plt.show(block=False)
-	if n_random_pick is not None:
-		plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_percentage_vs_separation_randomly_picked.png')
-	else:
-		plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_percentage_vs_separation.png')
+	# plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation.png')
 
-	surface_densities = np.linspace(0.0, 0.02, 100)
-	p_est_1_per_particle = np.zeros(len(surface_densities))
-	for j, eta in enumerate(surface_densities):
-		prev_r = 0
-		for i, r_over_psf in enumerate(separations):
-			r = r_over_psf * psf_float
-			dr = r - prev_r
-			lam = eta * np.pi * r**2
-			p_est_1_per_particle[j] += percentage_data['estimation==1'][i] / 100 * 2 * np.pi * lam * r * np.exp(-lam*np.pi*r**2) * dr
-			prev_r = r
+	# surface_densities = np.array([0, 0.001, 0.01, 0.1, 1, 10])
+	radiuses = sep_to_psf_ratios * psf_float
+	pdf_w = np.zeros(len(radiuses))
+	cdf_w = np.zeros(len(radiuses))
 	
+	# expected_num_of_unresolvably_overlapping_particles = np.zeros(len(radiuses))
+
+	# Calculate the radius interval available
+	dr = (radiuses[1] - radiuses[0]) * psf_float
+
+	# for j, surf_den in enumerate(surface_densities):
+	for i, radius in enumerate(radiuses):
+		# Calculate the probability density function 
+		pdf_w[i] = percentage_data['estimation==1'][i] / 100 * 2 * np.pi * radius
+
+		# Calculate the cumulative density function
+		if i == 0:
+			cdf_w[i] = pdf_w[i] * dr
+		else:
+			cdf_w[i] = cdf_w[i-1] + pdf_w[i] * dr
+
 	plt.figure(figsize=(8, 4))
-	plt.plot(surface_densities, p_est_1_per_particle, label='p_est_1_per_particle', color='blue')
-	plt.xlabel('Surface Density (num of particle/pixel)', fontsize=14)
-	plt.ylabel('p_est_1_per_particle', fontsize=14)
-	plt.ylim(0, 0.6)
-	plt.title(f'PSF{prefix.split("psf")[-1]} Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
+	plt.plot(radiuses, cdf_w, color='red')
+	plt.xlabel('Radius (px)', fontsize=14)
+	plt.xlim([-.5, 21.5])
+	plt.ylabel('Expected number', fontsize=14)
+	plt.title(f'PSF {prefix.split("psf")[-1]} Expected num_particles unresolvably overlapping with an arbitrary particle / Surface Density', fontsize=12)
 	plt.legend(fontsize=12)
 	plt.grid(True)
 	plt.tight_layout()
 	# plt.show(block=False)
-	if n_random_pick is not None:
-		plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density)_randomly_picked.png')
-	else:
-		plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density).png')
+	plt.savefig(f'psf{prefix.split("psf")[-1]}_expected_num_of_unresolvably_overlapping_particles per surface_density.png')
+	pass
 
-	p_est_1_per_area = p_est_1_per_particle * surface_densities
 
-	return p_est_1_per_particle, p_est_1_per_area, surface_densities
+	# for surf_den in enumerate(surface_densities):
+
+	# 	prev_r = 0
+		
+	# 	for i, r_over_psf in enumerate(sep_to_psf_ratios):
+	# 		r = r_over_psf * psf_float
+	# 		dr = r - prev_r
+	# 		lam = surf_den * np.pi * r**2
+	# 		p_est_1_per_particle[j] += percentage_data['estimation==1'][i] / 100 * 2 * np.pi * lam * r * np.exp(-lam*np.pi*r**2) * dr
+	# 		prev_r = r
+	
+	# plt.close('all')
+	# plt.figure(figsize=(8, 4))
+	# plt.plot(surface_densities, p_est_1_per_particle, label='p_est_1_per_particle', color='blue')
+	# plt.xlabel('Surface Density (num of particle/pixel)', fontsize=14)
+	# plt.ylabel('p_est_1_per_particle', fontsize=14)
+	# plt.ylim(0, 1.0)
+	# plt.title(f'PSF{prefix.split("psf")[-1]} Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
+	# plt.legend(fontsize=12)
+	# plt.grid(True)
+	# plt.tight_layout()
+	# # plt.show(block=False)
+	# plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density).png')
+
+	# p_est_1_per_area = p_est_1_per_particle * surface_densities
+
+	# return cdf_w, p_est_1_per_area, surface_densities
+	return cdf_w, radiuses, data[f'estimation==1']
+
+def plot_estimate_1s():
+	est_1 = {}
+	radiuses = {} 
+	psfs = [0.5, 1.0, 1.5, 2.0, 3.0]
+	for psf in psfs:
+		psf_string = f"{psf:.1f}".replace('.', '_')
+		_, radiuses[psf_string], est_1[psf_string] = process_separation_test_results(subdir='220724', prefix=f"psf{psf_string}")
+
+	palette = sns.color_palette("nipy_spectral", len(psfs))
+	plt.figure(figsize=(8, 3))
+
+	for psf in psfs:
+		psf_string = f"{psf:.1f}".replace('.', '_')
+		plt.plot(radiuses[psf_string], est_1[psf_string], label=f'psf{psf_string}', marker='x', markersize=3, color=palette[psfs.index(psf)])
+
+	plt.xlabel('distance (px)', fontsize=12)
+	plt.ylabel('Probability of estimating 2 as 1', fontsize=11)
+	plt.title('Probability of estimating 2 as 1', fontsize=12)
+	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
+	plt.grid(True)
+	plt.tight_layout()
+	plt.savefig('probability_of_estimating_2_as_1.png')
+	plt.show(block=False)
+
+
+    
+
+def plot_unresolv_prob_per_particle_vs_radius_all_psfs():
+	exp_num_overlap = {}
+	radiuses = {}
+	psfs = [0.5, 1.0, 1.5, 2.0, 3.0]
+	for psf in psfs:
+		psf_string = f"{psf:.1f}".replace('.', '_')
+		exp_num_overlap[psf_string], radiuses[psf_string] = process_separation_test_results(subdir='220724', prefix=f"psf{psf_string}")
+
+	palette = sns.color_palette("nipy_spectral", 5)
+	plt.figure(figsize=(8, 3))
+
+	for psf in psfs:
+		psf_string = f"{psf:.1f}".replace('.', '_')
+		plt.plot(radiuses[psf_string], exp_num_overlap[psf_string], label=f'psf{psf_string}', marker='x', markersize=3, color=palette[psfs.index(psf)])
+
+	plt.xlabel('radius (px)', fontsize=12)
+	plt.ylabel('Num_particle / Surf_density', fontsize=11)
+	plt.title('Expected number of unresolvably overlapping particles with an arbitrary particle / Surface density', fontsize=12)
+	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
+	plt.grid(True)
+	plt.tight_layout()
+	plt.savefig('expected_num_of_unresolvably_overlapping_particles_per_surface_density.png')
+	plt.show(block=False)
+	pass
 
 def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
 
-	p_est1_2_0, p_est1_2_0_per_area, surface_densities = process_separation_test_results(prefix="separation_test_psf2_0")
-	p_est1_1_5, p_est1_1_5_per_area, _ = process_separation_test_results(prefix="separation_test_psf1_5")
-	p_est1_1_0, p_est1_1_0_per_area, _ = process_separation_test_results(prefix="separation_test_psf1_0")
-	p_est1_0_5, p_est1_0_5_per_area, _ = process_separation_test_results(prefix="separation_test_psf0_5")
+	p_est1_2_0, p_est1_2_0_per_area, surface_densities = process_separation_test_results(subdir='220724', prefix="psf2_0")
+	p_est1_1_5, p_est1_1_5_per_area, _ = process_separation_test_results(subdir='220724', prefix="psf1_5")
+	p_est1_1_0, p_est1_1_0_per_area, _ = process_separation_test_results(subdir='220724', prefix="psf1_0")
+	p_est1_0_5, p_est1_0_5_per_area, _ = process_separation_test_results(subdir='220724', prefix="psf0_5")
+	p_est1_3_0, p_est1_3_0_per_area, _ = process_separation_test_results(subdir='220724', prefix="psf3_0")
 
 	# Assuming p_est1_* are dictionaries with keys as separations and values as counts
 
 	# Create a viridis palette
-	palette = sns.color_palette("turbo", 4)
+	palette = sns.color_palette("nipy_spectral", 5)
 
 	# Plotting all p_est1's on a single plot
-	plt.figure(figsize=(12, 6))
+	plt.figure(figsize=(8, 3))
 
-	plt.plot(surface_densities, p_est1_2_0, label='psf2_0', marker='o', markersize=3, color=palette[0])
-	plt.plot(surface_densities, p_est1_1_5, label='psf1_5', marker='o', markersize=3, color=palette[1])
-	plt.plot(surface_densities, p_est1_1_0, label='psf1_0', marker='o', markersize=3, color=palette[2])
-	plt.plot(surface_densities, p_est1_0_5, label='psf0_5', marker='o', markersize=3, color=palette[3])
+	plt.plot(surface_densities, p_est1_3_0, label='psf3_0', marker='x', markersize=3, color=palette[4])
+	plt.plot(surface_densities, p_est1_2_0, label='psf2_0', marker='x', markersize=3, color=palette[0])
+	plt.plot(surface_densities, p_est1_1_5, label='psf1_5', marker='x', markersize=3, color=palette[1])
+	plt.plot(surface_densities, p_est1_1_0, label='psf1_0', marker='x', markersize=3, color=palette[2])
+	plt.plot(surface_densities, p_est1_0_5, label='psf0_5', marker='x', markersize=3, color=palette[3])
 
 	plt.xlabel('Surface density (num_particle/pixel)', fontsize=14)
 	plt.ylabel('Probability', fontsize=14)
@@ -250,12 +322,13 @@ def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
 	# plt.show(block=False)
 
 	# Plotting all p_est1's on a single plot
-	plt.figure(figsize=(12, 6))
+	plt.figure(figsize=(8, 3))
 
-	plt.plot(surface_densities, p_est1_2_0_per_area, label='psf2_0', marker='o', markersize=3, color=palette[0])
-	plt.plot(surface_densities, p_est1_1_5_per_area, label='psf1_5', marker='o', markersize=3, color=palette[1])
-	plt.plot(surface_densities, p_est1_1_0_per_area, label='psf1_0', marker='o', markersize=3, color=palette[2])
-	plt.plot(surface_densities, p_est1_0_5_per_area, label='psf0_5', marker='o', markersize=3, color=palette[3])
+	plt.plot(surface_densities, p_est1_3_0_per_area, marker='x', markersize=3, label='psf3_0', color=palette[4])
+	plt.plot(surface_densities, p_est1_2_0_per_area, marker='x', markersize=3, label='psf2_0', color=palette[0])
+	plt.plot(surface_densities, p_est1_1_5_per_area, marker='x', markersize=3, label='psf1_5', color=palette[1])
+	plt.plot(surface_densities, p_est1_1_0_per_area, marker='x', markersize=3, label='psf1_0', color=palette[2])
+	plt.plot(surface_densities, p_est1_0_5_per_area, marker='x', markersize=3, label='psf0_5', color=palette[3])
 
 	plt.xlabel('Surface density (num_particle/pixel)', fontsize=14)
 	plt.ylabel('Probability', fontsize=14)
@@ -314,10 +387,13 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
 
-create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_remote_2/')
-# process_separation_test_results(subdir='220724', prefix="psf0_5", n_random_pick=500)
-# process_separation_test_results(subdir='220724', prefix="psf1_0", n_random_pick=500)
-# process_separation_test_results(subdir='220724', prefix="psf1_5", n_random_pick=500)
-# process_separation_test_results(subdir='220724', prefix="psf2_0", n_random_pick=500)
-# process_separation_test_results(subdir='220724', prefix="psf3_0", n_random_pick=500)
+# create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_remote_2/')
+# psfs = np.array([.5, 1, 1.5, 2, 3])
+# for psf in psfs:
+# 	process_separation_test_results(subdir='220724', prefix=f"psf{psf}".replace('.', '_'))
+# 	plt.close('all')
+# pass
+# plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
+# plot_unresolv_prob_per_particle_vs_radius_all_psfs()
+plot_estimate_1s()
 pass
