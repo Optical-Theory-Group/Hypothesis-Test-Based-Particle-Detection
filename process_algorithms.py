@@ -984,11 +984,26 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
     return h0_params, h1_params, crlbs, pfa
 
 
-def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_h_index=7, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
-    # print('Analyzing image using the Generalized Maximum Likelihood Rule.')
+def generalized_maximum_likelihood_rule_on_rgb(roi_image, rough_peaks_xy, psf_sd, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
+    # Set the random seed
     np.random.seed(random_seed)
 
+    # Check the input image (C, H, W)
+    assert roi_image.ndim == 3
+    _, szy, szx = roi_image.shape
+    """ Indexing rules
+    - hypothesis_index: 0, 1, 2, ...   (H0, H1, H2, ...)
+    - particle_index: 1, 2, 3, ...     (particle 1, particle 2, particle 3, ...)
+    - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
+    """ 
 
+
+
+def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
+    # Set the random seed
+    np.random.seed(random_seed)
+
+    # Check the input image
     assert roi_image.ndim == 2
     szy, szx = roi_image.shape 
     
@@ -1290,8 +1305,8 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
                             fisher_mat_original[ll, kk] = fisher_mat_original[kk, ll] # The FIM is symmetric.
 
             # Check diagonal zeros
-            non_zero_diag_count = np.sum(np.diag(fisher_mat_original) == 0) 
-            if non_zero_diag_count > 0:
+            zero_diag_count = np.sum(np.diag(fisher_mat_original) == 0) 
+            if zero_diag_count > 0:
                 print(" ******************* Warning: Diagonal zeros detected in the FIM. ******************* ")
                 print(f"fisher_mat_original: \n{fisher_mat_original}")
                 # print(f"fisher_mat: \n{fisher_mat}")
@@ -1437,7 +1452,10 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
             prev_xi = xi[-1]
             prev_xi_assigned = True
 
-        penalty += [0.5 * log_det_fisher_mat]
+        if hypothesis_index != 0 and zero_diag_count > 0:
+            penalty += [1e10]
+        else:
+            penalty += [0.5 * log_det_fisher_mat]
         if np.isinf(penalty[-1]):
             penalty[-1] = np.nan
         lli += [sum_loglikelihood]

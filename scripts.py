@@ -361,7 +361,7 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 			config_data['code_version_date'] = '2024-07-19'
 
 			# Set the fields for separation test image generation
-			config_data['separation_test_image_generation?'] = True
+			config_data['separation_test_image_generation?'] = False
 			config_data['sep_psf_sd'] = psf
 			config_data['sep_psf_ratio'] = round(sep, 2)
 			config_data['sep_image_count'] = 7500
@@ -374,7 +374,7 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 			config_data['generate_the_dataset?'] = False
 
 			# Set the field for analysis to True and set the (pre-defined) psf 
-			config_data['analyze_the_dataset?'] = False
+			config_data['analyze_the_dataset?'] = True
 			config_data['ana_predefined_psf_sd'] = psf
 			config_data['ana_random_seed'] = 723	
 			config_data['ana_use_premature_hypothesis_choice?'] = False
@@ -387,7 +387,7 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
 
-# create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_remote_2/')
+create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_remote_2/')
 # psfs = np.array([.5, 1, 1.5, 2, 3])
 # for psf in psfs:
 # 	process_separation_test_results(subdir='220724', prefix=f"psf{psf}".replace('.', '_'))
@@ -395,5 +395,5 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 # pass
 # plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
 # plot_unresolv_prob_per_particle_vs_radius_all_psfs()
-plot_estimate_1s()
+# plot_estimate_1s()
 pass
