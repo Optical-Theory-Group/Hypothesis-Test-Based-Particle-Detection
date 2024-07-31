@@ -984,22 +984,180 @@ def generalized_likelihood_ratio_test(roi_image, psf_sd, iterations=8, fittype=0
     return h0_params, h1_params, crlbs, pfa
 
 
-def generalized_maximum_likelihood_rule_on_rgb(roi_image, rough_peaks_xy, psf_sd, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
-    # Set the random seed
-    np.random.seed(random_seed)
+# def generalized_maximum_likelihood_rule_on_rgb(roi_image, rough_peaks_xy, psf_sd, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
+#     # Set the random seed
+#     np.random.seed(random_seed)
 
-    # Check the input image (C, H, W)
-    assert roi_image.ndim == 3
-    _, szy, szx = roi_image.shape
-    """ Indexing rules
-    - hypothesis_index: 0, 1, 2, ...   (H0, H1, H2, ...)
-    - particle_index: 1, 2, 3, ...     (particle 1, particle 2, particle 3, ...)
-    - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
-    """ 
+#     # Check the input image (C, H, W)
+#     assert roi_image.ndim == 3
+#     _, szy, szx = roi_image.shape
+#     """ Indexing rules
+#     - hypothesis_index: 0, 1, 2, ...   (H0, H1, H2, ...)
+#     - particle_index: 1, 2, 3, ...     (particle 1, particle 2, particle 3, ...)
+#     - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
+#     """ 
+#     # x, y, BG_r, BG_g, BG_b, (I_r, I_g, I_b) * n_particles, 
+#     # num of parameters for each hypothesis:
+#     # H0: 3 (BG_r, BG_g, BG_b), 
+#     # ...
+#     # Hn: 3 (BG_r, BG_g, BG_b) + 2 (x, y) * n + 3 (I_r, I_g, I_b) * n 
+#     #   = 3 + 5n
+
+#     # Find tentative peaks
+#     roi_image_grayscale = np.mean(roi_image, axis=0)
+#     tentative_peaks = get_tentative_peaks(roi_image_grayscale, min_distance=1)
+#     rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+
+#     # Set the minimum model at any x, y coordinate to avoid dividing by zero.
+#     min_model_xy = 1e-2
+#     # Set the method to use with scipy.optimize.minimize for the MLE estimation.
+#     method = 'trust-exact'
+
+#     # Initialize test scores
+#     xi = [] # Which will be lli - penalty
+#     lli = [] # log likelihood
+#     penalty = [] # penalty term
+
+#     fisher_info = [] # Fisher Information Matrix
+
+#     # get minimum and maximum values of each R, G, B channel of the image.
+#     roi_max = [np.max(roi_image[i]) for i in range(3)]
+#     roi_min = [np.min(roi_image[i]) for i in range(3)]
+
+#     # Initialize the fit results
+#     fit_results = [] 
+
+#     # Theta will be a dict
+#     # bg -> r, g, b
+#     # particles -> x, y, I_r, I_g, I_b
+
+#     for hypothesis_index in range(last_h_index + 1): # hypothesis_index is also the number of particles. 
+
+#         # Initialization
+#         n_hk_params = 3 + 5 * hypothesis_index # Number of parameters for each hypothesis
+        
+#         # Initialize the theta (parameter) dict
+#         theta = {}
+
+#         # Starting values
+#         if hypothesis_index == 0:
+#             theta['bg'] = [channel.sum() / szx / szy for channel in roi_image]
+#         else: # Initializing estimated particle_intensities
+#             theta['bg'] = [roi_min for channel in roi_image]
+
+#             try:
+#                 for particle_index in range(1, hypothesis_index + 1): # Note that the particle index starts from 1, not 0. 
+#                     # Initialize estimated particle intensities to the maximum value of the Gaussian roi image.
+#                     theta[particle_index][0] = (roi_max - roi_min) * 2 * np.pi * psf_sd**2
+
+#                 # Initialize all particle coordinates as the center of mass of the image.
+#                 for particle_index in range(1, hypothesis_index + 1):
+#                     if len(rough_peaks_xy) <= 0:
+#                         break
+#                     if particle_index <= len(rough_peaks_xy):
+#                         theta[particle_index][1] = rough_peaks_xy[particle_index-1][0]
+#                         theta[particle_index][2] = rough_peaks_xy[particle_index-1][1]
+#                     else:
+#                         # assign random positions. 
+#                         theta[particle_index][1] = random.random() * (szx - 1)
+#                         theta[particle_index][2] = random.random() * (szy - 1)
+#             except Exception as e:
+#                 print(f"Error occurred during initialization of theta inside gmlr(): {e}")
+#                 print(f"theta: {theta}")
+
+#         # Only do the MLE if k > 0
+#         if hypothesis_index == 0:
+#             assert n_hk_params == 1
+#             convergence_list = [True]
+#         else:
+#             # Normazlize the parameters before passing on to neg_loglikelihood_function
+#             norm_flat_trimmed_theta = normalize(theta, hypothesis_index, n_hk_params_per_particle, roi_min, roi_max, psf_sd, szx, szy)
+
+#             # Initialize storage for the jacobian and hessian snapshots
+#             # jac_snapshots = []
+#             gradientnorm_snapshots = []
+#             # hess_snapshots = []
+#             fn_snapshots = []
+#             theta_snapshots = []
+#             denormflat_theta_snapshots = []
+
+#             # Define the callback function as a nested function
+#             def callback_fn(xk, *args):
+#                 jac = jacobian_fn(xk, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy)
+#                 gradientnorm = np.linalg.norm(jac)
+#                 fn = modified_neg_loglikelihood_fn(xk, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy)
+#                 gradientnorm_snapshots.append(gradientnorm)
+#                 fn_snapshots.append(fn)                
+#                 theta_snapshots.append(xk)
+#                 denormflat_theta_snapshots.append(denormalize(xk, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy).flatten())
+
+#             # Now, let's update the parameters using scipy.optimize.minimize
+#             if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
+#                 print("norm_flat_trimmed_theta contains NaN or inf values.")
+
+#             # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
+#             try:
+#                 minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sd, szx, szy),
+#                                 method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+#             except Exception as e:
+#                 print(f"Error occurred during optimization: {e}")
+#                 # print("Here is the last (denorm) theta snapshot:")
+#                 # print(denormalize(theta_snapshots[-1], hypothesis_index, roi_min, roi_max, psf_sd, szx, szy))
+
+                
+
+#             # print(f'H{hypothesis_index} converged?: {result.success}')
+#             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
+#             snapshot_length = len(fn_snapshots)
+#             convergence = minimization_result.success
+#             norm_theta = minimization_result.x
+
+#             convergence_list.append(convergence)
+
+#             # Retrieve the estimated parameters.
+#             theta = denormalize(norm_theta, hypothesis_index, roi_min, roi_max, psf_sd, szx, szy)           
+                            
+#         # Store fit results
+#         if hypothesis_index == 0:
+#             current_hypothesis_fit_result = {
+#                 'hypothesis_index': hypothesis_index,
+#                 'theta': theta,
+#                 'convergence': True,
+#             }
+#         else:
+#             current_hypothesis_fit_result = {
+#                 'hypothesis_index': hypothesis_index,
+#                 'theta': theta,
+#                 'convergence': convergence,
+#             }
+#         # Append the fit result to fit_results
+#         fit_results.append(current_hypothesis_fit_result)
+
+#         if display_fit_results and hypothesis_index > 0:
+#             # ax_main[0].cla()
+#             # _, ax_main = plt.subplots(2, 1, figsize=(2 * (1), 5))
+#             ax_main[0][hypothesis_index].set_title(f"H{hypothesis_index} - convgd: {convergence_list[hypothesis_index]}\nbg: {theta[0][0]:.1f}", fontsize=8)
+#             for particle_index in range(1, hypothesis_index + 1):
+#                 # print(f"theta[ {particle_index} ]: {theta[particle_index][0]:.3f}\t{theta[particle_index][1]:.3f}\t{theta[particle_index][2]:.3f}")
+#                 ax_main[0][hypothesis_index].imshow(roi_image)
+#                 red = random.randint(200, 255)
+#                 green = random.randint(0, 100)
+#                 blue = random.randint(0, 50)
+#                 color_code = '#%02X%02X%02X' % (red, green, blue)
+#                 ax_main[0][hypothesis_index].scatter(theta[particle_index][1], theta[particle_index][2], s=10, color=color_code, marker='x')
+#                 ax_main[0][hypothesis_index].text(theta[particle_index][1] + np.random.rand() * 1.5, theta[particle_index][2] + (np.random.rand() - 0.5) * 4,
+#                                             f'  {theta[particle_index][0]:.1f}', color=color_code, fontsize=10,) 
+#             ax_main[1][hypothesis_index].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
+#             ax_main[1][hypothesis_index].plot(np.arange(snapshot_length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
+#             ax_main[1][hypothesis_index].set_ylim(bottom=0)
+#             plt.tight_layout()
+#             plt.show(block=False)
+#             pass
 
 
 
-def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=True):
+def generalized_maximum_likelihood_rule(roi_image, psf_sd, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=False):
+#   generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi=use_exit_condi, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
     # Set the random seed
     np.random.seed(random_seed)
 
@@ -1012,10 +1170,17 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
     - particle_index: 1, 2, 3, ...     (particle 1, particle 2, particle 3, ...)
     - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
     """ 
+
+    # Find tentative peaks
+    tentative_peaks = get_tentative_peaks(roi_image, min_distance=1)
+    rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+
+    # Set the minimum model at any x, y coordinate to avoid dividing by zero.
     min_model_xy = 1e-2
+    # Set the method to use with scipy.optimize.minimize for the MLE estimation.
     method = 'trust-exact'
     
-    # MLE estimation of H1, H2, ... (where should it end?) 
+    # MLE estimation of H1, H2, 
     n_hk_params_per_particle = 3
     n_h0_params = 1
     
@@ -1035,11 +1200,11 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         # Create a colormap instance
         cmap = plt.get_cmap('turbo')# Create a colormap instance for tentative peak coordinates presentation.
         
+        # As an exception to the other axes, use ax_main[1][0] to show tentative peak locations, since there's is not much to show for a simple background estimation.
         for i, coord in enumerate(rough_peaks_xy):
             x, y = coord # Check whether this is correct.
             color = cmap(i / len(rough_peaks_xy))  # Use turbo colormap
             ax_main[1][0].text(x, y, f'{i}', fontsize=6, color=color) 
-
         ax_main[1][0].set_xlim(0-.5, szx-.5)
         ax_main[1][0].set_ylim(szy-.5, 0-.5) 
         ax_main[1][0].set_aspect('equal')
@@ -1061,7 +1226,7 @@ def generalized_maximum_likelihood_rule(roi_image, rough_peaks_xy, psf_sd, last_
         
 
         # Initialize the theta (parameter) vector
-        # theta[1][0] will be the estimated center-pixel intensity of particle 1.
+        # theta[1][0] will be the estimated scattering strength of particle 1.
         # theta[1][1], theta[1][2] will be the estimated x and y coordinate of particle 1, etc.
         # theta[0][0] will be the estimated background intensity. (However, if hypothesis_index == 0, theta will just be a scalar, and equal the background intensity.)
         # Since background intensity is the only parameter for H0, theta[0][1] and theta[0][2] will be nan and, importantly, not be passed for optimization.

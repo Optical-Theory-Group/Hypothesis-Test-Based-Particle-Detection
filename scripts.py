@@ -146,8 +146,9 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 
 	# Plotting the count of each estimated particle count as a function of separation
 
-	_, axs = plt.subplots(2, 1, figsize=(12, 7))
-	plt.sca(axs[0]) # sca: set current axis
+	# _, axs = plt.subplots(2, 1, figsize=(12, 7))
+	_, axs = plt.subplots(figsize=(12, 4))
+	# plt.sca(axs[0]) # sca: set current axis
 	for estimation in range(6):
 		plt.plot(sep_to_psf_ratios, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', color=palette[estimation])
 
@@ -158,9 +159,12 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
 	plt.grid(True)
 	plt.tight_layout()
+	plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
 	# plt.show(block=False)
+	plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation_in_psf.png')
 
-	plt.sca(axs[1]) # sca: set current axis
+	_, axs = plt.subplots(figsize=(12, 4))
+	# plt.sca(axs[1]) # sca: set current axis
 	for estimation in range(6):
 		plt.plot(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', markersize=1, color=palette[estimation])
 	plt.xlabel('Separation (px)', fontsize=14)
@@ -170,9 +174,10 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 	plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
 	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
 	plt.grid(True)
-	# plt.tight_layout()
+	plt.tight_layout()
+	plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
 	# plt.show(block=False)
-	# plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation.png')
+	plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation_in_px.png')
 
 	# surface_densities = np.array([0, 0.001, 0.01, 0.1, 1, 10])
 	radiuses = sep_to_psf_ratios * psf_float
@@ -262,9 +267,6 @@ def plot_estimate_1s():
 	plt.savefig('probability_of_estimating_2_as_1.png')
 	plt.show(block=False)
 
-
-    
-
 def plot_unresolv_prob_per_particle_vs_radius_all_psfs():
 	exp_num_overlap = {}
 	radiuses = {}
@@ -339,10 +341,9 @@ def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
 	plt.savefig('expected_overlap_pairs_per_area_vs_surface_density_all_psfs.png')
 	plt.show(block=False)
 
-def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./config_for_remote_exec/'):
+def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./config_for_remote_exec/', psfs=[0.5, 1.0, 1.5, 2.0, 3.0]):
 	
 	separations = np.arange(0.0, 7.0, 0.2)
-	psfs = [0.5, 1.0, 1.5, 2.0, 3.0]
 	for psf in psfs:
 		for sep in separations:
 			# Define the source and destination paths
@@ -358,13 +359,13 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 
 			# set the following fields
 			config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
-			config_data['code_version_date'] = '2024-07-19'
+			config_data['code_version_date'] = '2024-07-31'
 
 			# Set the fields for separation test image generation
-			config_data['separation_test_image_generation?'] = False
+			config_data['separation_test_image_generation?'] = True
 			config_data['sep_psf_sd'] = psf
 			config_data['sep_psf_ratio'] = round(sep, 2)
-			config_data['sep_image_count'] = 7500
+			config_data['sep_image_count'] = 10000
 			config_data['sep_intensity_prefactor_to_bg_level'] = 5.0
 			config_data['sep_img_width'] = 40
 			config_data['sep_bg_level'] = 500
@@ -387,11 +388,14 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
 
-create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_remote_2/')
+# create_config_files_for_separation_tests(ref_json_path='config_sep_test_remote_2/psf3_0_sep6_8.json', dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
+create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[0.5, 3.0])
 # psfs = np.array([.5, 1, 1.5, 2, 3])
+# psfs = np.array([3])
 # for psf in psfs:
-# 	process_separation_test_results(subdir='220724', prefix=f"psf{psf}".replace('.', '_'))
-# 	plt.close('all')
+# # 	# process_separation_test_results(subdir='310724', prefix=f"psf{psf}".replace('.', '_'))
+# 	process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
+	# plt.close('all')
 # pass
 # plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
 # plot_unresolv_prob_per_particle_vs_radius_all_psfs()

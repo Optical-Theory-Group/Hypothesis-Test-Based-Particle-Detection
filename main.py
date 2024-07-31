@@ -267,19 +267,22 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
     # Generate the images
     sz_original = sz
     for img_idx in range(n_total_image_count):
-        if img_idx % 100 == 0:
-            print(f"{img_idx} images generated")
+        if img_idx % 20 == 0:
+            print(f"Generating image index {img_idx}", end='\r')
         particle_intensity = bg * amp_to_bg
         angle = np.random.uniform(0, 2*np.pi)
+        # Center pos of the image - give random offset of the size of the pixel
+        center_x = sz / 2 + np.random.uniform(-.5, .5)
+        center_y = sz / 2 + np.random.uniform(-.5, .5)
         # Particle 1
-        x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
-        y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
+        x1 = center_x + separation_distance / 2 * np.cos(angle)
+        y1 = center_y + separation_distance / 2 * np.sin(angle)
 
         retry_count = 0
         while retry_count < 1000 and (x1 < -.5 * 2 * psf_sd or x1 > sz - .5 - 2 * psf_sd or y1 < -.5 * 2 * psf_sd or y1 > sz - .5 - 2 * psf_sd):
             angle = np.random.uniform(0, 2*np.pi)
-            x1 = sz / 2 + separation_distance / 2 * np.cos(angle)
-            y1 = sz / 2 + separation_distance / 2 * np.sin(angle)
+            x1 = center_x + separation_distance / 2 * np.cos(angle)
+            y1 = center_y + separation_distance / 2 * np.sin(angle)
             retry_count += 1
         
         if retry_count == 1000:
@@ -290,8 +293,8 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
         image = np.ones((sz, sz), dtype=float) * bg
         image += psfconvolution(peak_info, sz)
         # Particle 2
-        x2 = sz / 2 - separation_distance / 2 * np.cos(angle)
-        y2 = sz / 2 - separation_distance / 2 * np.sin(angle)
+        x2 = sz / 2 + separation_distance / 2 * np.cos(angle)
+        y2 = sz / 2 + separation_distance / 2 * np.sin(angle)
         peak_info = [{'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
         image += psfconvolution(peak_info, sz)
         # Add Poisson noise
@@ -377,7 +380,7 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.write(text)
         # sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_fit_results=False, display_xi_graph=False, timeout=120):
+def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout=120):
     '''Analyzes all the images in the dataset folder.'''
     # Set random seed
     np.random.seed(analysis_rand_seed)
@@ -486,7 +489,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     else:
         progress = 0
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
-            analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
+            # analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
+            analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_xi_graph=display_xi_graph)
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['image_filename']
@@ -509,22 +513,22 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             
     return log_folder #, determined_particle_intensities
 
-def process_tile(image_array, psf_sd, last_h_index, random_seed, use_exit_condi, display_fit_results=False, display_xi_graph=False):
-    # Find tentative peaks
-    tentative_peaks = get_tentative_peaks(image_array, min_distance=1)
-    rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+# def process_tile(image_array, psf_sd, last_h_index, random_seed, use_exit_condi, display_fit_results=False, display_xi_graph=False):
+#     # Find tentative peaks
+#     tentative_peaks = get_tentative_peaks(image_array, min_distance=1)
+#     rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
 
-    # Run GMRL
-    estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image_array, rough_peaks_xy=rough_peaks_xy, \
-                                                        psf_sd=psf_sd, last_h_index=last_h_index, random_seed=random_seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+#     # Run GMRL
+#     estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image_array, rough_peaks_xy=rough_peaks_xy, \
+#                                                         psf_sd=psf_sd, last_h_index=last_h_index, random_seed=random_seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
 
-    return estimated_num_particles, fit_results, test_metrics
+#     return estimated_num_particles, fit_results, test_metrics
 
 def merge_conincident_particles(image, tile_dicts_array, psf):
 
     plt.close('all')
     _, axs = plt.subplots(2, 1, figsize=(5,10))
-    markers = ['x', '+', '1', '2', '|', '_'] * 100
+    markers = ['|',  '_', '+', '1', '2', 'x',] * 100
     palette = sns.color_palette('Paired', len(tile_dicts_array.flatten()))
     plt.sca(axs[0])
     plt.imshow(image, cmap='gray')     
@@ -542,44 +546,48 @@ def merge_conincident_particles(image, tile_dicts_array, psf):
         i += 1
         
     overlap = 0
+    # abs_locations_of_unique_particles = []
     new_tile_dicts_array = tile_dicts_array.copy()
     for ref_tile_x in range(tile_dicts_array.shape[0]):
         for ref_tile_y in range(tile_dicts_array.shape[1]):
             ref_tile = tile_dicts_array[ref_tile_x][ref_tile_y]
 
-            if ref_tile_x < tile_dicts_array.shape[0] - 1:
-                compare_tile = tile_dicts_array[ref_tile_x+1][ref_tile_y] 
+            # Check the right tile first 
+            if ref_tile_x < tile_dicts_array.shape[0] - 1: # If the tile is not the rightmost tile
+                compare_tile = tile_dicts_array[ref_tile_x+1][ref_tile_y]  # Get the tile to the right
+                # Initialize the replacement information
                 replacement_info = {'ref_indices_to_del': [], 'com_indices_to_del': [], 'average_location_in_ref_frame': []}
+                # For each particle location in the reference tile
                 for ref_loc_index, relative_ref_loc in enumerate(ref_tile['particle_locations']):
+                    # For each particle location in the compare tile
                     for com_loc_index, relative_compare_loc in enumerate(compare_tile['particle_locations']):
-                        # If the distance between the two locations is less than psf, then consider them as the same particle.
+                        # Calculate the absolute locations of the particles
                         absolute_ref_loc = relative_ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
                         absolute_compare_loc = relative_compare_loc + np.array([compare_tile['x_low_end'], compare_tile['y_low_end']])
+                        # If the distance between the two locations is less than psf, then consider them as the same particle.
                         if (absolute_ref_loc[0] - absolute_compare_loc[0])**2 + (absolute_ref_loc[1] - absolute_compare_loc[1])**2 < psf**2:
                             overlap += 1
-                            # Delete the information from tile_dict_j and add the average to tile_dict_i
+                            # Add to the replacement information that the reference particle index should be deleted
                             replacement_info['ref_indices_to_del'].append(ref_loc_index)
-                            # replacement_info['com_indices_to_del'].append(com_loc_index)
-                            # average_location = np.mean([absolute_ref_loc, absolute_compare_loc], axis=0)
-                            # average_location_in_frame = average_location - np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
-                            # replacement_info['average_location_in_ref_frame'].append(average_location_in_frame)
+
+                # Create a new reference tile containing information of ref_tile except particle locations
                 new_ref_tile = ref_tile.copy()
                 new_ref_tile['particle_locations'] = []
-                # new_com_tile = compare_tile.copy()
-                # new_com_tile['particle_locations'] = []
+                # For each particle location in the reference tile
                 for i in range(len(ref_tile['particle_locations'])):
+                    # If the particle location index is not in the list of indices to delete, then add it to the new reference tile
                     if i not in replacement_info['ref_indices_to_del']:
                         new_ref_tile['particle_locations'].append(ref_tile['particle_locations'][i])
-                # for i in range(len(compare_tile['particle_locations'])):
-                #     if i not in replacement_info['com_indices_to_del']:
-                #         new_com_tile['particle_locations'].append(compare_tile['particle_locations'][i])
-                # for i in range(len(replacement_info['average_location_in_ref_frame'])):
-                #     new_ref_tile['particle_locations'].append(replacement_info['average_location_in_ref_frame'][i])
+                    # else:
+                    #     abs_locations_of_unique_particles.append(ref_tile['particle_locations'][i] + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']]))
                 ref_tile = new_ref_tile
                 new_tile_dicts_array[ref_tile_x][ref_tile_y] = ref_tile
-                # compare_tile = new_com_tile
 
+            # Check the bottom tile
             if ref_tile_y < tile_dicts_array.shape[1] - 1:
+                if ref_tile_y == tile_dicts_array.shape[1] == 2:
+                    # Breakpoint for debugging - stop here if the tile is the one up from the bottommost tile
+                    pass
                 compare_tile = tile_dicts_array[ref_tile_x][ref_tile_y+1] 
                 replacement_info = {'ref_indices_to_del': [], 'com_indices_to_del': [], 'average_location_in_ref_frame': []}
                 for ref_loc_index, relative_ref_loc in enumerate(ref_tile['particle_locations']):
@@ -591,15 +599,14 @@ def merge_conincident_particles(image, tile_dicts_array, psf):
                             overlap += 1
                             # Delete the information from tile_dict_j and add the average to tile_dict_i
                             replacement_info['ref_indices_to_del'].append(ref_loc_index)
-                            # replacement_info['com_indices_to_del'].append(com_loc_index)
-                            # replacement_info['average_location_in_ref_frame'].append(np.mean([absolute_ref_loc, absolute_compare_loc], axis=0))
                 new_ref_tile = ref_tile.copy()
                 new_ref_tile['particle_locations'] = []
-                # new_com_tile = compare_tile.copy()
-                # new_com_tile['particle_locations'] = []
                 for i in range(len(ref_tile['particle_locations'])):
                     if i not in replacement_info['ref_indices_to_del']:
                         new_ref_tile['particle_locations'].append(ref_tile['particle_locations'][i])
+                    # else:
+                    #     abs_locations_of_unique_particles.append(ref_tile['particle_locations'][i] + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']]))
+                        
                 # for i in range(len(compare_tile['particle_locations'])):
                 #     if i not in replacement_info['com_indices_to_del']:
                 #         new_com_tile['particle_locations'].append(compare_tile['particle_locations'][i])
@@ -653,7 +660,54 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
 
     sz = image.shape[0]
     if sz < tile_width + tile_stride:
-        estimated_num_particles, fit_results, test_metrics = process_tile(image, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
+
+        # Run GMRL
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, \
+                                                            psf_sd=psf_sd, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+
+        image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
+
+        # Extract xi, lli, and penalty from test_metrics
+        xi = test_metrics['xi']
+        lli = test_metrics['lli']
+        penalty = test_metrics['penalty']
+        fisher_info = test_metrics['fisher_info']
+        fit_parameters = [result['theta'] for result in fit_results]
+
+        # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
+        file_h_info = [f"{image_filename} (h{h_index})" for h_index in range(len(xi))]
+        true_counts = [actual_num_particles for _ in range(len(xi))]
+        h_numbers = [h_index for h_index in range(len(xi))]
+        selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+        determined_particle_intensities = []
+        if estimated_num_particles > 0:
+            for i in range(1, estimated_num_particles + 1):
+                determined_particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
+        determined_particle_intensities
+
+        metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
+
+        # Write the data to the CSV files
+        os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
+
+        with open(image_analysis_log_filename, 'w', newline='') as file:
+            writer = csv.writer(file)
+            # writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+            writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+            writer.writerows(metric_data)
+
+        image_analysis_results = {
+                                'actual_num_particles': actual_num_particles,
+                                'estimated_num_particles': estimated_num_particles,
+                                'image_filename': image_filename,
+                                'determined_particle_intensities': determined_particle_intensities,
+                                }
+        
+        return image_analysis_results
+
+    # estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image_array, rough_peaks_xy=rough_peaks_xy, \
+    #                                                     psf_sd=psf_sd, last_h_index=last_h_index, random_seed=random_seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+        # estimated_num_particles, fit_results, test_metrics = process_tile(image, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
     else:
         # Divide the image into tiles, following the tiling_stride.
         tile_sz = (tile_width, tile_width)
@@ -661,6 +715,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
         n_x = sz // tile_stride if sz % tile_stride == 0 else sz // tile_stride + 1
         tile_dicts_array = np.zeros((n_y, n_x), dtype=object)
         img_height, img_width = image.shape
+        tile_count = 0
         for y_index, y_low_end in enumerate(range(0, img_height, tile_stride)):
             if y_index == 8:
                 pass
@@ -670,11 +725,16 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
                     pass
                 x_high_end = min(x_low_end + tile_sz[1], img_width)
                 tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end]}
+                print(f"Loading tile {tile_count} from image {image_filename}", end='\r')
+                tile_count += 1
 
         # (x,y) or all detected particles
         # particle_locations = []
         for tile_dict in tile_dicts_array.flatten():
-            est_num_particle_tile, fit_results, _ = process_tile(tile_dict['image_slice'], psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
+            if tile_dict['y_low_end'] == 510:
+                pass
+            # est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sd, last_h_index, analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
+            est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sd, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
             # Choose the fit_result with its index matching est_num_particle_tile
             chosen_fit = fit_results[est_num_particle_tile]
             particle_locations = []
@@ -683,6 +743,40 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
                 # tile_dict['particle_locations'].append(loc)
                 particle_locations.append(loc)
             tile_dict['particle_locations'] = particle_locations
+
+            # Set the log file name for the current tile
+            tilename = f"tile_x{tile_dict['x_low_end']}-{tile_dict['x_low_end'] + tile_width}_y{tile_dict['y_low_end']}-{tile_dict['y_low_end'] + tile_width}"
+            print(f"Processing tile {tilename} in image {image_filename}", end='\r')
+
+            image_filename_base = os.path.basename(image_filename).split('.')[0]
+            tile_analysis_log_filename = f"{log_folder}/image_log/{image_filename_base}_{tilename}_analysis_log.csv"
+
+            # Extract xi, lli, and penalty from test_metrics and fit_parameters from fit_results - for this tile/generate_se
+            xi = test_metrics['xi']
+            lli = test_metrics['lli']
+            penalty = test_metrics['penalty']
+            fisher_info = test_metrics['fisher_info']
+            fit_parameters = [result['theta'] for result in fit_results]
+
+            # Create a list of tuples containing hypothesis_index, xi, lli, and penalty - for this tile
+            file_tile_h_info = [f"{image_filename} {tilename} (h{h_index})" for h_index in range(len(xi))]
+            # true_counts = [actual_num_particles for _ in range(len(xi))]
+            h_numbers = [h_index for h_index in range(len(xi))]
+            selected_bools = [1 if est_num_particle_tile == h_index else 0 for h_index in range(len(xi))]
+            determined_particle_intensities = []
+            if est_num_particle_tile > 0:
+                for i in range(1, est_num_particle_tile + 1):
+                    determined_particle_intensities.append(fit_parameters[est_num_particle_tile][i][0])
+            determined_particle_intensities
+            file_tile_metric_data = list(zip(file_tile_h_info, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
+
+            # Write the data to the CSV files
+            os.makedirs(os.path.dirname(tile_analysis_log_filename), exist_ok=True)
+            with open(tile_analysis_log_filename, 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['image_filename (h number)', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+                writer.writerows(file_tile_metric_data)
+                pass
 
         deduplicate_locations = merge_conincident_particles(image, tile_dicts_array, psf_sd)
 
@@ -697,37 +791,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
         # estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
         #                                                     psf_sd=psf_sd, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
 
-        # image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
 
-        # # Extract xi, lli, and penalty from test_metrics
-        # xi = test_metrics['xi']
-        # lli = test_metrics['lli']
-        # penalty = test_metrics['penalty']
-        # fisher_info = test_metrics['fisher_info']
-        # fit_parameters = [result['theta'] for result in fit_results]
-
-        # # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-        # file_h_info = [f"{image_filename} (h{h_index})" for h_index in range(len(xi))]
-        # true_counts = [actual_num_particles for _ in range(len(xi))]
-        # h_numbers = [h_index for h_index in range(len(xi))]
-        # selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
-        # determined_particle_intensities = []
-        # if estimated_num_particles > 0:
-        #     for i in range(1, estimated_num_particles + 1):
-        #         determined_particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
-        # determined_particle_intensities
-        # pass
-
-        # metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
-
-        # # Write the data to the CSV files
-        # os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
-
-        # with open(image_analysis_log_filename, 'w', newline='') as file:
-        #     writer = csv.writer(file)
-        #     # writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
-        #     writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
-        #     writer.writerows(metric_data)
 
         # image_analysis_results = {
         #                         'actual_num_particles': actual_num_particles,
@@ -1194,6 +1258,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                 config_content=json.dumps(config))
         # Analyze the dataset
         if config['analyze_the_dataset?']:
+            # parallel = False # Debug purpose
             log_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
                                                 code_version_date=config['code_version_date'], 
                                                 use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
@@ -1222,19 +1287,24 @@ def process(config_files_dir, parallel=False, timeout=120):
                 print('Deleting image data.')
 
 if __name__ == '__main__':
-    img_folder_path = generate_test_images(image_folder_namebase='test', code_ver='2024-07-24', n_total_image_count=1, minimum_number_of_particles=100, maximum_number_of_particles=100, 
-                                           amp_to_bg_min=5, generation_random_seed=42, amp_to_bg_max=5, amp_sd=0, psf_sd=1.0, sz=512, bg=100)
-    print("image generated")
-    image_files = glob.glob(os.path.join(img_folder_path, '*.png')) + glob.glob(os.path.join(img_folder_path, '*.tiff'))
-    image_file = image_files[0]
-    analyze_image(image_file, psf_sd=1.0, last_h_index=5, analysis_rand_seed_per_image=1, use_exit_condi=False, log_folder='runs/test_2024-07-24', display_fit_results=False, display_xi_graph=False, tile_width=40, tile_stride=30)
-    pass
+
+    sys.argv = ['main.py', '-c', './config_sep_test_scale_intensity/'] 
+    # main()
+    # pass 
+    # img_folder_path = generate_test_images(image_folder_namebase='test', code_ver='2024-07-24', n_total_image_count=1, minimum_number_of_particles=100, maximum_number_of_particles=100, 
+    #                                        amp_to_bg_min=5, generation_random_seed=42, amp_to_bg_max=5, amp_sd=0, psf_sd=1.0, sz=512, bg=100)
+    # print("image generated")
+    # image_files = glob.glob(os.path.join(img_folder_path, '*.png')) + glob.glob(os.path.join(img_folder_path, '*.tiff'))
+    # image_file = image_files[0]
+    # analyze_image(image_file, psf_sd=1.0, last_h_index=5, analysis_rand_seed_per_image=1, use_exit_condi=False, log_folder='runs/test_2024-07-24', display_xi_graph=False, tile_width=40, tile_stride=30)
+    # combine_log_files('runs/test_2024-07-24', 'test', '2024-07-24', delete_individual_files=False)
+    # pass
     
     # sys.argv = ['main.py', '-c', './config_test/'] 
     # sys.argv = ['main.py', '-c', './config_files/'] 
     # sys.argv = ['main.py', '-c', './config_scale1_test/'] 
     # sys.argv = ['main.py', '-c', './config_3/'] 
-    sys.argv = ['main.py', '-c', './config_scale_img_check/'] 
+    # sys.argv = ['main.py', '-c', './config_scale_img_check/'] 
     # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
