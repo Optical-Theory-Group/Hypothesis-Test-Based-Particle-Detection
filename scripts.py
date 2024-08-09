@@ -367,6 +367,8 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 			config_data['sep_psf_ratio'] = round(sep, 2)
 			config_data['sep_image_count'] = 10000
 			config_data['sep_intensity_prefactor_to_bg_level'] = 5.0
+			if psf == 3.0:
+				config_data['sep_intensity_prefactor_to_bg_level'] = 20.0
 			config_data['sep_img_width'] = 40
 			config_data['sep_bg_level'] = 500
 			config_data['sep_random_seed'] = 722 
@@ -382,6 +384,7 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 			config_data['ana_maximum_hypothesis_index'] = 5
 			config_data['ana_delete_the_dataset_after_analysis?'] = True 
 
+
 			# Save the modified JSON to the new file
 			os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 			with open(dest_path, 'w') as file:
@@ -389,12 +392,13 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 			print(f'Saved modified config to {dest_path}')
 
 # create_config_files_for_separation_tests(ref_json_path='config_sep_test_remote_2/psf3_0_sep6_8.json', dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
-create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[0.5, 3.0])
+# create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
+# create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_random_offset_center/', psfs=[0.5])
 # psfs = np.array([.5, 1, 1.5, 2, 3])
-# psfs = np.array([3])
-# for psf in psfs:
-# # 	# process_separation_test_results(subdir='310724', prefix=f"psf{psf}".replace('.', '_'))
-# 	process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
+psfs = np.array([0.5, 3])
+for psf in psfs:
+	# process_separation_test_results(subdir='2024-08-02', prefix=f"psf{psf}".replace('.', '_'))
+	process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
 	# plt.close('all')
 # pass
 # plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
