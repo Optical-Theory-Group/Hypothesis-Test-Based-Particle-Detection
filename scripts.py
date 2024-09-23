@@ -1,5 +1,5 @@
-import random
-from main import generate_separation_test_images
+from main import make_specific_images
+from process_algorithms import generalized_maximum_likelihood_rule_on_rgb
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
@@ -395,13 +395,33 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_random_offset_center/', psfs=[0.5])
 # psfs = np.array([.5, 1, 1.5, 2, 3])
-psfs = np.array([0.5, 3])
-for psf in psfs:
-	# process_separation_test_results(subdir='2024-08-02', prefix=f"psf{psf}".replace('.', '_'))
-	process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
-	# plt.close('all')
+# psfs = np.array([0.5, 3])
+# for psf in psfs:
+# 	process_separation_test_results(subdir='2024-08-19', prefix=f"psf{psf}".replace('.', '_'))
+# 	# process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
+# 	# plt.close('all')
+# # pass
+# # plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
+# # plot_unresolv_prob_per_particle_vs_radius_all_psfs()
+# # plot_estimate_1s()
 # pass
-# plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
-# plot_unresolv_prob_per_particle_vs_radius_all_psfs()
-# plot_estimate_1s()
+
+
+
+img_param = [
+            {'bg': [50, 40, 30], 'sz': 20, 'psf': 1},
+            {'x': 5, 'y': 5, 'intensity': [1000, 100, 10]},
+            {'x': 10, 'y': 10, 'intensity': [20, 2000, 200]},
+            {'x': 15, 'y': 15, 'intensity': [25, 250, 2500]},
+            ]
+foldername = 'specific_images'
+filename = 'count3-index0.tiff'
+random_seed = 0
+roi_image = make_specific_images(foldername, img_param, random_seed)
+fit_results = generalized_maximum_likelihood_rule_on_rgb(roi_image, img_param[0]['psf'], last_h_index=5, random_seed=0, display_fit_results=True, display_xi_graph=False, use_exit_condi=False)
+# res = analyze_image(os.path.join('./image_dataset/', foldername, filename), img_param[0]['psf'], 5, 0, './runs/specific_images', display_fit_results=True, display_xi_graph=True)
+# print(f'Actual number of particles: {res["actual_num_particles"]}')
+# print(f'Estimated number of particles: {res["estimated_num_particles"]}')
+# print(f'Determined particle intensities: {res["determined_particle_intensities"]}')
+# print(f'Metrics: {res["metrics"]}')
 pass

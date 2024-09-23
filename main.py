@@ -1,3 +1,4 @@
+import tifffile
 import ast
 import matplotlib
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -196,7 +197,33 @@ from pstats import SortKey, Stats
 
 #     return t_g, p_value
 
-def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd, n_total_image_count, psf_sd, sz, bg, generation_random_seed=42, config_content=None, minimum_number_of_particles=0):
+def make_specific_images(image_folder_namebase, img_param, random_seed=0):
+    '''Generates images with specific parameters.'''
+    # Create the folder to store the images
+    np.random.seed(random_seed)
+    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}")
+    os.makedirs(image_folder_path, exist_ok=True)
+    print(f"Generating images with specific parameters in folder {image_folder_path}.")
+
+    if len(img_param[0]['bg']) == 3: # Case rgb image
+        # Generate the images
+        image = np.ones((3, img_param[0]['sz'], img_param[0]['sz']), dtype=float) 
+        for i in range(3):
+            image[i] *= img_param[0]['bg'][i]
+
+        for i in range(1, len(img_param)):
+            peak_info = {'x': img_param[i]['x'], 'y': img_param[i]['y'], 'prefactor': img_param[i]['intensity'], 'psf_sd': img_param[0]['psf']}
+            image += psfconvolution(peak_info, img_param[0]['sz'])
+    else: 
+        print('Case: gray scale image not implemented yet.')
+    # Add Poisson noise
+    image = np.random.poisson(image).astype(np.uint16)
+    # tifffile.imwrite(os.path.join(image_folder_path, img_filename), image, dtype=np.uint8)
+
+    return image
+
+
+def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd=0, n_total_image_count=1, psf_sd=1, sz=20, bg=1, generation_random_seed=42, config_content=None, minimum_number_of_particles=0):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -215,32 +242,51 @@ def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_part
 
     for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
         for img_idx in range(number_of_images_per_count):
-            image = np.ones((sz, sz), dtype=float) * bg
-            chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
-            for _ in range(n_particles):
+            # Initialize the image and the chosen mean intensity(s)
+            if isinstance(amp_to_bg_max, (int, float)): # Case : gray scale
+                image = np.ones((sz, sz), dtype=float) * bg
+                chosen_mean_intensity = (np.random.rand() * (amp_to_bg_max - amp_to_bg_min) + amp_to_bg_min) * bg
+            else: # Case : rgb
+                assert(len(amp_to_bg_max) == len(amp_to_bg_min) == len(bg) == 3)
+                image = [np.ones((sz, sz), dtype=float) * bg[i] for i in range(3)]
+                chosen_mean_intensities = [(np.random.rand() * (amp_to_bg_max[i] - amp_to_bg_min[i]) + amp_to_bg_min[i]) * bg[i] for i in range(3)]
 
-                # This is setting for wider possible area. 
+            for _ in range(n_particles):
+                # Randomly draw the position of the particle, avoiding the edges of the image
                 x = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
                 y = np.random.rand() * (sz - psf_sd * 4) + psf_sd * 2 - 0.5
+
+                # Below is randomly drawing from the entire image area (does not regard the problem of the edge)
                 # x = np.random.rand() * sz - 0.5 # The center of the leftmost pixel is 0. Thus, the possible position starts from -0.5. The center of the rightmost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
                 # y = np.random.rand() * sz - 0.5 # The center of the topmost pixel is 0. Thus, the possible position starts from -0.5. The center of the bottommost pixel is sz - 0.5. Thus, the possible position ends at sz - 0.5.
 
-                # This is setting for narrower possible area.
-                # x = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
-                # y = np.random.rand() * (sz - psf_sd * 6) + psf_sd * 3 - 0.5
+                # Randomly draw the relative intensity of the particle (mean: 1, std: amp_sd)
+                if isinstance(amp_to_bg_max, (int, float)): # Case : gray scale
+                    relative_intensity = np.random.normal(1, amp_sd)
+                    if relative_intensity < relative_intensity_min:
+                        relative_intensity = relative_intensity_min
+                        print('Warning: Randomly drawn particle intensity is less than 0.1 * "expected intensity". Forcing it to be 0.1 * "expected intensity"')
 
-                relative_intensity = np.random.normal(1, amp_sd)
-                if relative_intensity < relative_intensity_min:
-                    relative_intensity = relative_intensity_min
-                    print('Warning: Randomly drawn particle intensity is less than 0.1 * "expected intensity". Forcing it to be 0.1 * "expected intensity"')
-                amplitude = relative_intensity * chosen_mean_intensity
-                peak_info = [{'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}]
+                    amplitude = relative_intensity * chosen_mean_intensity
+                    peak_info = {'x': x, 'y': y, 'prefactor': amplitude, 'psf_sd': psf_sd}
+
+                else: # Case : rgb
+                    relative_intensities = np.array([np.random.normal(1, amp_sd[i]) for i in range(3)])
+                    if np.any(relative_intensities < relative_intensity_min):
+                        print('Warning: Randomly drawn particle intensity is less than 0.1 * "expected intensity". Forcing it to be 0.1 * "expected intensity"')
+                        relative_intensities[relative_intensities < relative_intensity_min] = relative_intensity_min
+
+                    amplitudes = [relative_intensities[i] * chosen_mean_intensities[i] for i in range(3)]
+                    peak_info = {'x': x, 'y': y, 'prefactor': amplitudes, 'psf_sd': psf_sd}
+
                 image += psfconvolution(peak_info, sz)
             # Add Poisson noise
-            image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
+            # image = np.random.poisson(image, size=(image.shape)).astype(np.uint16) # This is the resulting (given) image.
+            image = np.random.poisson(image).astype(np.uint16) # This is the resulting (given) image.
             img_filename = f"count{n_particles}-index{img_idx}.tiff"
-            pil_image = im.fromarray(image.astype(np.uint16))
-            pil_image.save(os.path.join(image_folder_path, img_filename))
+            if image.ndim == 3 and image.shape[0] == 3:
+                image = np.transpose(image, (1, 2, 0))
+            tifffile.imwrite(os.path.join(image_folder_path, img_filename), image, dtype=np.uint16)
     
     # Save the content of the config file
     if config_content is not None:
@@ -381,7 +427,7 @@ def update_progress(progress, status='', barlength=20):
         # sys.stdout.write(text)
         # sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=True, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout=120):
+def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=False, last_h_index=7, psf_sd=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout=120):
     '''Analyzes all the images in the dataset folder.'''
     # Set random seed
     np.random.seed(analysis_rand_seed)
@@ -445,7 +491,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         # Analyze the images in parallel using ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
-            futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, )
+            futures = [executor.submit(analyze_image, filename, psf_sd, last_h_index, analysis_rand_seed_per_image, log_folder, use_exit_condi=use_exit_condi )
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
             progress = 0
             # Write the results to the main log file
@@ -490,8 +536,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     else:
         progress = 0
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
-            # analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
-            analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, use_exit_condi, log_folder, display_xi_graph=display_xi_graph)
+            analysis_result = analyze_image(filename, psf_sd, last_h_index, analysis_rand_seed_per_image, log_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['image_filename']
@@ -647,7 +692,7 @@ def merge_conincident_particles(image, tile_dicts_array, psf):
 
 
 
-def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_image, log_folder, display_fit_results=False, display_xi_graph=False, tile_width=40, tile_stride=30):
+def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_image, log_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30):
     # Print the name of the image file
     image = np.array(im.open(image_filename))
 
@@ -663,11 +708,11 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
     actual_num_particles = int(num_particles)
 
     sz = image.shape[0]
-    if sz < tile_width + tile_stride:
+    if sz < tile_width + tile_stride: # If the image is smaller than the tile size, then process the whole image (no need to divide into tiles)
 
         # Run GMRL
         estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, \
-                                                            psf_sd=psf_sd, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph,) 
+                                                            psf_sd=psf_sd, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
 
         image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
 
@@ -705,6 +750,7 @@ def analyze_image(image_filename, psf_sd, last_h_index, analysis_rand_seed_per_i
                                 'estimated_num_particles': estimated_num_particles,
                                 'image_filename': image_filename,
                                 'determined_particle_intensities': determined_particle_intensities,
+                                'metric_data': metric_data
                                 }
         
         return image_analysis_results
@@ -1156,7 +1202,6 @@ def process(config_files_dir, parallel=False, timeout=120):
 
     for i, config_file in enumerate(config_files):
         print(f"Processing {config_file} ({i+1}/{len(config_files)})")
-        print(config_file)
         try:
             with open(os.path.join(config_files_dir, config_file), 'r') as f:
                 config = json.load(f)
@@ -1328,7 +1373,8 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_3/'] 
     # sys.argv = ['main.py', '-c', './config_/'] 
     # sys.argv = ['main.py', '-c', './config_/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './config_/']
+    sys.argv = ['main.py', '-c', './config_files/']
+    # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"

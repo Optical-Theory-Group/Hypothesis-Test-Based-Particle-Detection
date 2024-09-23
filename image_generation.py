@@ -10,17 +10,14 @@ parula = nmmn.plots.parulacmap()
 def psfconvolution(peak_info, image_width=512):
     """returns the pixel values to be added to the image based on psf convolution."""
 
-    output = np.zeros((image_width, image_width))
-    for j in range(image_width):
-        for i in range(image_width):
-            for peak in peak_info:
-                x, y, prefactor, psf_sd = peak['x'], peak['y'], peak['prefactor'], peak['psf_sd']
-                # integrate the normalized psf over the pixel area for both dimensions
-                integral_x = integrate_gauss_1d(i, x, psf_sd)
-                integral_y = integrate_gauss_1d(j, y, psf_sd)
-                # calculate the pixel value as the product of the 1d integrals in x and y, scaled by the multiplying constant
-                pixel_contribution = prefactor * integral_x * integral_y
-                output[j, i] += pixel_contribution
+    integral_x = integrate_gauss_1d(np.arange(image_width), peak_info['x'], peak_info['psf_sd'])
+    integral_y = integrate_gauss_1d(np.arange(image_width), peak_info['y'], peak_info['psf_sd'])
+
+    if isinstance(peak_info['prefactor'], (int, float)): # Case grayscale image
+        output = np.outer(integral_y, integral_x) * peak_info['prefactor']
+    else: # Case RGB image
+        output = np.array([np.outer(integral_y, integral_x) * peak_info['prefactor'][i] for i in range(3)])
+
     return output  
 
 def lowfreq_background(image_width, x_freq, y_freq, amplitude=100, phase=0):
