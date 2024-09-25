@@ -1,11 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import cv2
+# import cv2
 import random
-import nmmn.plots
+# import nmmn.plots
 from process_algorithms import integrate_gauss_1d
 
-parula = nmmn.plots.parulacmap()
+# parula = nmmn.plots.parulacmap()
 
 def psfconvolution(peak_info, image_width=512):
     """returns the pixel values to be added to the image based on psf convolution."""
@@ -44,23 +44,23 @@ def lowfreq_background(image_width, x_freq, y_freq, amplitude=100, phase=0):
 
     return outputimg
 
-def apply_vignette(image, strength=0.5, vignette_factor_min=0.5):
-    # Assumes `image` is a grayscale image (2D numpy array)
-    rows, cols = image.shape
+# def apply_vignette(image, strength=0.5, vignette_factor_min=0.5):
+#     # Assumes `image` is a grayscale image (2D numpy array)
+#     rows, cols = image.shape
 
-    # Create a vignette mask using Gaussian kernels
-    kernel_x = cv2.getGaussianKernel(cols, cols/4)
-    kernel_y = cv2.getGaussianKernel(rows, rows/4)
-    kernel = kernel_y * kernel_x.T
-    mask = kernel / np.linalg.norm(kernel)
-    mask = cv2.GaussianBlur(mask, (0, 0), strength*cols/4)
-    # Normalize mask to range from 0.5 to 1
-    rescaled_mask = (mask - np.min(mask)) / (np.max(mask) - np.min(mask)) * (1 - vignette_factor_min) + vignette_factor_min
+#     # Create a vignette mask using Gaussian kernels
+#     kernel_x = cv2.getGaussianKernel(cols, cols/4)
+#     kernel_y = cv2.getGaussianKernel(rows, rows/4)
+#     kernel = kernel_y * kernel_x.T
+#     mask = kernel / np.linalg.norm(kernel)
+#     mask = cv2.GaussianBlur(mask, (0, 0), strength*cols/4)
+#     # Normalize mask to range from 0.5 to 1
+#     rescaled_mask = (mask - np.min(mask)) / (np.max(mask) - np.min(mask)) * (1 - vignette_factor_min) + vignette_factor_min
 
-    # Apply the mask to the image
-    vignetted_image = image * rescaled_mask
+#     # Apply the mask to the image
+#     vignetted_image = image * rescaled_mask
 
-    return vignetted_image
+#     return vignetted_image
 
 def neighboring_position(positions, distance=.5):
     # Randomly select a position

@@ -223,7 +223,7 @@ def make_specific_images(image_folder_namebase, img_param, random_seed=0):
     return image
 
 
-def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd=0, n_total_image_count=1, psf_sd=1, sz=20, bg=1, generation_random_seed=42, config_content=None, minimum_number_of_particles=0):
+def generate_test_images(image_folder_namebase, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd=0, n_total_image_count=1, psf_sd=1, sz=20, bg=1, generation_random_seed=42, config_content=None, minimum_number_of_particles=0):
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -237,7 +237,7 @@ def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_part
     print(f'Image save destination: ./image_dataset/{image_folder_namebase}.')
 
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}_code_ver{code_ver}") 
+    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}") 
     os.makedirs(image_folder_path, exist_ok=True)
 
     for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
@@ -296,7 +296,7 @@ def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_part
 
     return image_folder_path
 
-def generate_separation_test_images(image_folder_namebase='separation_test', code_ver='', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
+def generate_separation_test_images(image_folder_namebase='separation_test', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
 
     separation_distance = sep_distance_ratio_to_psf_sigma * psf_sd
     if separation_distance > sz:
@@ -306,7 +306,7 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
     # Create the folder to store the images
     psf_str = f"{psf_sd:.1f}".replace('.', '_')
     sep_str = f"{sep_distance_ratio_to_psf_sigma:.1f}".replace('.', '_')
-    image_folder_path = f"./image_dataset/{image_folder_namebase}_code_ver{code_ver}"
+    image_folder_path = f"./image_dataset/{image_folder_namebase}"
     os.makedirs(image_folder_path, exist_ok=True)
     print(f'Generating {n_total_image_count} images with psf {psf_sd} and separation {sep_str} times the psf in folder {image_folder_path}.')
 
@@ -336,13 +336,13 @@ def generate_separation_test_images(image_folder_namebase='separation_test', cod
             print(f"Warning: Particles could not be fitted inside the image. The separation and the psf are probably too large. {img_idx} will be skipped.")
             continue
 
-        peak_info = [{'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
+        peak_info = {'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sd': psf_sd}
         image = np.ones((sz, sz), dtype=float) * bg
         image += psfconvolution(peak_info, sz)
         # Particle 2
         x2 = center_x - separation_distance / 2 * np.cos(angle)
         y2 = center_y - separation_distance / 2 * np.sin(angle)
-        peak_info = [{'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sd': psf_sd}]
+        peak_info = {'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sd': psf_sd}
         image += psfconvolution(peak_info, sz)
         # Add Poisson noise
         image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
@@ -1289,7 +1289,7 @@ def process(config_files_dir, parallel=False, timeout=120):
         # Generate separation test images
         if config['separation_test_image_generation?']:
             generate_separation_test_images(image_folder_namebase=config['image_folder_namebase'], 
-                                            code_ver=config['code_version_date'],
+                                            # code_ver=config['code_version_date'],
                                             sep_distance_ratio_to_psf_sigma = config['sep_distance_ratio_to_psf_sigma'],
                                             n_total_image_count=config['sep_image_count'],
                                             amp_to_bg=config['sep_intensity_prefactor_to_bg_level'], 
@@ -1302,7 +1302,7 @@ def process(config_files_dir, parallel=False, timeout=120):
 
         elif config['genereate_regular_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
-                                code_ver=config['code_version_date'],
+                                # code_ver=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
                                 minimum_number_of_particles=config['gen_minimum_particle_count'], 
                                 maximum_number_of_particles=config['gen_maximum_particle_count'], 
@@ -1373,8 +1373,8 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_3/'] 
     # sys.argv = ['main.py', '-c', './config_/'] 
     # sys.argv = ['main.py', '-c', './config_/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './config_files/']
-    # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './config_files/']
+    sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
