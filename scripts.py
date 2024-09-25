@@ -363,7 +363,7 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 
 			# Set the fields for separation test image generation
 			config_data['separation_test_image_generation?'] = True
-			config_data['sep_psf_sd'] = psf
+			config_data['sep_psf_sigma'] = psf
 			config_data['sep_psf_ratio'] = round(sep, 2)
 			config_data['sep_image_count'] = 10000
 			config_data['sep_intensity_prefactor_to_bg_level'] = 5.0

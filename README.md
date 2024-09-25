@@ -21,20 +21,20 @@ or
     "code_version_date": "",</br>
 </br>
     "separation_test_image_generation?": false,</br>
-    "sep_distance": 5.3,</br>
+    "sep_distance_ratio_to_psf_sigma": 5.3,</br>
     "sep_image_count": 24,</br>
     "sep_intensity_prefactor_to_bg_level": 5.0,</br>
-    "sep_psf_sd": 2.0,</br>
+    "sep_psf_sigma": 2.0,</br>
     "sep_img_width": 40,</br>
     "sep_bg_level": 500,</br>
     "sep_random_seed": 0,</br>
 </br>
-    "generate_the_dataset?": true,</br>
+    "generate_regular_dataset?": true,</br>
     "gen_random_seed": 0,</br>
     "gen_total_image_count": 11,</br>
     "gen_minimum_particle_count": 0,</br>
     "gen_maximum_particle_count": 5,</br>
-    "gen_psf_sd": 1,</br>
+    "gen_psf_sigma": 1,</br>
     "gen_img_width": 26,</br>
     "gen_bg_level": 500,</br>
     "gen_intensity_prefactor_to_bg_level_ratio_min": 5,</br>
@@ -43,7 +43,7 @@ or
 </br>
     "analyze_the_dataset?": true,</br>
     "ana_random_seed": 0,</br>
-    "ana_predefined_psf_sd": 1,</br>
+    "ana_predefined_psf_sigma": 1,</br>
     "ana_use_premature_hypothesis_choice?": false,</br>
     "ana_maximum_hypothesis_index": 5,</br>
     "ana_delete_the_dataset_after_analysis?": true</br>

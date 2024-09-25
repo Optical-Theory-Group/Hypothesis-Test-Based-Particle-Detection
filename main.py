@@ -296,16 +296,16 @@ def generate_test_images(image_folder_namebase, code_ver, maximum_number_of_part
 
     return image_folder_path
 
-def generate_separation_test_images(image_folder_namebase='separation_test', code_ver='', sep_psf_ratio=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
+def generate_separation_test_images(image_folder_namebase='separation_test', code_ver='', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
 
-    separation_distance = sep_psf_ratio * psf_sd
+    separation_distance = sep_distance_ratio_to_psf_sigma * psf_sd
     if separation_distance > sz:
         raise ValueError(f"Separation {separation_distance} is greater than the size of the image {sz}.")
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Create the folder to store the images
     psf_str = f"{psf_sd:.1f}".replace('.', '_')
-    sep_str = f"{sep_psf_ratio:.1f}".replace('.', '_')
+    sep_str = f"{sep_distance_ratio_to_psf_sigma:.1f}".replace('.', '_')
     image_folder_path = f"./image_dataset/{image_folder_namebase}_code_ver{code_ver}"
     os.makedirs(image_folder_path, exist_ok=True)
     print(f'Generating {n_total_image_count} images with psf {psf_sd} and separation {sep_str} times the psf in folder {image_folder_path}.')
@@ -1214,13 +1214,13 @@ def process(config_files_dir, parallel=False, timeout=120):
                 required_fields_for_separation_test = ['separation_test_image_generation?', 
                                                        'sep_image_count', 
                                                        'sep_intensity_prefactor_to_bg_level', 
-                                                       'sep_psf_sd', 
-                                                       'sep_psf_ratio', 
+                                                       'sep_psf_sigma', 
+                                                       'sep_distance_ratio_to_psf_sigma', 
                                                        'sep_img_width', 
                                                        'sep_bg_level', 
                                                        'sep_random_seed']
 
-                required_fields_for_generation = ['generate_the_dataset?', 
+                required_fields_for_generation = ['genereate_regular_dataset?', 
                                                   'gen_random_seed', 
                                                   'gen_total_image_count', 
                                                   'gen_psf_sd', 
@@ -1234,7 +1234,7 @@ def process(config_files_dir, parallel=False, timeout=120):
 
                 required_fields_for_analysis = ['analyze_the_dataset?', 
                                                 'ana_random_seed', 
-                                                'ana_predefined_psf_sd', 
+                                                'ana_predefined_psf_sigma', 
                                                 'ana_use_premature_hypothesis_choice?', 
                                                 'ana_maximum_hypothesis_index']
 
@@ -1261,7 +1261,7 @@ def process(config_files_dir, parallel=False, timeout=120):
 
                 if config['separation_test_image_generation?']:
                     required_fields += required_fields_for_separation_test
-                elif config['generate_the_dataset?']:
+                elif config['genereate_regular_dataset?']:
                     required_fields += required_fields_for_generation
                 elif config['analyze_the_dataset?']:
                     required_fields += required_fields_for_analysis
@@ -1272,8 +1272,8 @@ def process(config_files_dir, parallel=False, timeout=120):
                         if config['separation_test_image_generation?'] and field.startswith('sep'):
                             print(f"Error: '{field}' should be set for separation test image generation.")
                             exit()
-                        # If config['generate_the_dataset?'] is True, then all fields starting with 'gen' are required.
-                        if config['generate_the_dataset?'] and field.startswith('gen'):
+                        # If config['genereate_regular_dataset?'] is True, then all fields starting with 'gen' are required.
+                        if config['genereate_regular_dataset?'] and field.startswith('gen'):
                             print(f"Error: '{field}' should be set for image generation.")
                             exit()
                         # If config['analyze_the_dataset?'] is True, then all fields starting with 'analysis' are required.
@@ -1290,17 +1290,17 @@ def process(config_files_dir, parallel=False, timeout=120):
         if config['separation_test_image_generation?']:
             generate_separation_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                             code_ver=config['code_version_date'],
-                                            sep_psf_ratio = config['sep_psf_ratio'],
+                                            sep_distance_ratio_to_psf_sigma = config['sep_distance_ratio_to_psf_sigma'],
                                             n_total_image_count=config['sep_image_count'],
                                             amp_to_bg=config['sep_intensity_prefactor_to_bg_level'], 
-                                            psf_sd=config['sep_psf_sd'], 
+                                            psf_sd=config['sep_psf_sigma'], 
                                             sz=config['sep_img_width'], 
                                             bg=config['sep_bg_level'], 
                                             generation_random_seed=config['sep_random_seed'], 
                                             config_content=json.dumps(config)
                                             )
-        # Generate the dataset 
-        elif config['generate_the_dataset?']:
+
+        elif config['genereate_regular_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                 code_ver=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
@@ -1322,7 +1322,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                                 use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
                                                 last_h_index=config['ana_maximum_hypothesis_index'], 
                                                 analysis_rand_seed=config['ana_random_seed'], 
-                                                psf_sd=config['ana_predefined_psf_sd'], 
+                                                psf_sd=config['ana_predefined_psf_sigma'], 
                                                 config_content=json.dumps(config), 
                                                 parallel=parallel, 
                                                 timeout=timeout)
