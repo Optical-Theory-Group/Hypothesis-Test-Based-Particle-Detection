@@ -46,7 +46,7 @@ or
     "ana_predefined_psf_sigma": 1,</br>
     "ana_use_premature_hypothesis_choice?": false,</br>
     "ana_maximum_hypothesis_index": 5,</br>
-    "ana_delete_the_dataset_after_analysis?": true</br>
+    "Ana_delete_the_dataset_after_analysis?": true</br>
 }</br>
 
 ## Outputs

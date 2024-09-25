@@ -1223,7 +1223,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                 required_fields_for_generation = ['genereate_regular_dataset?', 
                                                   'gen_random_seed', 
                                                   'gen_total_image_count', 
-                                                  'gen_psf_sd', 
+                                                  'gen_psf_sigma', 
                                                   'gen_img_width', 
                                                   'gen_minimum_particle_count', 
                                                   'gen_maximum_particle_count', 
@@ -1310,7 +1310,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                 amp_to_bg_max=config['gen_intensity_prefactor_to_bg_level_ratio_max'], 
                                 amp_sd=config['gen_intensity_prefactor_coefficient_of_variation'], 
                                 
-                                psf_sd=config['gen_psf_sd'], sz=config['gen_img_width'], 
+                                psf_sd=config['gen_psf_sigma'], sz=config['gen_img_width'], 
                                 bg=config['gen_bg_level'], 
                                 generation_random_seed=config['gen_random_seed'], 
                                 config_content=json.dumps(config))
