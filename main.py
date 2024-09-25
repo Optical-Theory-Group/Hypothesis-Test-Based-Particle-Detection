@@ -1,4 +1,5 @@
-import tifffile
+import imageio
+# import tifffile
 import ast
 import matplotlib
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -223,7 +224,15 @@ def make_specific_images(image_folder_namebase, img_param, random_seed=0):
     return image
 
 
-def generate_test_images(image_folder_namebase, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd=0, n_total_image_count=1, psf_sd=1, sz=20, bg=1, generation_random_seed=42, config_content=None, minimum_number_of_particles=0):
+def generate_test_images(image_folder_namebase, maximum_number_of_particles, amp_to_bg_min, amp_to_bg_max, amp_sd=0, n_total_image_count=1, psf_sd=1, sz=20, bg=1, generation_random_seed=42, config_content=None, minimum_number_of_particles=0, format='tiff'):
+    if config_content:
+        config = json.loads(config_content)
+        if 'file_format' in config:
+            format = config['file_format']
+
+    if format not in ['tiff', 'png']:
+        raise ValueError("Format must be either 'tiff' or 'png'.")
+
     # Set the random seed
     np.random.seed(generation_random_seed)
     # Set the minimum relative intensity of a particle
@@ -283,10 +292,13 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, amp
             # Add Poisson noise
             # image = np.random.poisson(image, size=(image.shape)).astype(np.uint16) # This is the resulting (given) image.
             image = np.random.poisson(image).astype(np.uint16) # This is the resulting (given) image.
-            img_filename = f"count{n_particles}-index{img_idx}.tiff"
+            img_filename = f"count{n_particles}-index{img_idx}.{format}"
             if image.ndim == 3 and image.shape[0] == 3:
                 image = np.transpose(image, (1, 2, 0))
-            tifffile.imwrite(os.path.join(image_folder_path, img_filename), image, dtype=np.uint16)
+
+            imageio.imwrite(img_filename, image)
+
+            # tifffile.imwrite(os.path.join(image_folder_path, img_filename), image, dtype=np.uint16)
     
     # Save the content of the config file
     if config_content is not None:
@@ -296,7 +308,15 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, amp
 
     return image_folder_path
 
-def generate_separation_test_images(image_folder_namebase='separation_test', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None):
+def generate_separation_test_images(image_folder_namebase='separation_test', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sd=1, sz=20, bg=500, generation_random_seed=42, config_content=None, format='tiff'):
+    if config_content:
+        config = json.loads(config_content)
+        if 'file_format' in config:
+            format = config['file_format']
+
+    if format not in ['tiff', 'png']:
+        raise ValueError("Format must be either 'tiff' or 'png'.")
+
 
     separation_distance = sep_distance_ratio_to_psf_sigma * psf_sd
     if separation_distance > sz:
@@ -346,7 +366,7 @@ def generate_separation_test_images(image_folder_namebase='separation_test', sep
         image += psfconvolution(peak_info, sz)
         # Add Poisson noise
         image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
-        img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.tiff"
+        img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.{format}"
         pil_image = im.fromarray(image.astype(np.uint16))
         pil_image.save(os.path.join(image_folder_path, img_filename))
 
@@ -451,6 +471,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             raise ValueError(f"No folder starting with '{image_folder_namebase}' found in '{base_dir}'.")
 
     print(f"Note: The program is working with {images_folder} which is close to the user input {original_images_folder}. **")
+    # Read all png and tiff files
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
@@ -514,7 +535,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                         determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                         writer = csv.writer(f)
-                        writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                        writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                         if actual_num_particles == estimated_num_particles:
                             statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
@@ -544,7 +565,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
 
             with open(label_prediction_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
-                writer.writerow([input_image_file + ".tiff", actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                 statusmsg = f'{image_folder_namebase} '
                 if actual_num_particles == estimated_num_particles:
@@ -1373,8 +1394,8 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_3/'] 
     # sys.argv = ['main.py', '-c', './config_/'] 
     # sys.argv = ['main.py', '-c', './config_/', '-p', 'True']
-    # sys.argv = ['main.py', '-c', './config_files/']
-    sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
+    sys.argv = ['main.py', '-c', './config_files/']
+    # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
     # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
