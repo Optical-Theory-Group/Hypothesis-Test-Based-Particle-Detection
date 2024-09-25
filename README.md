@@ -20,8 +20,6 @@ or
     "image_folder_namebase": "general_test",</br>
     "code_version_date": "",</br>
 </br>
-    "file_format": "png",</br>
-</br>
     "separation_test_image_generation?": false,</br>
     "sep_distance_ratio_to_psf_sigma": 5.3,</br>
     "sep_image_count": 24,</br>
