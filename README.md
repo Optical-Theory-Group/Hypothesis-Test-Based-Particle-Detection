@@ -1,8 +1,8 @@
-# Particle Counting via Hypothesis Testing
+# Hypothesis Test-Based Particle Detection
 
 ## Description
 
-- This project generates and runs simulated nanoparticle assay images and perform hypothesis testing to count the number of particles in the image using detection theory. 
+- This project generates and runs simulated nanoparticle assay images and perform hypothesis tests to detect particles in the image using information theory. 
 - Currently, it is using GMLR (generalized maximum likelihood rule) to decide the number of particles.
 
 ## How to run
@@ -55,44 +55,19 @@ or
 
 ### Generated Images
 
-- The script will generate, if dictated by the config file, dataset images into image_dataset\{dataset_name}\.
-- dataset_name is set inside the config file used. 
-- File name: img{index}_{actual_number_of_particles}particles.tiff
+- The script will generate, if dictated by the config file, images into image_dataset\{image_folder_namebase}_{code_version_date}\.
+- image_folder_namebase is set inside the config file used. 
+- Inside the folder, images will be generated with name format "count{num_particles}_index{index_num}.tiff"
+- config_used.json file will be also generated.
 
-### Analysis Results
+### Analysis Result
 
-- The script will generate, if dictated by the config file, analysis results inside runs\{dataset_name}_{run_name}\.
-- dataset_name and run_name are set inside the config file used. 
-
-#### Confusion Matrix
-
-- The confusion matrix (actual number of particles vs estimated number of particles) is built from the test results and saved inside runs\{dataset_name}_{run_name}\.
-- File name: actual_vs_counted.csv
-- The file has the following columns:
-1. `Actual Particle Number`: The actual number of particles in the image. This is extracted from the filename of the image.
-2. `Estimated Particle Number`: The number of particles estimated by the script. This is calculated by the script based on the image analysis.
-
-This log file is useful for comparing the performance of the script in estimating the number of particles in different images. It can help you understand how accurate the script is and identify any images where the script's estimates are significantly different from the actual number of particles.
-
-Here's an example of how the log file might look:
-
-| Actual Particle Number | Estimated Particle Number |
-|------------------------|---------------------------|
-| 4                      | 3                         |
-| 1                      | 1                         |
-....
-
-#### Configuration Used
-
-- The configuration used for the run is saved inside runs\{dataset_name}_{run_name}\.
-- File name: config_used.json
-
-#### Test Scores
-
-- The test scores (Xi, Loglikelihood, Penalty metric) are saved in runs\{dataset_name}_{run_name}\image_log\.
-- File name: {image_name}_scores.csv
-
-#### Fit Results
-
-- The fitting results (parameters) are saved in runs\{dataset_name}_{run_name}\image_log\.
-- File name: {image_name}_fittings.csv
+- The script will generate, if dictated by the config file, analysis results inside runs\{image_folder_namebase}_{code_version_date}\.
+- image_folder_namebase and code_version_date are set inside the config file used.
+- The following files will be created with the same prefix ({image_folder_namebase}_{code_version_date}):
+    1. (prefix)_config_used.json (self explanatory file name)
+    2. (prefix)_confusion_mat.csv (self explanatory file name)
+    3. (prefix)_confusion_mat.png (self explanatory file name)
+    4. (prefix)_label_prediction_log.csv (each line records the actual number of particles in the image (i.e., label) and the number algorithm determined (i.e., prediction))
+    5. (prefix)_metric_log_per_image_hypothesis.csv (records all metrics for each hypothesis test done on each image)
+    6. (prefix)_scores.csv (records the log likelihood, penalty, and the final xi scores)
