@@ -35,10 +35,19 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     Parameters:
         image_folder_namebase (str): The name of the folder to store the images.
         maximum_number_of_particles (int): The maximum number of particles in the image.
-        amp_to_bg_min (int): Minimum amplitude to background ratio.
-        amp_to_bg_max (int): Maximum amplitude to background ratio.
-        amp_sd (float): Standard deviation of the amplitude.
-
+        particle_intensity_mean (int or float): The mean intensity of the particles.
+        particle_intensity_sd (int or float): The standard deviation of the particle intensity. Default is 0.
+        n_total_image_count (int): The total number of images to be generated.
+        psf_sigma (float): The sigma (width) of the point spread function.
+        sz (int): The size of the image. Both width and height are the same.
+        bg (int): The background intensity of the image.
+        generation_random_seed (int): The random seed for generating the images.
+        config_content (str): The content of the config file.
+        minimum_number_of_particles (int): The minimum number of particles in the image. Default is 0.
+        file_format (str): The format of the image file. Default is 'tiff'.
+        
+    Returns:
+        str: The path of the folder containing the images
     """
 
     # Load the config file 
@@ -59,7 +68,7 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
-    print(f'Total number of images generated from this config is {number_of_images_per_count * number_of_counts}. Note that this number may be slightly higher than the total number of images requested.')
+    print(f'Image generation complete (total: {number_of_images_per_count * number_of_counts}). Note that this may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
     print(f'Image save destination: ./image_dataset/{image_folder_namebase}.')
 
     # Create the folder to store the images
@@ -68,10 +77,10 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
 
     # Determine the color mode of the image (gray or rgb)
     color_mode = ''
-    if len(particle_intensity_mean) == len(particle_intensity_sd) == len(bg) == 3: # Case : rgb
-        color_mode = 'rgb' 
-    elif isinstance(particle_intensity_mean, (int, float)): # Case : gray scale
+    if isinstance(particle_intensity_mean, (int, float)): # Case : gray scale
         color_mode = 'gray'
+    elif len(particle_intensity_mean) == len(particle_intensity_sd) == len(bg) == 3: # Case : rgb
+        color_mode = 'rgb' 
     else:
         raise ValueError("The color mode of the image is not recognized. Please check the following variables: particle_intensity_mean, particle_intensity_sd, and bg.")
 
@@ -105,17 +114,20 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
                     # Create peak info dictionary
                     peak_info = {'x': x, 'y': y, 'prefactor': particle_intensities, 'psf_sigma': psf_sigma}
 
-                # Convolve the psf with the particle position and add it to the image
+                # Add the point spread function of the particle to the image
                 image += psfconvolution(peak_info, sz)
 
             # Add Poisson noise
             image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
-            img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
+
+            # Adjust the shape of the image to match that of png or tiff
             if image.ndim == 3 and image.shape[0] == 3:
                 image = np.transpose(image, (1, 2, 0))
 
             # Save the image
-            imageio.imwrite(img_filename, image)
+            img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
+            img_filepath = os.path.join(image_folder_path, img_filename)
+            imageio.imwrite(img_filepath, image)
     
     # Save the content of the config file
     if config_content is not None:
@@ -128,66 +140,110 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
 
 def generate_separation_test_images(image_folder_namebase='separation_test', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sigma=1, 
                                     sz=20, bg=500, generation_random_seed=42, config_content=None, file_format='tiff'):
+    """ Generate test images with two particles separated by a distance of sep_distance_ratio_to_psf_sigma times the psf sigma.
+        RGB images are not supported in this function.
+    
+    Parameters:
+        image_folder_namebase (str): The name of the folder to store the images.
+        sep_distance_ratio_to_psf_sigma (int or float): The ratio of the separation distance to the psf sigma.
+        n_total_image_count (int): The total number of images to be generated.
+        amp_to_bg (int or float): The amplitude of the particles relative to the background.
+        psf_sigma (float): The sigma (width) of the point spread function.
+        sz (int): The size of the image. Both width and height are the same.
+        bg (int): The background intensity of the image.
+        generation_random_seed (int): The random seed for generating the images.
+        config_content (str): The content of the config file.
+        file_format (str): The format of the image file. Default is 'tiff'.
+        
+    Returns:
+        str: The path of the folder containing the images
+    """                            
+    # Load the config file
     if config_content:
         config = json.loads(config_content)
         if 'file_format' in config:
             file_format = config['file_format']
 
+    # Check if the format is either 'tiff' or 'png'
     if file_format not in ['tiff', 'png']:
         raise ValueError("Format must be either 'tiff' or 'png'.")
 
-
+    # Calculate the separation distance in pixels
     separation_distance = sep_distance_ratio_to_psf_sigma * psf_sigma
-    if separation_distance > sz:
-        raise ValueError(f"Separation {separation_distance} is greater than the size of the image {sz}.")
-    # Set the random seed
+
+    # Check if the separation distance is greater than the size of the image
+    if separation_distance >= sz - 4 * psf_sigma - 2: 
+        # 4 * psf_sigma accounts for the required separation of the two particles from the edge of
+        # the image and 2 accounts for the maximum random shift of center_x and center_y.
+
+        raise ValueError(f"Separation {separation_distance} must be less than sz - 4 * psf_sigma - 2 to be generally detectable.")
+
+    # Set random seed
     np.random.seed(generation_random_seed)
-    # Create the folder to store the images
-    psf_str = f"{psf_sigma:.1f}".replace('.', '_')
-    sep_str = f"{sep_distance_ratio_to_psf_sigma:.1f}".replace('.', '_')
+
+    # Create the folder to store the images. 
     image_folder_path = f"./image_dataset/{image_folder_namebase}"
     os.makedirs(image_folder_path, exist_ok=True)
+    
+    # Set strings containing the psf and separation distance for file naming, replacing '.' with '_' to avoid confusing '.' as file extension separator.
+    psf_str = f"{psf_sigma:.1f}".replace('.', '_')
+    sep_str = f"{sep_distance_ratio_to_psf_sigma:.1f}".replace('.', '_')
+
+    # Print the number of images to be generated and the folder to store the images.
     print(f'Generating {n_total_image_count} images with psf {psf_sigma} and separation {sep_str} times the psf in folder {image_folder_path}.')
 
-    # Generate the images
-    sz_original = sz
+    # Generate images
     for img_idx in range(n_total_image_count):
+
+        # Print the image index every 20 images
         if img_idx % 20 == 0:
             print(f"Generating image index {img_idx}", end='\r')
-        particle_intensity = bg * amp_to_bg
+
+        # Initialize the image with the background intensity
+        image = np.ones((sz, sz), dtype=float) * bg
+
+        # Calculate the particle intensity
+        particle_intensity = amp_to_bg * bg
         angle = np.random.uniform(0, 2*np.pi)
-        # Center pos of the image - give random offset of the size of the pixel
+
+        # Set the middle position between particle 1 & 2 - Give random offset (-.5, .5) pixels in both x and y to randomize the center position relative to the pixel grid.
         center_x = sz / 2 + np.random.uniform(-.5, .5)
         center_y = sz / 2 + np.random.uniform(-.5, .5)
-        # print(f"{center_x=}, {center_y=}")
-        # Particle 1
+
+        # Set the x, y positions of particle 1
         x1 = center_x + separation_distance / 2 * np.cos(angle)
         y1 = center_y + separation_distance / 2 * np.sin(angle)
 
-        retry_count = 0
-        while retry_count < 1000 and (x1 < -.5 * 2 * psf_sigma or x1 > sz - .5 - 2 * psf_sigma or y1 < -.5 * 2 * psf_sigma or y1 > sz - .5 - 2 * psf_sigma):
-            angle = np.random.uniform(0, 2*np.pi)
-            x1 = center_x + separation_distance / 2 * np.cos(angle)
-            y1 = center_y + separation_distance / 2 * np.sin(angle)
-            retry_count += 1
-        
-        if retry_count == 1000:
-            print(f"Warning: Particles could not be fitted inside the image. The separation and the psf are probably too large. {img_idx} will be skipped.")
-            continue
+        # Check if the particle is out of bounds
+        if (x1 <= -.5 + 2 * psf_sigma or x1 >= sz - .5 - 2 * psf_sigma): 
+            raise ValueError(f"Particle 1 is out of bounds: x1={x1}, y1={y1}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
 
+        # Add the point spread function of particle 1 to the image
         peak_info = {'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
-        image = np.ones((sz, sz), dtype=float) * bg
         image += psfconvolution(peak_info, sz)
-        # Particle 2
+
+        # Set the x, y positions of particle 2
         x2 = center_x - separation_distance / 2 * np.cos(angle)
         y2 = center_y - separation_distance / 2 * np.sin(angle)
+
+        # Check if the particle is out of bounds
+        if (y1 <= -.5 + 2 * psf_sigma or y1 >= sz - .5 - 2 * psf_sigma):
+            raise ValueError(f"Particle 2 is out of bounds: x2={x2}, y2={y2}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
+        
+        # Add the point spread function of particle 2 to the image
         peak_info = {'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
         image += psfconvolution(peak_info, sz)
-        # Add Poisson noise
-        image = np.random.poisson(image, size=(image.shape)) # This is the resulting (given) image.
+
+        # Add Poisson noise to the whole image
+        image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
+
+        # Save the image
         img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.{file_format}"
-        pil_image = im.fromarray(image.astype(np.uint16))
-        pil_image.save(os.path.join(image_folder_path, img_filename))
+        img_filepath = os.path.join(image_folder_path, img_filename)
+        imageio.imwrite(img_filepath, image)
+
+    # Print the completion of image generation
+    print(f"Image generation completed (total: {n_total_image_count}). Images saved to {image_folder_path}.")
 
     # Save the content of the config file
     if config_content is not None:
@@ -196,6 +252,7 @@ def generate_separation_test_images(image_folder_namebase='separation_test', sep
             json.dump(json.loads(config_content), f, indent=4)
 
     return image_folder_path
+
 
 def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=''):
     """
@@ -1060,7 +1117,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                                        'sep_bg_level', 
                                                        'sep_random_seed']
 
-                required_fields_for_generation = ['genereate_regular_dataset?', 
+                required_fields_for_generation = ['generate_regular_dataset?', 
                                                   'gen_random_seed', 
                                                   'gen_total_image_count', 
                                                   'gen_psf_sigma', 
@@ -1100,7 +1157,7 @@ def process(config_files_dir, parallel=False, timeout=120):
 
                 if config['separation_test_image_generation?']:
                     required_fields += required_fields_for_separation_test
-                elif config['genereate_regular_dataset?']:
+                elif config['generate_regular_dataset?']:
                     required_fields += required_fields_for_generation
                 elif config['analyze_the_dataset?']:
                     required_fields += required_fields_for_analysis
@@ -1111,8 +1168,8 @@ def process(config_files_dir, parallel=False, timeout=120):
                         if config['separation_test_image_generation?'] and field.startswith('sep'):
                             print(f"Error: '{field}' should be set for separation test image generation.")
                             exit()
-                        # If config['genereate_regular_dataset?'] is True, then all fields starting with 'gen' are required.
-                        if config['genereate_regular_dataset?'] and field.startswith('gen'):
+                        # If config['generate_regular_dataset?'] is True, then all fields starting with 'gen' are required.
+                        if config['generate_regular_dataset?'] and field.startswith('gen'):
                             print(f"Error: '{field}' should be set for image generation.")
                             exit()
                         # If config['analyze_the_dataset?'] is True, then all fields starting with 'analysis' are required.
@@ -1139,16 +1196,14 @@ def process(config_files_dir, parallel=False, timeout=120):
                                             config_content=json.dumps(config)
                                             )
 
-        elif config['genereate_regular_dataset?']:
-# def generate_test_images(image_folder_namebase, maximum_number_of_particles, particle_intensity_mean, particle_intensity_sd=0, n_total_image_count=1, psf_sigma=1, sz=20, bg=1, 
-#                          generation_random_seed=42, config_content=None, minimum_number_of_particles=0, format='tiff'):
+        elif config['generate_regular_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                 # code_ver=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
                                 minimum_number_of_particles=config['gen_minimum_particle_count'], 
                                 maximum_number_of_particles=config['gen_maximum_particle_count'], 
-                                particle_intensity_mean=config['particle_intensity_mean'], 
-                                particle_intensity_sd=config['particle_intensity_sd'], 
+                                particle_intensity_mean=config['gen_particle_intensity_mean'], 
+                                particle_intensity_sd=config['gen_particle_intensity_sd'], 
                                 
                                 psf_sigma=config['gen_psf_sigma'], sz=config['gen_img_width'], 
                                 bg=config['gen_bg_level'], 
@@ -1213,7 +1268,7 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_3/'] 
     # sys.argv = ['main.py', '-c', './config_/'] 
     # sys.argv = ['main.py', '-c', './config_/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './config_files/']
+    sys.argv = ['main.py', '-c', './test_code_config/']
     # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()

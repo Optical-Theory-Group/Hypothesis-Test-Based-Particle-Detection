@@ -5,8 +5,8 @@ from process_algorithms import integrate_gauss_1d
 def psfconvolution(peak_info, image_width=512):
     """returns the pixel values to be added to the image based on psf convolution."""
 
-    integral_x = integrate_gauss_1d(np.arange(image_width), peak_info['x'], peak_info['psf_sd'])
-    integral_y = integrate_gauss_1d(np.arange(image_width), peak_info['y'], peak_info['psf_sd'])
+    integral_x = integrate_gauss_1d(np.arange(image_width), peak_info['x'], peak_info['psf_sigma'])
+    integral_y = integrate_gauss_1d(np.arange(image_width), peak_info['y'], peak_info['psf_sigma'])
 
     if isinstance(peak_info['prefactor'], (int, float)): # Case grayscale image
         output = np.outer(integral_y, integral_x) * peak_info['prefactor']
