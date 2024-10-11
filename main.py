@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from process_algorithms import generalized_likelihood_ratio_test, generalized_maximum_likelihood_rule
-from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks
+from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks, merge_conincident_particles
 import math
 import numpy as np
 import diplib as dip
@@ -493,117 +493,6 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             progress += 1
             
     return log_folder  # Return the path of the folder containing the logs
-
-def merge_conincident_particles(image, tile_dicts, psf, display_merged_locations=True):
-    """ If an image was subdivided into tiles, this function merges the coincident particles in the overlapping regions of the tiles.
-
-    Parameters:
-        image (np.ndarray): The image.
-        tile_dicts_array (np.ndarray): The array of tile dictionaries.
-        - tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': []}
-        psf (float): The point spread function's sigma (width) in pixels.
-
-    Returns:
-        merged_locations (list): The list of merged particle locations.
-    """
-
-    # Display the merged locations if display_merged_locations is True
-    if display_merged_locations:
-        _, axs = plt.subplots(2, 1, figsize=(5,10))
-        markers = ['1', '2', '|',  '_', '+', 'x',] * 100
-        palette = sns.color_palette('Paired', len(tile_dicts.flatten()))
-        plt.sca(axs[0])
-        plt.imshow(image, cmap='gray')     
-        count_before_resolution = sum([len(tile_dict['particle_locations']) for tile_dict in tile_dicts.flatten()])
-        plt.title(f'Particle count before resolution: {count_before_resolution}')
-        ax = plt.gca()
-
-        # Display tile boundaries and each tile's particle locations
-        for particle_marker_idx, tile_dict in enumerate(tile_dicts.flatten()):
-            locations = tile_dict['particle_locations']
-            rectangle = plt.Rectangle((tile_dict['x_low_end'], tile_dict['y_low_end']), tile_dict['image_slice'].shape[1], tile_dict['image_slice'].shape[0], edgecolor=palette[particle_marker_idx], facecolor='none', linewidth=1, )
-            ax.add_patch(rectangle)
-            for loc in locations:
-                plt.scatter(loc[0] + tile_dict['x_low_end'], loc[1] + tile_dict['y_low_end'], marker=markers[particle_marker_idx], s=300, color=palette[particle_marker_idx], linewidths=2)
-
-    # For each tile 
-    for ref_col in range(tile_dicts.shape[0]):
-        for ref_row in range(tile_dicts.shape[1]):
-    
-            # Set the reference tile as the current tile.
-            ref_tile = tile_dicts[ref_col][ref_row]
-            # List all particle indices of the reference tile.
-            all_pidx = list(range(len(ref_tile['particle_locations'])))
-    
-            if ref_col < tile_dicts.shape[0] - 1:  # If the tile is NOT the rightmost tile.
-
-                # Get the tile to the right.
-                right_tile = tile_dicts[ref_col + 1][ref_row]
-
-                del_pidx = [] # If determined to be the same particle, the particle index (as referenced in the reference tile) will be added to this list.
-
-                for ref_pidx in all_pidx: # For each particle's location recorded for the reference tile:
-
-                    ref_loc = ref_tile['particle_locations'][ref_pidx] # This location is relative to the reference tile.
-
-                    for right_loc in right_tile['particle_locations']: # For each particle's location relative to the right tile:
-    
-                        # Calculate the absolute locations of the particles.
-                        abs_ref_loc = ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
-                        abs_right_loc = right_loc + np.array([right_tile['x_low_end'], right_tile['y_low_end']])
-    
-                        # If the distance between the two locations is less than psf, then consider them as the same particle.
-                        if np.sum((abs_ref_loc - abs_right_loc)**2) < psf**2:
-                            # These particles will be deleted from the reference tile. (One could also average the particle location, but such implementation needs more careful consideration.)
-                            del_pidx.append(ref_pidx)
-
-                # From the reference tile, delete the particles that are determined to be the same particle. It's important to delete from the ref tile only, and not from the right tile.
-                ref_tile['particle_locations'] = [loc for i, loc in enumerate(ref_tile['particle_locations']) if i not in del_pidx]
-
-            # List all particle indices of the reference tile again, as the indices may have changed.
-            all_pidx = list(range(len(ref_tile['particle_locations'])))
-
-            if ref_row < tile_dicts.shape[1] - 1: # If the tile is NOT the bottommost tile:
-
-                # Get the tile below.
-                bottom_tile = tile_dicts[ref_col][ref_row + 1]
-
-                # Initialize the list of particle indices to be deleted (as referenced in the reference tile).
-                del_pidx = []
-
-                for ref_pidx in all_pidx: # For each particle's location recorded for the reference tile:
-
-                    ref_loc = ref_tile['particle_locations'][ref_pidx] # This location is relative to the reference tile.
-                    
-                    for bottom_loc in bottom_tile['particle_locations']: # For each particle's location relative to the bottom tile:
-
-                        # Calculate the absolute locations of the particles.
-                        abs_ref_loc = ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
-                        abs_bottom_loc = bottom_loc + np.array([bottom_tile['x_low_end'], bottom_tile['y_low_end']])
-
-                        # If the distance between the two locations is less than psf, then consider them as the same particle.
-                        if np.sum((abs_ref_loc - abs_bottom_loc)**2) < psf**2:
-                            del_pidx.append(ref_pidx)
-
-                # From the reference tile, delete the particles that are determined to be the same particle. It's important to delete from the ref tile only, and not from the bottom tile.
-                ref_tile['particle_locations'] = [loc for i, loc in enumerate(ref_tile['particle_locations']) if i not in del_pidx]
-
-    result_locations = []
-    for tile_dict in tile_dicts.flatten():
-        for loc in tile_dict['particle_locations']:
-            absolute_loc = loc + np.array([tile_dict['x_low_end'], tile_dict['y_low_end']])
-            result_locations.append(absolute_loc)
-
-    if display_merged_locations:
-        plt.sca(axs[1])
-        ax = plt.gca()
-        plt.title(f'Same locations merged (count:{len(result_locations)})')
-        plt.imshow(image, cmap='gray')     
-        for loc in result_locations:
-            plt.scatter(loc[0], loc[1], marker=markers[i], s=200, color='red', linewidths=1)
-        plt.show()
-
-    return result_locations
 
 def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30):
     # Print the name of the image file
