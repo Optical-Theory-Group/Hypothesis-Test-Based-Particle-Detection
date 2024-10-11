@@ -255,20 +255,14 @@ def generate_separation_test_images(image_folder_namebase='separation_test', sep
 
 
 def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=''):
-    """
-        Calls updated_progress() to print updated progress bar and returns the updated progress count.
+    """ Calls updated_progress() to print updated progress bar and returns the updated progress count.
 
-        Input:
-            progresscount: int
-                Current counter recording progress.
-            totalrealisations: int
-                Total number of realisations to be calculation
-            starttime: datetime
-                Time at which simulation was started
-
-        Return:
-            progresscount: int
-                Input value incremented by 1.
+    Parameters:
+        progresscount (int): Current counter recording progress.
+        totalrealisations (int): Total number of realisations to be calculation
+        starttime (datetime): Time at which simulation was started
+    Return:
+        progresscount (int): Input value incremented by 1.
     """
     # update progress trackers and inform user if they have so requested
     progresscount += 1
@@ -287,18 +281,14 @@ def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=
     return progresscount
 
 def update_progress(progress, status='', barlength=20):
-    """
-        Prints a progress bar to console
+    """ Prints a progress bar to console
 
-        Parameters
-        ----------
-        progress : float
-            Variable ranging from 0 to 1 indicating fractional progress.
-        status : TYPE, optional
-            Status text to suffix progress bar. The default is ''.
-        barlength : str, optional
-            Controls width of progress bar in console. The default is 20.
+    Parameters:
+        progress (float): Variable ranging from 0 to 1 indicating fractional progress.
+        status (TYPE, optional): Status text to suffix progress bar. The default is ''.
+        barlength (str, optional): Controls width of progress bar in console. The default is 20.
 
+    Returns nothing.
     """
     if isinstance(progress, int):
         progress = float(progress)
@@ -320,38 +310,61 @@ def update_progress(progress, status='', barlength=20):
     clear_line = '\r' + ' ' * erase_length + '\r'
     sys.stdout.write(clear_line + text)
     sys.stdout.flush()
-    # sys.stdout.write(text)
-    # sys.stdout.flush()
 
 def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout=120):
-    '''Analyzes all the images in the dataset folder.'''
+    '''Analyzes all the images in the dataset folder.
+
+    Parameters:
+        image_folder_namebase (str): The name of the folder containing the images.
+        code_version_date (str): The version of the code.
+        use_exit_condi (bool): Whether to use the exit condition.
+        last_h_index (int): The last index of the hypothesis.
+        psf_sigma (float): The sigma of the point spread function.
+        analysis_rand_seed (int): The random seed for the analysis.
+        config_content (str): The content of the config file.
+        parallel (bool): Whether to analyze the images in parallel.
+        display_xi_graph (bool): Whether to display the xi graph.
+        timeout (int): The maximum time allowed for the analysis of each image in seconds.
+
+    Returns:
+        log_folder (str): The path of the folder containing the logs.
+    '''
+
     # Set random seed
     np.random.seed(analysis_rand_seed)
 
     # Get a list of image files in the folder
     images_folder = os.path.join('./image_dataset', image_folder_namebase)
     original_images_folder = images_folder
-    
+
+    # Print the folder being analyzed
     print(f"Looking into the folder {images_folder}")
 
     # Check if the folder exists
     if not os.path.exists(images_folder):
+        # If the folder does not exist, print a message and find another folder that starts with image_folder_namebase
         print(f"Folder {images_folder} does not exist.")
-        # Find another folder that starts with image_folder_namebase
         base_dir = './image_dataset'
         matching_folders = [f for f in os.listdir(base_dir) if f.startswith(image_folder_namebase)]
+
+        # If there are folders starting with image_folder_namebase, use the first one
         if matching_folders:
             print(f"Found folders starting with '{image_folder_namebase}': {matching_folders}")
             images_folder = os.path.join(base_dir, matching_folders[0])
+
+            # Print a message to inform the user that the program is working with the folder that starts with image_folder_namebase
+            print(f"Note: The program is working with {images_folder} which is close to the user input {original_images_folder}. **")
         else:
             raise ValueError(f"No folder starting with '{image_folder_namebase}' found in '{base_dir}'.")
 
-    print(f"Note: The program is working with {images_folder} which is close to the user input {original_images_folder}. **")
     # Read all png and tiff files
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
+
+    # Check if there are any images in the folder
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
 
+    # Print the number of images loaded
     print(f"Images loaded (total of {len(image_files)}):")
 
     # Create a folder to store the logs
@@ -364,7 +377,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         with open(config_file_save_path, 'w') as f:
             json.dump(json.loads(config_content), f, indent=4)
 
-    # Prepare the label (actual count) prediction (estimated count) log file
+    # Prepare the label (=actual count) prediction (=estimated count) log file
     label_prediction_log_file_path = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
     with open(label_prediction_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
@@ -375,7 +388,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     if not os.path.exists(runs_folder):
         os.makedirs(runs_folder)
 
-    # For each image file, 
+    # Mark the start time and print a message indicating the beginning of the image analysis
     starttime = datetime.now()
     print('Beginning image analysis...')
 
@@ -383,211 +396,214 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     image_rand_seeds = list(range(len(image_files)))
     np.random.shuffle(image_rand_seeds)
 
-    # Analyze the images in parallel or sequentially
+    # Check if the analysis is to be done in parallel (or sequentially).
     if parallel:
         # Analyze the images in parallel using ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
             futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, use_exit_condi=use_exit_condi )
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
+            # Initialize the progress counter
             progress = 0
             # Write the results to the main log file
-            with open(label_prediction_log_file_path, 'a', newline='') as f:  #####
+            with open(label_prediction_log_file_path, 'a', newline='') as f:
                 # Iterate over the futures that are completed. 
                 for cfresult in concurrent.futures.as_completed(futures):
                     # If an exception is raised, print the exception and continue to the next image
                     if cfresult._exception is not None:
+                        # Check if the exception is a Warning or an Exception
                         if isinstance(cfresult._exception, Warning):
                             print("Encountered a Warning:", cfresult._exception)
                         else:
                             print("Encountered an Exception:", cfresult._exception)
                             print("Proceeding without addressing the exception.")
-                    # Get the result of the future and write the results to the main log file??k
-                    try:
+
+                    
+                    try: # Process the result of the future
+
+                        # Get the result of the future 
                         analysis_result = cfresult.result(timeout=timeout)
+
+                        # Extract the results from the analysis result
                         actual_num_particles = analysis_result['actual_num_particles']
                         estimated_num_particles = analysis_result['estimated_num_particles']
                         input_image_file = analysis_result['image_filename']
                         determined_particle_intensities = analysis_result['determined_particle_intensities']
 
+                        # Write the results to the label_prediction log file
                         writer = csv.writer(f)
                         writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
+                        # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                         if actual_num_particles == estimated_num_particles:
                             statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
                         elif actual_num_particles > estimated_num_particles:
                             statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}'
                         else:
                             statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}'
+
+                    # If the task timed out, print a message and cancel the future
                     except concurrent.futures.TimeoutError:
                         print(f"Task exceeded the maximum allowed time of {timeout} seconds and was cancelled.")
-                        cfresult.cancel()  # Attempt to cancel the future
+                        cfresult.cancel()  
                         statusmsg = 'Task cancelled due to timeout.'
+                    # If an exception is raised in the processing of the result, print the exception and continue to the next image
                     except Exception as e:
                         print(f"Error in cfresult.result(): {e}")
                         statusmsg = f'Error: {e}'
 
-                    # statusmsg += f' Test results saved to {filename}'
+                    # Report the progress
                     report_progress(progress, len(image_files), starttime, statusmsg)
+
+                    # Increment the progress counter
                     progress += 1
-    else:
+
+    else: # If the analysis is to be done sequentially
+
+        # Initialize the progress counter
         progress = 0
+
+        # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
+            # Analyze the image
             analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
+
+            # Extract the results from the analysis result
             actual_num_particles = analysis_result['actual_num_particles']
             estimated_num_particles = analysis_result['estimated_num_particles']
             input_image_file = analysis_result['image_filename']
             determined_particle_intensities = analysis_result['determined_particle_intensities']
 
+            # Write the results to the label_prediction log file
             with open(label_prediction_log_file_path, 'a', newline='') as f: 
                 writer = csv.writer(f)
                 writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
-                statusmsg = f'{image_folder_namebase} '
+                # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                 if actual_num_particles == estimated_num_particles:
-                    statusmsg += f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                    statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
                 elif actual_num_particles > estimated_num_particles:
-                    statusmsg += f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                    statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
                 else:
-                    statusmsg += f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                    statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
+            # Report the progress
             report_progress(progress, len(image_files), starttime, statusmsg)
+            # Increment the progress counter
             progress += 1
             
-    return log_folder #, determined_particle_intensities
+    return log_folder  # Return the path of the folder containing the logs
 
-# def process_tile(image_array, psf_sigma, last_h_index, random_seed, use_exit_condi, display_fit_results=False, display_xi_graph=False):
-#     # Find tentative peaks
-#     tentative_peaks = get_tentative_peaks(image_array, min_distance=1)
-#     rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+def merge_conincident_particles(image, tile_dicts, psf, display_merged_locations=True):
+    """ If an image was subdivided into tiles, this function merges the coincident particles in the overlapping regions of the tiles.
 
-#     # Run GMRL
-#     estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image_array, rough_peaks_xy=rough_peaks_xy, \
-#                                                         psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=random_seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+    Parameters:
+        image (np.ndarray): The image.
+        tile_dicts_array (np.ndarray): The array of tile dictionaries.
+        - tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': []}
+        psf (float): The point spread function's sigma (width) in pixels.
 
-#     return estimated_num_particles, fit_results, test_metrics
+    Returns:
+        merged_locations (list): The list of merged particle locations.
+    """
 
-def merge_conincident_particles(image, tile_dicts_array, psf):
+    # Display the merged locations if display_merged_locations is True
+    if display_merged_locations:
+        _, axs = plt.subplots(2, 1, figsize=(5,10))
+        markers = ['1', '2', '|',  '_', '+', 'x',] * 100
+        palette = sns.color_palette('Paired', len(tile_dicts.flatten()))
+        plt.sca(axs[0])
+        plt.imshow(image, cmap='gray')     
+        count_before_resolution = sum([len(tile_dict['particle_locations']) for tile_dict in tile_dicts.flatten()])
+        plt.title(f'Particle count before resolution: {count_before_resolution}')
+        ax = plt.gca()
 
-    plt.close('all')
-    _, axs = plt.subplots(2, 1, figsize=(5,10))
-    markers = ['1', '2', '|',  '_', '+', 'x',] * 100
-    palette = sns.color_palette('Paired', len(tile_dicts_array.flatten()))
-    plt.sca(axs[0])
-    plt.imshow(image, cmap='gray')     
-    len_all_locations = sum([len(tile_dict['particle_locations']) for tile_dict in tile_dicts_array.flatten()])
-    plt.title(f'Tiled - Sum of all particle detections: {len_all_locations}')
-    ax = plt.gca()
-    i = 0
-    for tile_dict in tile_dicts_array.flatten():
-        locations = tile_dict['particle_locations']
-        rectangle = plt.Rectangle((tile_dict['x_low_end'], tile_dict['y_low_end']), tile_dict['image_slice'].shape[1], tile_dict['image_slice'].shape[0], edgecolor=palette[i], facecolor='none', linewidth=1, )
-        ax.add_patch(rectangle)
-        for loc in locations:
-            plt.scatter(loc[0] + tile_dict['x_low_end'], loc[1] + tile_dict['y_low_end'], marker=markers[i], s=300, color=palette[i], linewidths=2)
-        # plt.scatter(locations[0] + tile_dict['x_low_end'], locations[1] + tile_dict['y_low_end'], marker=markers[i], s=300, color=palette[i], linewidths=3)
-        i += 1
-        
-    overlap = 0
-    # abs_locations_of_unique_particles = []
-    new_tile_dicts_array = tile_dicts_array.copy()
-    for ref_tile_x in range(tile_dicts_array.shape[0]):
-        for ref_tile_y in range(tile_dicts_array.shape[1]):
-            ref_tile = tile_dicts_array[ref_tile_x][ref_tile_y]
+        # Display tile boundaries and each tile's particle locations
+        for particle_marker_idx, tile_dict in enumerate(tile_dicts.flatten()):
+            locations = tile_dict['particle_locations']
+            rectangle = plt.Rectangle((tile_dict['x_low_end'], tile_dict['y_low_end']), tile_dict['image_slice'].shape[1], tile_dict['image_slice'].shape[0], edgecolor=palette[particle_marker_idx], facecolor='none', linewidth=1, )
+            ax.add_patch(rectangle)
+            for loc in locations:
+                plt.scatter(loc[0] + tile_dict['x_low_end'], loc[1] + tile_dict['y_low_end'], marker=markers[particle_marker_idx], s=300, color=palette[particle_marker_idx], linewidths=2)
 
-            # Check the right tile first 
-            if ref_tile_x < tile_dicts_array.shape[0] - 1: # If the tile is not the rightmost tile
-                compare_tile = tile_dicts_array[ref_tile_x+1][ref_tile_y]  # Get the tile to the right
-                # Initialize the replacement information
-                replacement_info = {'ref_indices_to_del': [], 'com_indices_to_del': [], 'average_location_in_ref_frame': []}
-                # For each particle location in the reference tile
-                for ref_loc_index, relative_ref_loc in enumerate(ref_tile['particle_locations']):
-                    # For each particle location in the compare tile
-                    for com_loc_index, relative_compare_loc in enumerate(compare_tile['particle_locations']):
-                        # Calculate the absolute locations of the particles
-                        absolute_ref_loc = relative_ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
-                        absolute_compare_loc = relative_compare_loc + np.array([compare_tile['x_low_end'], compare_tile['y_low_end']])
+    # For each tile 
+    for ref_col in range(tile_dicts.shape[0]):
+        for ref_row in range(tile_dicts.shape[1]):
+    
+            # Set the reference tile as the current tile.
+            ref_tile = tile_dicts[ref_col][ref_row]
+            # List all particle indices of the reference tile.
+            all_pidx = list(range(len(ref_tile['particle_locations'])))
+    
+            if ref_col < tile_dicts.shape[0] - 1:  # If the tile is NOT the rightmost tile.
+
+                # Get the tile to the right.
+                right_tile = tile_dicts[ref_col + 1][ref_row]
+
+                del_pidx = [] # If determined to be the same particle, the particle index (as referenced in the reference tile) will be added to this list.
+
+                for ref_pidx in all_pidx: # For each particle's location recorded for the reference tile:
+
+                    ref_loc = ref_tile['particle_locations'][ref_pidx] # This location is relative to the reference tile.
+
+                    for right_loc in right_tile['particle_locations']: # For each particle's location relative to the right tile:
+    
+                        # Calculate the absolute locations of the particles.
+                        abs_ref_loc = ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
+                        abs_right_loc = right_loc + np.array([right_tile['x_low_end'], right_tile['y_low_end']])
+    
                         # If the distance between the two locations is less than psf, then consider them as the same particle.
-                        if (absolute_ref_loc[0] - absolute_compare_loc[0])**2 + (absolute_ref_loc[1] - absolute_compare_loc[1])**2 < psf**2:
-                            overlap += 1
-                            # Add to the replacement information that the reference particle index should be deleted
-                            replacement_info['ref_indices_to_del'].append(ref_loc_index)
+                        if np.sum((abs_ref_loc - abs_right_loc)**2) < psf**2:
+                            # These particles will be deleted from the reference tile. (One could also average the particle location, but such implementation needs more careful consideration.)
+                            del_pidx.append(ref_pidx)
 
-                # Create a new reference tile containing information of ref_tile except particle locations
-                new_ref_tile = ref_tile.copy()
-                new_ref_tile['particle_locations'] = []
-                # For each particle location in the reference tile
-                for i in range(len(ref_tile['particle_locations'])):
-                    # If the particle location index is not in the list of indices to delete, then add it to the new reference tile
-                    if i not in replacement_info['ref_indices_to_del']:
-                        new_ref_tile['particle_locations'].append(ref_tile['particle_locations'][i])
-                ref_tile = new_ref_tile
-                new_tile_dicts_array[ref_tile_x][ref_tile_y] = ref_tile
+                # From the reference tile, delete the particles that are determined to be the same particle. It's important to delete from the ref tile only, and not from the right tile.
+                ref_tile['particle_locations'] = [loc for i, loc in enumerate(ref_tile['particle_locations']) if i not in del_pidx]
 
-            # Check the bottom tile
-            if ref_tile_y < tile_dicts_array.shape[1] - 1:
-                compare_tile = tile_dicts_array[ref_tile_x][ref_tile_y+1] 
-                replacement_info = {'ref_indices_to_del': [], 'com_indices_to_del': [], 'average_location_in_ref_frame': []}
-                for ref_loc_index, relative_ref_loc in enumerate(ref_tile['particle_locations']):
-                    for com_loc_index, relative_compare_loc in enumerate(compare_tile['particle_locations']):
+            # List all particle indices of the reference tile again, as the indices may have changed.
+            all_pidx = list(range(len(ref_tile['particle_locations'])))
+
+            if ref_row < tile_dicts.shape[1] - 1: # If the tile is NOT the bottommost tile:
+
+                # Get the tile below.
+                bottom_tile = tile_dicts[ref_col][ref_row + 1]
+
+                # Initialize the list of particle indices to be deleted (as referenced in the reference tile).
+                del_pidx = []
+
+                for ref_pidx in all_pidx: # For each particle's location recorded for the reference tile:
+
+                    ref_loc = ref_tile['particle_locations'][ref_pidx] # This location is relative to the reference tile.
+                    
+                    for bottom_loc in bottom_tile['particle_locations']: # For each particle's location relative to the bottom tile:
+
+                        # Calculate the absolute locations of the particles.
+                        abs_ref_loc = ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
+                        abs_bottom_loc = bottom_loc + np.array([bottom_tile['x_low_end'], bottom_tile['y_low_end']])
+
                         # If the distance between the two locations is less than psf, then consider them as the same particle.
-                        absolute_ref_loc = relative_ref_loc + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']])
-                        absolute_compare_loc = relative_compare_loc + np.array([compare_tile['x_low_end'], compare_tile['y_low_end']])
-                        if (absolute_ref_loc[0] - absolute_compare_loc[0])**2 + (absolute_ref_loc[1] - absolute_compare_loc[1])**2 < psf**2:
-                            overlap += 1
-                            # Delete the information from tile_dict_j and add the average to tile_dict_i
-                            replacement_info['ref_indices_to_del'].append(ref_loc_index)
-                            replacement_info['com_indices_to_del'].append(com_loc_index)
+                        if np.sum((abs_ref_loc - abs_bottom_loc)**2) < psf**2:
+                            del_pidx.append(ref_pidx)
 
-                # Create a new reference tile containing information of ref_tile except particle locations
-                new_ref_tile = ref_tile.copy()
-                new_ref_tile['particle_locations'] = []
-                # For each particle location in the reference tile
-                for i in range(len(ref_tile['particle_locations'])):
-                    # If the particle location index is not in the list of indices to delete, then add it to the new reference tile
-                    if i not in replacement_info['ref_indices_to_del']:
-                        new_ref_tile['particle_locations'].append(ref_tile['particle_locations'][i])
-                ref_tile = new_ref_tile
-                new_tile_dicts_array[ref_tile_x][ref_tile_y] = ref_tile
-                        # ref_tile['particle_locations'].pop(i)
-                    # else: # if it is in the list of indices to delete, delete that particle location from compare_tile
-                    # else:
-                    #     abs_locations_of_unique_particles.append(ref_tile['particle_locations'][i] + np.array([ref_tile['x_low_end'], ref_tile['y_low_end']]))
-                        
-                # for i in range(len(compare_tile['particle_locations'])):
-                #     if i not in replacement_info['com_indices_to_del']:
-                #         new_com_tile['particle_locations'].append(compare_tile['particle_locations'][i])
-                # for i in range(len(replacement_info['average_location_in_ref_frame'])):
-                #     new_ref_tile['particle_locations'].append(replacement_info['average_location_in_ref_frame'][i])
-                # new_tile_dicts_array[ref_tile_x][ref_tile_y] = ref_tile
-                # compare_tile = new_com_tile
-                pass
+                # From the reference tile, delete the particles that are determined to be the same particle. It's important to delete from the ref tile only, and not from the bottom tile.
+                ref_tile['particle_locations'] = [loc for i, loc in enumerate(ref_tile['particle_locations']) if i not in del_pidx]
 
+    result_locations = []
+    for tile_dict in tile_dicts.flatten():
+        for loc in tile_dict['particle_locations']:
+            absolute_loc = loc + np.array([tile_dict['x_low_end'], tile_dict['y_low_end']])
+            result_locations.append(absolute_loc)
 
-    print(f"{overlap=}")
-    for x in range(new_tile_dicts_array.shape[0]):
-        for y in range(new_tile_dicts_array.shape[1]):
-            print(f"Tile ({x}, {y}): {(new_tile_dicts_array[x][y]['particle_locations'])}")
+    if display_merged_locations:
+        plt.sca(axs[1])
+        ax = plt.gca()
+        plt.title(f'Same locations merged (count:{len(result_locations)})')
+        plt.imshow(image, cmap='gray')     
+        for loc in result_locations:
+            plt.scatter(loc[0], loc[1], marker=markers[i], s=200, color='red', linewidths=1)
+        plt.show()
 
-    merged_locations = []
-    for tile in new_tile_dicts_array.flatten():
-        for loc in tile['particle_locations']:
-            absolute_loc = loc + np.array([tile['x_low_end'], tile['y_low_end']])
-            merged_locations.append(absolute_loc)
-
-    plt.sca(axs[1])
-    ax = plt.gca()
-    plt.title(f'Same locations merged (count:{len(merged_locations)})')
-    plt.imshow(image, cmap='gray')     
-    for loc in merged_locations:
-        plt.scatter(loc[0], loc[1], marker=markers[i], s=200, color='red', linewidths=1)
-    plt.show()
-    pass
-
-
-    return merged_locations
-
-
+    return result_locations
 
 def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30):
     # Print the name of the image file
@@ -680,7 +696,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             for x_index, x_low_end in enumerate(x_low_end_list):
                 x_high_end = min(x_low_end + tile_sz[1], img_width)
                 tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': []}
-                print(f"Loading tile {tile_count} from image {image_filename}", end='\r')
+                print(f"Loading {tile_count} tiles from image {image_filename}", end='\r')
                 tile_count += 1
 
         # (x,y) or all detected particles
@@ -1267,8 +1283,8 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_scale1_test/'] 
     # sys.argv = ['main.py', '-c', './config_3/'] 
     # sys.argv = ['main.py', '-c', './config_/'] 
-    # sys.argv = ['main.py', '-c', './config_/', '-p', 'True']
-    sys.argv = ['main.py', '-c', './test_code_config/']
+    sys.argv = ['main.py', '-c', './test_code_config/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './test_code_config/']
     # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
