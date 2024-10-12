@@ -14,8 +14,7 @@ import seaborn as sns
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from process_algorithms import generalized_likelihood_ratio_test, generalized_maximum_likelihood_rule
-from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks, merge_conincident_particles
-import math
+from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks, merge_coincident_particles
 import numpy as np
 import diplib as dip
 import glob
@@ -69,10 +68,10 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
     print(f'Image generation complete (total: {number_of_images_per_count * number_of_counts}). Note that this may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
-    print(f'Image save destination: ./image_dataset/{image_folder_namebase}.')
+    print(f'Image save destination: ./datasets/{image_folder_namebase}.')
 
     # Create the folder to store the images
-    image_folder_path = os.path.join("image_dataset", f"{image_folder_namebase}") 
+    image_folder_path = os.path.join("datasets", f"{image_folder_namebase}") 
     os.makedirs(image_folder_path, exist_ok=True)
 
     # Determine the color mode of the image (gray or rgb)
@@ -182,7 +181,7 @@ def generate_separation_test_images(image_folder_namebase='separation_test', sep
     np.random.seed(generation_random_seed)
 
     # Create the folder to store the images. 
-    image_folder_path = f"./image_dataset/{image_folder_namebase}"
+    image_folder_path = f"./datasets/{image_folder_namebase}"
     os.makedirs(image_folder_path, exist_ok=True)
     
     # Set strings containing the psf and separation distance for file naming, replacing '.' with '_' to avoid confusing '.' as file extension separator.
@@ -333,8 +332,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     # Set random seed
     np.random.seed(analysis_rand_seed)
 
-    # Get a list of image files in the folder
-    images_folder = os.path.join('./image_dataset', image_folder_namebase)
+    # Get the list of image files in the folder
+    images_folder = os.path.join('./datasets', image_folder_namebase)
     original_images_folder = images_folder
 
     # Print the folder being analyzed
@@ -344,10 +343,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     if not os.path.exists(images_folder):
         # If the folder does not exist, print a message and find another folder that starts with image_folder_namebase
         print(f"Folder {images_folder} does not exist.")
-        base_dir = './image_dataset'
+        base_dir = './datasets'
         matching_folders = [f for f in os.listdir(base_dir) if f.startswith(image_folder_namebase)]
 
-        # If there are folders starting with image_folder_namebase, use the first one
+        # Still check whether there are folders starting with image_folder_namebase. If then, use the first one
         if matching_folders:
             print(f"Found folders starting with '{image_folder_namebase}': {matching_folders}")
             images_folder = os.path.join(base_dir, matching_folders[0])
@@ -368,7 +367,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     print(f"Images loaded (total of {len(image_files)}):")
 
     # Create a folder to store the logs
-    log_folder = os.path.join('./runs', image_folder_namebase + '_code_ver' + code_version_date)
+    log_folder = os.path.join('./analyses', image_folder_namebase + '_code_ver' + code_version_date)
     os.makedirs(log_folder, exist_ok=True)
 
     # Save the content of the config file
@@ -383,10 +382,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
 
-    # Create the "runs" folder if it doesn't exist
-    runs_folder = './runs'
-    if not os.path.exists(runs_folder):
-        os.makedirs(runs_folder)
+    # Create the "analyses" folder if it doesn't exist
+    analyses_folder = './analyses'
+    if not os.path.exists(analyses_folder):
+        os.makedirs(analyses_folder)
 
     # Mark the start time and print a message indicating the beginning of the image analysis
     starttime = datetime.now()
@@ -639,7 +638,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             #     pass
             #     break
 
-        deduplicate_locations = merge_conincident_particles(image, tile_dicts_array, psf_sigma)
+        deduplicate_locations = merge_coincident_particles(image, tile_dicts_array, psf_sigma)
 
         pass
 
@@ -855,7 +854,7 @@ def combine_log_files(log_folder, image_folder_namebase, code_version_date, dele
             shutil.rmtree(dir_path)
             print('Deleting individual image log files.')
 
-def make_metrics_histograms(file_path = "./runs/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", metric_of_interest='penalty'):
+def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", metric_of_interest='penalty'):
     # metric_of_interest = 'lli'
     # metric_of_interest = 'xi'
     # Fix legacy formats: 
@@ -1141,7 +1140,7 @@ def process(config_files_dir, parallel=False, timeout=120):
 
             # Delete the dataset after analysis
             if config['ana_delete_the_dataset_after_analysis?']:
-                dir_path =os.path.join("image_dataset", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
+                dir_path =os.path.join("datasets", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
@@ -1157,14 +1156,14 @@ if __name__ == '__main__':
     # image_file = image_files[0]
 
     # Get a list of image files in the folder
-    # images_folder = os.path.join('./image_dataset', 'test_code_ver2024-07-31')
+    # images_folder = os.path.join('./datasets', 'test_code_ver2024-07-31')
     # image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
     # if len(image_files) == 0:
     #     raise ValueError("There are no images in this folder.")
     # image_file = image_files[0]
 
-    # analyze_image(image_file, psf_sigma=1.0, last_h_index=5, analysis_rand_seed_per_image=1, log_folder='runs/test_2024-07-24', tile_width=40, tile_stride=30)
-    # combine_log_files('runs/test_2024-07-24', 'test', '2024-07-24', delete_individual_files=False)
+    # analyze_image(image_file, psf_sigma=1.0, last_h_index=5, analysis_rand_seed_per_image=1, log_folder='analyses/test_2024-07-24', tile_width=40, tile_stride=30)
+    # combine_log_files('analyses/test_2024-07-24', 'test', '2024-07-24', delete_individual_files=False)
     # pass
     
     # sys.argv = ['main.py', '-c', './config_test/'] 
@@ -1177,7 +1176,7 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
     # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
-    # filepath = "./runs/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
+    # filepath = "./analyses/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
     # make_metrics_histograms(file_path=filepath, metric_of_interest='penalty')
     # make_metrics_histograms(file_path=filepath, metric_of_interest='lli')
     # make_metrics_histograms(file_path=filepath, metric_of_interest='xi')

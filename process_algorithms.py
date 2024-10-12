@@ -1,3 +1,4 @@
+import seaborn as sns
 import random
 import matplotlib.pyplot as plt
 import numpy as np
@@ -1515,7 +1516,7 @@ def generalized_maximum_likelihood_rule_on_rgb(roi_image, psf_sigma, last_h_inde
 
     return fit_results
 
-def merge_conincident_particles(image, tile_dicts, psf, display_merged_locations=True):
+def merge_coincident_particles(image, tile_dicts, psf, display_merged_locations=True):
     """ If an image was subdivided into tiles, this function merges the coincident particles in the overlapping regions of the tiles.
 
     Parameters:

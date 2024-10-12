@@ -1,6 +1,6 @@
 {
-    "image_folder_namebase": "testers_choice",
-    "code_version_date": "2024-10-08",
+    "image_folder_namebase": "test_merge",
+    "code_version_date": "2024-10-10",
 
     "file_format": "png",
 
@@ -15,16 +15,16 @@
 
     "generate_regular_dataset?": true,
     "gen_random_seed": 0,
-    "gen_total_image_count": 100,
-    "gen_minimum_particle_count": 0,
-    "gen_maximum_particle_count": 4,
+    "gen_total_image_count": 1,
+    "gen_minimum_particle_count": 30,
+    "gen_maximum_particle_count": 30,
     "gen_psf_sigma": 1,
-    "gen_img_width": 30,
+    "gen_img_width": 100,
     "gen_bg_level": 500,
     "gen_particle_intensity_mean": 2500,
     "gen_particle_intensity_sd": 0,
 
-    "analyze_the_dataset?": false,
+    "analyze_the_dataset?": true,
     "ana_random_seed": 0,
     "ana_predefined_psf_sigma": 0.5,
     "ana_use_premature_hypothesis_choice?": false,

@@ -13,7 +13,7 @@ pd.options.display.float_format = '{:.4f}'.format
 
 def delete_images(n_remain):
 	# Define the directory containing the folders
-	directory = './image_dataset/'
+	directory = './datasets/'
 
 	# Iterate through each folder in the directory that starts with "separation_test_psf"
 	for foldername in os.listdir(directory):
@@ -91,7 +91,7 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 		Returns:
 			tuple: A tuple containing the probability of overlap per particle, probability of overlap per area, and surface densities.
 	"""
-	directory = os.path.join('./runs/', subdir)
+	directory = os.path.join('./analyses/', subdir)
 	# Dictionary to store the count of each estimated particle count vs. separation
 	counts = defaultdict(lambda: defaultdict(int))
 	pattern = re.compile(r'_sep(\d+(\_\d+)?)')
@@ -419,7 +419,7 @@ filename = 'count3-index0.tiff'
 random_seed = 0
 roi_image = make_specific_images(foldername, img_param, random_seed)
 fit_results = generalized_maximum_likelihood_rule_on_rgb(roi_image, img_param[0]['psf'], last_h_index=5, random_seed=0, display_fit_results=True, display_xi_graph=False, use_exit_condi=False)
-# res = analyze_image(os.path.join('./image_dataset/', foldername, filename), img_param[0]['psf'], 5, 0, './runs/specific_images', display_fit_results=True, display_xi_graph=True)
+# res = analyze_image(os.path.join('./dataset/', foldername, filename), img_param[0]['psf'], 5, 0, './analyses/specific_images', display_fit_results=True, display_xi_graph=True)
 # print(f'Actual number of particles: {res["actual_num_particles"]}')
 # print(f'Estimated number of particles: {res["estimated_num_particles"]}')
 # print(f'Determined particle intensities: {res["determined_particle_intensities"]}')
