@@ -326,7 +326,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         timeout (int): The maximum time allowed for the analysis of each image in seconds.
 
     Returns:
-        log_folder (str): The path of the folder containing the logs.
+        analyses_folder (str): The path of the folder containing the analyses outputs.
     '''
 
     # Set random seed
@@ -359,25 +359,25 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     # Read all png and tiff files
     image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
 
-    # Check if there are any images in the folder
+    # If there are no images in the folder, raise an error
     if len(image_files) == 0:
         raise ValueError("There are no images in this folder.")
 
     # Print the number of images loaded
     print(f"Images loaded (total of {len(image_files)}):")
 
-    # Create a folder to store the logs
-    log_folder = os.path.join('./analyses', image_folder_namebase + '_code_ver' + code_version_date)
-    os.makedirs(log_folder, exist_ok=True)
+    # Create a folder to store the analysis outputs
+    analyses_folder = os.path.join('./analyses', image_folder_namebase + '_code_ver' + code_version_date)
+    os.makedirs(analyses_folder, exist_ok=True)
 
     # Save the content of the config file
     if config_content is not None:
-        config_file_save_path = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_config_used.json')
+        config_file_save_path = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_config_used.json')
         with open(config_file_save_path, 'w') as f:
             json.dump(json.loads(config_content), f, indent=4)
 
     # Prepare the label (=actual count) prediction (=estimated count) log file
-    label_prediction_log_file_path = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
+    label_prediction_log_file_path = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
     with open(label_prediction_log_file_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
@@ -400,7 +400,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         # Analyze the images in parallel using ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
-            futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, use_exit_condi=use_exit_condi )
+            futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condi=use_exit_condi )
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
             # Initialize the progress counter
             progress = 0
@@ -465,7 +465,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
             # Analyze the image
-            analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
+            analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
 
             # Extract the results from the analysis result
             actual_num_particles = analysis_result['actual_num_particles']
@@ -491,9 +491,27 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             # Increment the progress counter
             progress += 1
             
-    return log_folder  # Return the path of the folder containing the logs
+    return analyses_folder  # Return the path of the folder containing the analyses outputs
 
-def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, log_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30):
+def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30):
+    """ Analyze an image using the generalized maximum likelihood rule.
+    
+    Parameters:
+        image_filename (str): The name of the image file.
+        psf_sigma (float): The sigma of the point spread function.
+        last_h_index (int): The last index of the hypothesis.
+        analysis_rand_seed_per_image (int): The random seed for the analysis of the image.
+        analyses_folder (str): The path of the folder containing the analyses outputs.
+        display_fit_results (bool): Whether to display the fit results. Default is False.
+        display_xi_graph (bool): Whether to display the xi graph. Default is False.
+        use_exit_condi (bool): Whether to use the exit condition. Default is False.
+        tile_width (int): The width of the tile. Default is 40. Tiling only occurs if the image is larger than the tile size.
+        tile_stride (int): The stride of the tile. Default is 30. This is the distance between adjacent tiles in pixels. It is less than the tile width to ensure overlap between adjacent tiles.
+        
+    Returns:
+        image_analysis_results (dict) or tile_combined_results (dict): The results of the image analysis or, if the image is too big to analyze at once, the combined results of the tiles. 
+        (Currently, the latter is not implemented and the function returns None.)
+    """
     # Print the name of the image file
     image = np.array(im.open(image_filename))
 
@@ -501,21 +519,28 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
     basename = os.path.basename(image_filename)
     count_part = basename.split('-')[0]
     foldername = os.path.basename(os.path.dirname(image_filename))
+
+    # If it is a separation test, set the number of particles to 2
     if count_part.startswith("separation") or os.path.basename(foldername).startswith("separation"):
         num_particles = 2
     else:
-        num_particles = count_part.split('count')[1]
-        num_particles = num_particles.split('_')[0]
+        num_particles = count_part.split('count')[1] # Get the part right after 'count'
+        num_particles = num_particles.split('_')[0] # Get the part before '_'
+
+    # Convert the number of particles (str) to an integer
     actual_num_particles = int(num_particles)
 
+    # Get the size of the image (width and height are both sz)
     sz = image.shape[0]
-    if sz < tile_width + tile_stride: # If the image is smaller than the tile size, then process the whole image (no need to divide into tiles)
 
-        # Run GMRL
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, \
-                                                            psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+    # If the image is smaller than the tile size, then process the whole image (no need to divide into tiles)
+    if sz < tile_width + tile_stride: 
 
-        image_analysis_log_filename = f"{log_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
+        # Call the generalized_maximum_likelihood_rule (GMLR) function to analyze the image
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, psf_sigma=psf_sigma, 
+                                                                last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, 
+                                                                display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+
 
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
@@ -529,15 +554,20 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         true_counts = [actual_num_particles for _ in range(len(xi))]
         h_numbers = [h_index for h_index in range(len(xi))]
         selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+
+        # Extract the determined particle intensities (to see the particle intensity distribution)
         determined_particle_intensities = []
         if estimated_num_particles > 0:
             for i in range(1, estimated_num_particles + 1):
                 determined_particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
         determined_particle_intensities
 
+        # Combine variables into list named metric_data 
         metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
 
-        # Write the data to the CSV files
+        # Save the results to a CSV file ending with '_analysis_log.csv'
+        image_analysis_log_filename = f"{analyses_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
+
         os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
 
         with open(image_analysis_log_filename, 'w', newline='') as file:
@@ -553,12 +583,10 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
                                 'determined_particle_intensities': determined_particle_intensities,
                                 'metric_data': metric_data
                                 }
-        
+
+        # Return the results of the image analysis 
         return image_analysis_results
 
-    # estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image_array, rough_peaks_xy=rough_peaks_xy, \
-    #                                                     psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=random_seed, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
-        # estimated_num_particles, fit_results, test_metrics = process_tile(image, psf_sigma, last_h_index, analysis_rand_seed_per_image, use_exit_condi, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph)
     else:
         # Divide the image into tiles, following the tiling_stride.
         tile_sz = (tile_width, tile_width)
@@ -573,27 +601,27 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             n_x += 1
         while n_y * tile_stride + tile_width < sz:
             n_y += 1
+        print(f"{image_filename} is divided into {(n_x + 1) * (n_y + 1)} tiles.")
 
+        # Create a dictionary to store tile information
         tile_dicts_array = np.zeros((n_y + 1, n_x + 1), dtype=object)
         y_low_end_list = [tile_stride * (n) for n in range(n_y + 1)]
         x_low_end_list = [tile_stride * (n) for n in range(n_x + 1)]
         img_height, img_width = image.shape
-        tile_count = 0
         for y_index, y_low_end in enumerate(y_low_end_list):
             y_high_end = min(y_low_end + tile_sz[0], img_height)
             for x_index, x_low_end in enumerate(x_low_end_list):
                 x_high_end = min(x_low_end + tile_sz[1], img_width)
                 tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': []}
-                print(f"Loading {tile_count} tiles from image {image_filename}", end='\r')
-                tile_count += 1
 
-        # (x,y) or all detected particles
-        # particle_locations = []
         for tile_dict in tile_dicts_array.flatten():
-            # est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
+            # Call generalized_maximum_likelihood_rule for each tile
             est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=True)
-            # Choose the fit_result with its index matching est_num_particle_tile
+
+            # Use the estimated number of particles to see the fit under the corresponding hypothesis
             chosen_fit = fit_results[est_num_particle_tile]
+
+            # Extract the particle locations from the chosen fit and store them in the tile_dict
             particle_locations = []
             for particle_index in range(1, est_num_particle_tile + 1):
                 loc = chosen_fit['theta'][particle_index][1:3]
@@ -605,18 +633,19 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             print(f"Processing tile {tilename} in image {image_filename}", end='\r')
 
             image_filename_base = os.path.basename(image_filename).split('.')[0]
-            tile_analysis_log_filename = f"{log_folder}/image_log/{image_filename_base}_{tilename}_analysis_log.csv"
+            tile_analysis_log_filename = f"{analyses_folder}/image_log/{image_filename_base}_{tilename}_analysis_log.csv"
 
-            # Extract xi, lli, and penalty from test_metrics and fit_parameters from fit_results - for this tile/generate_se
+            # Extract xi, lli, and penalty from test_metrics and fit_parameters from fit_results for this tile
             xi = test_metrics['xi']
             lli = test_metrics['lli']
             penalty = test_metrics['penalty']
             fisher_info = test_metrics['fisher_info']
             fit_parameters = [result['theta'] for result in fit_results]
 
-            # Create a list of tuples containing hypothesis_index, xi, lli, and penalty - for this tile
+            # Create a list of tuples containing hypothesis_index, xi, lli, and penalty for this tile
             file_tile_h_info = [f"{image_filename} {tilename} (h{h_index})" for h_index in range(len(xi))]
-            # true_counts = [actual_num_particles for _ in range(len(xi))]
+
+            # Extract the determined particle intensities (to see the particle intensity distribution)
             h_numbers = [h_index for h_index in range(len(xi))]
             selected_bools = [1 if est_num_particle_tile == h_index else 0 for h_index in range(len(xi))]
             determined_particle_intensities = []
@@ -624,9 +653,11 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
                 for i in range(1, est_num_particle_tile + 1):
                     determined_particle_intensities.append(fit_parameters[est_num_particle_tile][i][0])
             determined_particle_intensities
+
+            # Combine variables into list named file_tile_metric_data
             file_tile_metric_data = list(zip(file_tile_h_info, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
 
-            # Write the data to the CSV files
+            # Write the data to the tile analysis log (CSV) file
             os.makedirs(os.path.dirname(tile_analysis_log_filename), exist_ok=True)
             with open(tile_analysis_log_filename, 'w', newline='') as file:
                 writer = csv.writer(file)
@@ -634,49 +665,52 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
                 writer.writerows(file_tile_metric_data)
                 pass
 
-            # if tile_dict['y_low_end'] == 510:
-            #     pass
-            #     break
+        merge_coincident_particles(image, tile_dicts_array, psf_sigma)
 
-        deduplicate_locations = merge_coincident_particles(image, tile_dicts_array, psf_sigma)
+        # Todo: Assign the tile_combined_result as below
 
-        pass
-
-        
-        # # Find tentative peaks
-        # tentative_peaks = get_tentative_peaks(image, min_distance=1)
-        # rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
-
-        # # Run GMRL
-        # estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, rough_peaks_xy=rough_peaks_xy, \
-        #                                                     psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
-
-
-
-        # image_analysis_results = {
+        # tile_combined_result = {
         #                         'actual_num_particles': actual_num_particles,
         #                         'estimated_num_particles': estimated_num_particles,
         #                         'image_filename': image_filename,
         #                         'determined_particle_intensities': determined_particle_intensities,
+        #                         'metric_data': None
         #                         }
-    
-    # return image_analysis_results
-    return None
+
+        ## 'metric_data' being None will be used to indicate that the analysis was done on tiles.
+
+        tile_combined_result = None
+
+        return tile_combined_result
 
 def generate_intensity_histogram(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
+    """ Generate the intensity histogram of the determined particle intensities.
+    
+    Parameters:
+        label_pred_log_file_path (str): The path of the label prediction log file.
+        image_folder_namebase (str): The name of the folder containing the images.
+        code_version_date (str): The version of the code.
+        display (bool): Whether to display the histogram. Default is False.
+        savefig (bool): Whether to save the histogram as a PNG file. Default is True.
+        
+    Returns:
+        None
+    """
+
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
     try:
-        intensities = df[ "Determined Particle Intensities"]
+        intensities = df["Determined Particle Intensities"]
     except KeyError:
-        intensities = df[ "Determined Particle Intensities"]
+        raise KeyError("The column name 'Determined Particle Intensities' is not found in the CSV file.")
 
+    # Convert the string of intensities to a list of floats
     all_intensities = []
     for entry in intensities:
         all_intensities.extend(ast.literal_eval(entry))
 
     # Generate intensity histogram
-    fig, ax = plt.subplots()
+    _, ax = plt.subplots()
     ax.hist(all_intensities, bins=20)
     ax.set_xlabel('Particle Intensity')
     ax.set_ylabel('Frequency')
@@ -690,24 +724,40 @@ def generate_intensity_histogram(label_pred_log_file_path, image_folder_namebase
         plt.savefig(png_file_path, dpi=300)
 
 def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
+    """ Generate the confusion matrix and calculate the metrics.
+    
+    Parameters:
+        label_pred_log_file_path (str): The path of the label prediction log file.
+        image_folder_namebase (str): The name of the folder containing the images.
+        code_version_date (str): The version of the code.
+        display (bool): Whether to display the confusion matrix. Default is False.
+        savefig (bool): Whether to save the confusion matrix as a PNG file. Default is True.
+        
+    Returns:
+        None
+    """
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
     # Extract the actual and estimated particle numbers
     try:
         actual = df['Actual Particle Count']
     except KeyError:
-        actual = df['Actual Particle Number'] 
+        try:
+            actual = df['Actual Particle Number'] 
+        except KeyError:
+            raise KeyError("The column name 'Actual Particle Count' or 'Actual Particle Number' is not found in the CSV file.")
     try:
         estimated = df['Estimated Particle Count']
     except KeyError:
-        estimated = df['Estimated Particle Number']
+        try: 
+            estimated = df['Estimated Particle Number']
+        except KeyError:
+            raise KeyError("The column name 'Estimated Particle Count' or 'Estimated Particle Number' is not found in the CSV file.")
     
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
-    # if matrix[-1].sum == 0:
-    #     matrix = matrix[:-1, :]
     
-    # Save the confusion matrix as a CSV file
+    # Save the confusion matrix as a CSV file ending with '_confusion_mat.csv'
     matrix_df = pd.DataFrame(matrix)
     csv_file_path = os.path.dirname(label_pred_log_file_path)
     csv_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_confusion_mat.csv'
@@ -759,12 +809,14 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
         'Root Mean Squared Error': rmse
     }
 
+    # Save the metrics as a CSV file ending with '_scores.csv'
     metrics_df = pd.DataFrame(scores, index=[0])
     csv_file_path = os.path.dirname(label_pred_log_file_path)
     csv_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_scores.csv'
     csv_file_path += csv_file_name
     metrics_df.to_csv(csv_file_path, index=False)
 
+    # Normalize the confusion matrix
     normalized_matrix = np.zeros(matrix.shape)
     
     row_sums = matrix.sum(axis=1)
@@ -782,7 +834,6 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
         # Debugging output to check if normalization is as expected
         print("Normalized matrix:\n", normalized_matrix)
 
-        # normalized_matrix = np.divide(matrix, row_sums[:, None] + epsilon, out=np.zeros_like(matrix, dtype=np.float64), where=row_sums!=0)
         folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
         ax = axs[0]
         sns.heatmap(normalized_matrix, annot=True, fmt='.3f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
@@ -807,9 +858,8 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
         ax.axis('off')
         # Add text messages to the figure
         ax.text(0.01, 0.5, text_message, ha='left', va='center')  # Adjust x, y values as needed
-    
         plt.tight_layout()
-        pass
+
         if display:
             plt.show(block=False)
 
@@ -819,16 +869,17 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
             png_file_path += png_file_name
             plt.savefig(png_file_path, dpi=300)
 
-def combine_log_files(log_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
+def combine_log_files(analyses_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
     '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
+
     # Create the fitting_results.csv file
-    whole_metrics_log_filename = os.path.join(log_folder, f'{image_folder_namebase}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
+    whole_metrics_log_filename = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
     print(f"{whole_metrics_log_filename=}")
     
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
 
     # Get all the *_fittings.csv files in the image_log folder
-    individual_image_log_files = glob.glob(os.path.join(log_folder, 'image_log', '*_analysis_log.csv'))
+    individual_image_log_files = glob.glob(os.path.join(analyses_folder, 'image_log', '*_analysis_log.csv'))
 
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
@@ -849,14 +900,14 @@ def combine_log_files(log_folder, image_folder_namebase, code_version_date, dele
 
     # Delete the image_log directory and all its contents
     if delete_individual_files:
-        dir_path = os.path.join(log_folder, 'image_log')
+        dir_path = os.path.join(analyses_folder, 'image_log')
         if os.path.exists(dir_path):
             shutil.rmtree(dir_path)
             print('Deleting individual image log files.')
 
 def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", metric_of_interest='penalty'):
-    # metric_of_interest = 'lli'
-    # metric_of_interest = 'xi'
+    """Make histograms of the metric of interest for each true count and h number in the given CSV file."""
+
     # Fix legacy formats: 
     # - Step 1: Open the CSV file for reading
     with open(file_path, 'r') as file:
@@ -894,7 +945,6 @@ def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2
         df = df[['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters']]
         df.to_csv(file_path, index=False)
 
-    
     # Identify all unique true_count values
     unique_true_counts = df['true_count'].unique()
     
@@ -926,7 +976,6 @@ def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2
             counts, _ = np.histogram(numerical_data, bins=edges)
             max_y_value = max(max_y_value, max(counts))
         max_y_value *= 1.1
-                
         
         # Create a figure with subplots
         fig, axs = plt.subplots(num_h_numbers, 1, figsize=(5, 1.6 * num_h_numbers))
@@ -966,10 +1015,6 @@ def main():
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
     parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
-
-    # Override config file folder argument for testing purposes
-    # print('Forcing the config file folder to ./config_files/300524 for testing purposes - remove the line below this code in main() to restore correct behaviour.')
-    # args.config_file_folder = './config_files/300524'
 
     # Check if config-file-folder is provided
     if (args.config_file_folder is None):
@@ -1116,7 +1161,7 @@ def process(config_files_dir, parallel=False, timeout=120):
         # Analyze the dataset
         if config['analyze_the_dataset?']:
             # parallel = False # Debug purpose
-            log_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
+            analyses_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
                                                 code_version_date=config['code_version_date'], 
                                                 use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
                                                 last_h_index=config['ana_maximum_hypothesis_index'], 
@@ -1131,10 +1176,10 @@ def process(config_files_dir, parallel=False, timeout=120):
             plt.close('all')
 
             # Combine analysis log files into one.
-            combine_log_files(log_folder_path, image_folder_namebase, code_version_date, delete_individual_files=True)
+            combine_log_files(analyses_folder_path, image_folder_namebase, code_version_date, delete_individual_files=True)
             
             # Generate confusion matrix
-            label_prediction_log_file_path = os.path.join(log_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
+            label_prediction_log_file_path = os.path.join(analyses_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
             generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
             # generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
 
@@ -1146,40 +1191,6 @@ def process(config_files_dir, parallel=False, timeout=120):
 
 if __name__ == '__main__':
 
-    # sys.argv = ['main.py', '-c', './config_sep_test_scale_intensity/'] 
-    # main()
-    # pass 
-    # img_folder_path = generate_test_images(image_folder_namebase='test', code_ver='2024-07-31', n_total_image_count=1, minimum_number_of_particles=100, maximum_number_of_particles=100, 
-    #                                        amp_to_bg_min=5, generation_random_seed=42, amp_to_bg_max=5, amp_sd=0, psf_sigma=1.0, sz=256, bg=100)
-    # # print("image generated")
-    # image_files = glob.glob(os.path.join(img_folder_path, '*.png')) + glob.glob(os.path.join(img_folder_path, '*.tiff'))
-    # image_file = image_files[0]
-
-    # Get a list of image files in the folder
-    # images_folder = os.path.join('./datasets', 'test_code_ver2024-07-31')
-    # image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
-    # if len(image_files) == 0:
-    #     raise ValueError("There are no images in this folder.")
-    # image_file = image_files[0]
-
-    # analyze_image(image_file, psf_sigma=1.0, last_h_index=5, analysis_rand_seed_per_image=1, log_folder='analyses/test_2024-07-24', tile_width=40, tile_stride=30)
-    # combine_log_files('analyses/test_2024-07-24', 'test', '2024-07-24', delete_individual_files=False)
-    # pass
-    
-    # sys.argv = ['main.py', '-c', './config_test/'] 
-    # sys.argv = ['main.py', '-c', './config_files/'] 
-    # sys.argv = ['main.py', '-c', './config_scale1_test/'] 
-    # sys.argv = ['main.py', '-c', './config_3/'] 
-    # sys.argv = ['main.py', '-c', './config_/'] 
     sys.argv = ['main.py', '-c', './test_code_config/', '-p', 'True']
     # sys.argv = ['main.py', '-c', './test_code_config/']
-    # sys.argv = ['main.py', '-c', './config_files/', '-p', 'True']
-    # print(f"Manually setting argv as {sys.argv}. Delete this line and above to restore normal behaviour. (inside main.py, if __name__ == '__main__': )")
     main()
-    # filepath = "./analyses/weighted FIM size 20 factors are theta_code_ver2024-07-09/weighted FIM size 20 factors are theta_code_ver2024-07-09_metrics_log_per_image_hypothesis.csv"
-    # make_metrics_histograms(file_path=filepath, metric_of_interest='penalty')
-    # make_metrics_histograms(file_path=filepath, metric_of_interest='lli')
-    # make_metrics_histograms(file_path=filepath, metric_of_interest='xi')
-    # items
-    # pass
-
