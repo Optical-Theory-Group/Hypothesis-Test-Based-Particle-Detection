@@ -383,9 +383,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
 
     # Create the "analyses" folder if it doesn't exist
-    analyses_folder = './analyses'
-    if not os.path.exists(analyses_folder):
-        os.makedirs(analyses_folder)
+    if not os.path.exists('./analyses'):
+        os.makedirs('./analyses')
 
     # Mark the start time and print a message indicating the beginning of the image analysis
     starttime = datetime.now()
@@ -870,7 +869,17 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
             plt.savefig(png_file_path, dpi=300)
 
 def combine_log_files(analyses_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
-    '''Combines the log files in the image_log folder into one file called fitting_results.csv.'''
+    ''' Combines the log files in the image_log folder into one file called fitting_results.csv.
+    
+    Parameters:
+        analyses_folder (str): The path of the folder containing the analyses outputs.
+        image_folder_namebase (str): The name of the folder containing the images.
+        code_version_date (str): The version of the code.
+        delete_individual_files (bool): Whether to delete the individual log files. Default is False.
+    
+    Returns:
+        None
+    '''
 
     # Create the fitting_results.csv file
     whole_metrics_log_filename = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
@@ -906,7 +915,15 @@ def combine_log_files(analyses_folder, image_folder_namebase, code_version_date,
             print('Deleting individual image log files.')
 
 def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2024-06-13_metrics_log_per_image_hypothesis.csv", metric_of_interest='penalty'):
-    """Make histograms of the metric of interest for each true count and h number in the given CSV file."""
+    """ Make histograms of the metric of interest for each true count and h number in the given CSV file.
+    
+    Parameters:
+        file_path (str): The path of the CSV file containing the metrics log.
+        metric_of_interest (str): The metric of interest. Default is 'penalty'.
+        
+    Returns:
+        None
+    """
 
     # Fix legacy formats: 
     # - Step 1: Open the CSV file for reading
@@ -1006,46 +1023,25 @@ def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2
         plt.close(fig)  # Close the figure to free memory
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
-def main():
-    # Start the batch job timer
-    batchjobstarttime = datetime.now()
-
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Process config files.')
-    parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
-    parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
-    args = parser.parse_args()
-
-    # Check if config-file-folder is provided
-    if (args.config_file_folder is None):
-        print("Please provide the folder name for config files using --config-file-folder or -c option.")
-        exit()
-    config_files_dir = args.config_file_folder
-    
-    if args.profile is True:
-        with Profile() as profile:
-            process(config_files_dir=config_files_dir, parallel=False)
-            (
-                Stats(profile)
-                .strip_dirs()
-                .sort_stats(SortKey.TIME)
-                .dump_stats('profile_results.prof')
-            )
-            # os.system('snakeviz profile_results.prof &')
-    else:
-        process(config_files_dir, parallel=True)
-
-    batchjobendtime = datetime.now()
-    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
-
 def process(config_files_dir, parallel=False, timeout=120):
-    '''Process the config files in the config_files_dir directory.'''
+    ''' Process the config files in the config_files_dir directory.
+    
+    Parameters:
+        config_files_dir (str): The path of the directory containing the config files.
+        parallel (bool): Whether to run the processing in parallel. Default is False.
+        timeout (int): The timeout in seconds for each process. Default is 120.
+        
+    Returns:
+        analyses_folder (str): The path of the folder containing the analyses outputs.
+    '''
+    # Load the config files
     config_files = os.listdir(config_files_dir)
-
+    # Print the config files
     print(f"Config files loaded (total of {len(config_files)}):")
     for config_file in config_files:
         print("> " + config_file)
 
+    # Process the config files
     for i, config_file in enumerate(config_files):
         print(f"Processing {config_file} ({i+1}/{len(config_files)})")
         try:
@@ -1055,6 +1051,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                 # Pretty print the config file
                 pprint.pprint(config)
 
+                # Set the required fields for each type of processing
                 required_fields_common = ['image_folder_namebase', 'code_version_date']
 
                 required_fields_for_separation_test = ['separation_test_image_generation?', 
@@ -1086,10 +1083,11 @@ def process(config_files_dir, parallel=False, timeout=120):
                 # Check if the required_fields_common are strings
                 for field in required_fields_common:
                     if field in config and not isinstance(config[field], str):
+                        # The config file cannot be used to run the code. Print an error message and exit
                         print(f"Error: '{field}' should be a string.")
                         exit()
                     else:
-                        # Replace '.' with '_' in the field value
+                        # Replace '.' with '_' in the field value to avoid issues with file paths
                         if '.' in config[field]:
                             before_change = config[field]
                             config[field] = config[field].replace('.', '_')
@@ -1098,10 +1096,11 @@ def process(config_files_dir, parallel=False, timeout=120):
                 # Check if all fields ending with '?' are boolean
                 for field in config:
                     if field.endswith('?') and not isinstance(config[field], bool):
+                        # The config file cannot be used to run the code. Print an error message and exit
                         print(f"Error: '{field}' should be a boolean.")
                         exit()
                         
-                # Check if the required fields are present in the config file
+                # Assign the required fields based on the type of processing
                 required_fields = required_fields_common
 
                 if config['separation_test_image_generation?']:
@@ -1111,6 +1110,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                 elif config['analyze_the_dataset?']:
                     required_fields += required_fields_for_analysis
 
+                # Check if all required fields are present in the config file
                 for field in required_fields:
                     if field not in config:
                         # If config['separation_test_image_generation?'] is True, then all fields starting with 'sep' are required.
@@ -1128,7 +1128,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                 
         # If the config file is not found or invalid, print an error message and continue to the next config file
         except (FileNotFoundError, json.JSONDecodeError):
-            print(f"Error: {config_file} file not found or invalid")
+            print(f"Error: {config_file} file not found or invalid. Skipping to the next config file.")
             continue
 
         # Generate separation test images
@@ -1145,6 +1145,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                             config_content=json.dumps(config)
                                             )
 
+        # Generate regular dataset
         elif config['generate_regular_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                 # code_ver=config['code_version_date'],
@@ -1158,7 +1159,8 @@ def process(config_files_dir, parallel=False, timeout=120):
                                 bg=config['gen_bg_level'], 
                                 generation_random_seed=config['gen_random_seed'], 
                                 config_content=json.dumps(config))
-        # Analyze the dataset
+
+        # Analyze dataset
         if config['analyze_the_dataset?']:
             # parallel = False # Debug purpose
             analyses_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
@@ -1189,8 +1191,51 @@ def process(config_files_dir, parallel=False, timeout=120):
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
+            
+def main():
+    """ Main function to run the analysis pipeline. """
+    
+    # Start the batch job timer
+    batchjobstarttime = datetime.now()
+
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Process config files.')
+    parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
+    parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
+    args = parser.parse_args()
+
+    # Check if config-file-folder is provided
+    if (args.config_file_folder is None):
+        print("Please provide the folder name for config files using --config-file-folder or -c option.")
+        exit()
+    config_files_dir = args.config_file_folder
+    
+    if args.profile is True:
+        with Profile() as profile:
+            process(config_files_dir=config_files_dir, parallel=False)
+            (
+                Stats(profile)
+                .strip_dirs()
+                .sort_stats(SortKey.TIME)
+                .dump_stats('profile_results.prof')
+            )
+            # os.system('snakeviz profile_results.prof &')
+    else:
+        process(config_files_dir, parallel=True)
+
+    # End the batch job timer
+    batchjobendtime = datetime.now()
+    # Print the time taken for the batch job
+    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
+
+
+# Run the main function if the script is executed from the command line
 if __name__ == '__main__':
 
-    sys.argv = ['main.py', '-c', './test_code_config/', '-p', 'True']
-    # sys.argv = ['main.py', '-c', './test_code_config/']
+    # Run the main function with parallel processing ('-p' option value is True)
+    # sys.argv = ['main.py', '-c', './test_code_config/', '-p', 'True']
+
+    # Run the main function without parallel processing ('-p' option value is False)
+    sys.argv = ['main.py', '-c', './test_code_config/']
+
     main()

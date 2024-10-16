@@ -13,7 +13,7 @@ def psfconvolution(peak_info, image_width=512):
     else: # Case RGB image
         output = np.array([np.outer(integral_y, integral_x) * peak_info['prefactor'][i] for i in range(3)])
 
-    return output  
+    return output
 
 def lowfreq_background(image_width, x_freq, y_freq, amplitude=100, phase=0):
     """ Creates a low frequency background signal
