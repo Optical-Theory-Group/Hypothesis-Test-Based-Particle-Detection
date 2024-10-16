@@ -27,7 +27,7 @@ from pstats import SortKey, Stats
 
 def generate_test_images(image_folder_namebase, maximum_number_of_particles, particle_intensity_mean, particle_intensity_sd=0, n_total_image_count=1, psf_sigma=1, sz=20, bg=1, 
                          generation_random_seed=42, config_content=None, minimum_number_of_particles=0, file_format='tiff'):
-    """ Generate test images with random number of particles between minimum_number_of_particles and maximum_number_of_particles.
+    """ Generate test images (16-bit) with random number of particles between minimum_number_of_particles and maximum_number_of_particles.
     
     Parameters:
         image_folder_namebase (str): The name of the folder to store the images.
@@ -65,7 +65,9 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
-    print(f'Image generation complete (total: {number_of_images_per_count * number_of_counts}). Note that this may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
+    print(f'Image generation complete (total: {number_of_images_per_count * number_of_counts}).')
+    if number_of_images_per_count * number_of_counts > n_total_image_count:
+        print('This may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
     print(f'Image save destination: ./datasets/{image_folder_namebase}.')
 
     # Create the folder to store the images
@@ -137,7 +139,7 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
 
 def generate_separation_test_images(image_folder_namebase='separation_test', sep_distance_ratio_to_psf_sigma=3, n_total_image_count=20, amp_to_bg=5, psf_sigma=1, 
                                     sz=20, bg=500, generation_random_seed=42, config_content=None, file_format='tiff'):
-    """ Generate test images with two particles separated by a distance of sep_distance_ratio_to_psf_sigma times the psf sigma.
+    """ Generate test images (16-bit) with two particles separated by a distance of sep_distance_ratio_to_psf_sigma times the psf sigma.
         RGB images are not supported in this function.
     
     Parameters:
@@ -1189,7 +1191,7 @@ def process(config_files_dir, parallel=False, timeout=120):
 
             # Delete the dataset after analysis
             if config['ana_delete_the_dataset_after_analysis?']:
-                dir_path =os.path.join("datasets", f"{config['image_folder_namebase']}_code_ver{config['code_version_date']}")
+                dir_path =os.path.join("datasets", f"{config['image_folder_namebase']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
 
