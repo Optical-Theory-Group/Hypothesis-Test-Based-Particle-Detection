@@ -11,12 +11,10 @@ from PIL import Image as im
 import os
 import pandas as pd
 import seaborn as sns
-import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
-from process_algorithms import generalized_likelihood_ratio_test, generalized_maximum_likelihood_rule
-from process_algorithms import make_subregions, create_separable_filter, get_tentative_peaks, merge_coincident_particles
+from process_algorithms import generalized_maximum_likelihood_rule
+from process_algorithms import merge_coincident_particles
 import numpy as np
-import diplib as dip
 import glob
 import shutil
 from sklearn.metrics import confusion_matrix
@@ -1035,8 +1033,12 @@ def process(config_files_dir, parallel=False, timeout=120):
         analyses_folder (str): The path of the folder containing the analyses outputs.
     '''
     # Load the config files
-    config_files = os.listdir(config_files_dir)
-    # Print the config files
+    try:
+        config_files = os.listdir(config_files_dir)
+    except (FileNotFoundError, PermissionError) as e:
+        print(f"Error accessing directory {config_files_dir}: {e}")
+        return None
+   # Print the config files
     print(f"Config files loaded (total of {len(config_files)}):")
     for config_file in config_files:
         print("> " + config_file)
@@ -1233,9 +1235,9 @@ def main():
 if __name__ == '__main__':
 
     # Run the main function with parallel processing ('-p' option value is True)
-    # sys.argv = ['main.py', '-c', './test_code_config/', '-p', 'True']
+    # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
     # Run the main function without parallel processing ('-p' option value is False)
-    sys.argv = ['main.py', '-c', './test_code_config/']
+    sys.argv = ['main.py', '-c', './example_config_folder/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
     main()

@@ -9,11 +9,11 @@
 
 - Type the following command
 
->python tests.py --config-file-folder "config file folder name"
+>python tests.py -c config file folder name"
 
 or
 
->python tests.py -c config file folder name"
+>python tests.py --config-file-folder "config file folder name"
 
 ## Config file format example (.json)
 {</br>
@@ -54,14 +54,14 @@ or
 
 ### Generated Images
 
-- The script will generate, if dictated by the config file, images into image_dataset\{image_folder_namebase}_{code_version_date}\.
-- image_folder_namebase is set inside the config file used. 
-- Inside the folder, images will be generated with name format "count{num_particles}_index{index_num}.tiff"
+- The script will generate, if dictated by the config file, images into "./datasets/{image_folder_namebase}".
+- {image_folder_namebase} is read from the config file used. 
+- Inside the folder, images will be generated with name format "count{num_particles}_index{index_num}.tiff" if it is part of a regular dataset, and "count2_psf{psf_sigma}_index{index_num}.tiff" if it is part of a separation test dataset.
 - config_used.json file will be also generated.
 
 ### Analysis Result
 
-- The script will generate, if dictated by the config file, analysis results inside runs\{image_folder_namebase}_{code_version_date}\.
+- The script will generate, if dictated by the config file, analysis results inside "analyses/{image_folder_namebase}_{code_version_date}/.
 - image_folder_namebase and code_version_date are set inside the config file used.
 - The following files will be created with the same prefix ({image_folder_namebase}_{code_version_date}):
     1. (prefix)_config_used.json (self explanatory file name)

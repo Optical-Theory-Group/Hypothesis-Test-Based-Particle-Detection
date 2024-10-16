@@ -3,7 +3,17 @@ import cv2
 from process_algorithms import integrate_gauss_1d
 
 def psfconvolution(peak_info, image_width=512):
-    """returns the pixel values to be added to the image based on psf convolution."""
+    """ Returns the pixel values to be added to the image based on psf convolution.
+    Args:
+        peak_info (dict): Dictionary containing the following keys:
+            x (float): x-coordinate of the peak
+            y (float): y-coordinate of the peak
+            psf_sigma (float): standard deviation of the PSF
+            prefactor (float or list): prefactor of the peak
+        image_width (int): width of the image
+    Returns:
+        numpy.array(dtype=float): image_width x image_width array of the pixel values to be added to the image
+    """
 
     integral_x = integrate_gauss_1d(np.arange(image_width), peak_info['x'], peak_info['psf_sigma'])
     integral_y = integrate_gauss_1d(np.arange(image_width), peak_info['y'], peak_info['psf_sigma'])
@@ -40,6 +50,14 @@ def lowfreq_background(image_width, x_freq, y_freq, amplitude=100, phase=0):
     return outputimg
 
 def apply_vignette(image, strength=0.5, vignette_factor_min=0.5):
+    """ Applies a vignette effect to the input image
+    Args:
+        image (numpy.array): input image
+        strength (float): strength of the vignette effect
+        vignette_factor_min (float): minimum value of the vignette factor
+    Returns:
+        numpy.array(dtype=float): image with the vignette effect applied
+    """
 
     # Assumes `image` is a grayscale image (2D numpy array)
     if len(image.shape) == 2:
