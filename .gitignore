@@ -5,7 +5,10 @@ testing.ipynb
 .lprof/
 .venv/
 image_dataset/
+datasets/
 runs/
+analyses/
+analyses/*
 config_files/
 *.prof
 profile_results.prof

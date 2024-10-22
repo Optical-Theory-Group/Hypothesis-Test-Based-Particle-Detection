@@ -1493,7 +1493,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             # print(f'xi_drop_count: {xi_drop_count}')
          
         if use_exit_condi and xi_drop_count >= 2:
-            print('drop count >= 2. No higher order hypothesis will be tested for this image.')
+            print('drop count >= 2. No higher order hypothesis will be tested for this image.                                        ')
             break
 
         fisher_info.append(fisher_mat)

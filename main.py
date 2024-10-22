@@ -68,7 +68,7 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     print(f'Image generation complete (total: {number_of_images_per_count * number_of_counts}).')
     if number_of_images_per_count * number_of_counts > n_total_image_count:
         print('This may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
-    print(f'Image save destination: ./datasets/{image_folder_namebase}.')
+    print(f'Image save destination: ./datasets/{image_folder_namebase}')
 
     # Create the folder to store the images
     image_folder_path = os.path.join("datasets", f"{image_folder_namebase}") 
@@ -492,7 +492,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             
     return analyses_folder  # Return the path of the folder containing the analyses outputs
 
-def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30):
+def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, tile_width=40, tile_stride=30, tiling_width_threshold=160):
     """ Analyze an image using the generalized maximum likelihood rule.
     
     Parameters:
@@ -533,7 +533,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
     sz = image.shape[0]
 
     # If the image is smaller than the tile size, then process the whole image (no need to divide into tiles)
-    if sz < tile_width + tile_stride: 
+    if sz < tiling_width_threshold: 
 
         # Call the generalized_maximum_likelihood_rule (GMLR) function to analyze the image
         estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, psf_sigma=psf_sigma, 
@@ -1040,7 +1040,11 @@ def process(config_files_dir, parallel=False, timeout=120):
     except (FileNotFoundError, PermissionError) as e:
         print(f"Error accessing directory {config_files_dir}: {e}")
         return None
-   # Print the config files
+
+    # Filter out non-JSON files
+    config_files = [file for file in config_files if file.endswith('.json')]
+    
+    # Print the config files
     print(f"Config files loaded (total of {len(config_files)}):")
     for config_file in config_files:
         print("> " + config_file)
@@ -1240,6 +1244,6 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
     # Run the main function without parallel processing ('-p' option value is False)
-    sys.argv = ['main.py', '-c', './example_config_folder/'] # -p for profiling. Default is False, and it will run on multiple processes.
+    sys.argv = ['main.py', '-c', './config_submission/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
     main()
