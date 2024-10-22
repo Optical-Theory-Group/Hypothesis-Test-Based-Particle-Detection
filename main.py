@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import imageio
 import ast
 import matplotlib
@@ -1054,7 +1055,7 @@ def process(config_files_dir, parallel=False, timeout=120):
         print(f"Processing {config_file} ({i+1}/{len(config_files)})")
         try:
             with open(os.path.join(config_files_dir, config_file), 'r') as f:
-                config = json.load(f)
+                config = json.load(f, object_pairs_hook=OrderedDict)
                 
                 # Pretty print the config file
                 pprint.pprint(config)
@@ -1244,6 +1245,8 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
     # Run the main function without parallel processing ('-p' option value is False)
-    sys.argv = ['main.py', '-c', './config_submission/'] # -p for profiling. Default is False, and it will run on multiple processes.
+    # sys.argv = ['main.py', '-c', './config_submission/'] # -p for profiling. Default is False, and it will run on multiple processes.
+    sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+
 
     main()
