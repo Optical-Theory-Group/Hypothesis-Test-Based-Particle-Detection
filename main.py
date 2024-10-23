@@ -199,54 +199,59 @@ def generate_separation_test_images(image_folder_namebase='separation_test', sep
     print(f'Generating {n_total_image_count} images with psf {psf_sigma} and separation {sep_str} times the psf in folder {image_folder_path}.')
 
     # Generate images
-    for img_idx in range(n_total_image_count):
 
-        # Print the image index every 20 images
-        if img_idx % 20 == 0:
-            print(f"Generating image index {img_idx}", end='\r')
+    with tqdm(total=n_total_image_count, desc="Generating Images", unit="image") as pbar:
+        for img_idx in range(n_total_image_count):
 
-        # Initialize the image with the background intensity
-        image = np.ones((sz, sz), dtype=float) * bg
+            # Print the image index every 20 images
+            if img_idx % 20 == 0:
+                print(f"Generating image index {img_idx}", end='\r')
 
-        # Calculate the particle intensity
-        particle_intensity = amp_to_bg * bg
-        angle = np.random.uniform(0, 2*np.pi)
+            # Initialize the image with the background intensity
+            image = np.ones((sz, sz), dtype=float) * bg
 
-        # Set the middle position between particle 1 & 2 - Give random offset (-.5, .5) pixels in both x and y to randomize the center position relative to the pixel grid.
-        center_x = sz / 2 + np.random.uniform(-.5, .5)
-        center_y = sz / 2 + np.random.uniform(-.5, .5)
+            # Calculate the particle intensity
+            particle_intensity = amp_to_bg * bg
+            angle = np.random.uniform(0, 2*np.pi)
 
-        # Set the x, y positions of particle 1
-        x1 = center_x + separation_distance / 2 * np.cos(angle)
-        y1 = center_y + separation_distance / 2 * np.sin(angle)
+            # Set the middle position between particle 1 & 2 - Give random offset (-.5, .5) pixels in both x and y to randomize the center position relative to the pixel grid.
+            center_x = sz / 2 + np.random.uniform(-.5, .5)
+            center_y = sz / 2 + np.random.uniform(-.5, .5)
 
-        # Check if the particle is out of bounds
-        if (x1 <= -.5 + 2 * psf_sigma or x1 >= sz - .5 - 2 * psf_sigma): 
-            raise ValueError(f"Particle 1 is out of bounds: x1={x1}, y1={y1}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
+            # Set the x, y positions of particle 1
+            x1 = center_x + separation_distance / 2 * np.cos(angle)
+            y1 = center_y + separation_distance / 2 * np.sin(angle)
 
-        # Add the point spread function of particle 1 to the image
-        peak_info = {'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
-        image += psfconvolution(peak_info, sz)
+            # Check if the particle is out of bounds
+            if (x1 <= -.5 + 2 * psf_sigma or x1 >= sz - .5 - 2 * psf_sigma): 
+                raise ValueError(f"Particle 1 is out of bounds: x1={x1}, y1={y1}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
 
-        # Set the x, y positions of particle 2
-        x2 = center_x - separation_distance / 2 * np.cos(angle)
-        y2 = center_y - separation_distance / 2 * np.sin(angle)
+            # Add the point spread function of particle 1 to the image
+            peak_info = {'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
+            image += psfconvolution(peak_info, sz)
 
-        # Check if the particle is out of bounds
-        if (y1 <= -.5 + 2 * psf_sigma or y1 >= sz - .5 - 2 * psf_sigma):
-            raise ValueError(f"Particle 2 is out of bounds: x2={x2}, y2={y2}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
-        
-        # Add the point spread function of particle 2 to the image
-        peak_info = {'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
-        image += psfconvolution(peak_info, sz)
+            # Set the x, y positions of particle 2
+            x2 = center_x - separation_distance / 2 * np.cos(angle)
+            y2 = center_y - separation_distance / 2 * np.sin(angle)
 
-        # Add Poisson noise to the whole image
-        image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
+            # Check if the particle is out of bounds
+            if (y1 <= -.5 + 2 * psf_sigma or y1 >= sz - .5 - 2 * psf_sigma):
+                raise ValueError(f"Particle 2 is out of bounds: x2={x2}, y2={y2}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
+            
+            # Add the point spread function of particle 2 to the image
+            peak_info = {'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
+            image += psfconvolution(peak_info, sz)
 
-        # Save the image
-        img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.{file_format}"
-        img_filepath = os.path.join(image_folder_path, img_filename)
-        imageio.imwrite(img_filepath, image)
+            # Add Poisson noise to the whole image
+            image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
+
+            # Save the image
+            img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.{file_format}"
+            img_filepath = os.path.join(image_folder_path, img_filename)
+            imageio.imwrite(img_filepath, image)
+
+            # Update the progress bar
+            pbar.update(1)
 
     # Print the completion of image generation
     print(f"Image generation completed (total: {n_total_image_count}). Images saved to {image_folder_path}.")
