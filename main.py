@@ -1,3 +1,4 @@
+from tqdm import tqdm
 from collections import OrderedDict
 import imageio
 import ast
@@ -66,7 +67,8 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     
     # Print the number of images to be generated and folder to store the images. 
     print(f'Generating images containing {minimum_number_of_particles} to {maximum_number_of_particles} particles. It will produce {number_of_images_per_count} images per count.')
-    print(f'Image generation complete (total: {number_of_images_per_count * number_of_counts}).')
+    num_total_images = number_of_images_per_count * number_of_counts
+    print(f'Image generation complete (total: {num_total_images}).')
     if number_of_images_per_count * number_of_counts > n_total_image_count:
         print('This may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
     print(f'Image save destination: ./datasets/{image_folder_namebase}')
@@ -84,50 +86,54 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
     else:
         raise ValueError("The color mode of the image is not recognized. Please check the following variables: particle_intensity_mean, particle_intensity_sd, and bg.")
 
-    for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
-        for img_idx in range(number_of_images_per_count):
-            # Initialize the image and the chosen mean intensity(s)
-            if color_mode == 'gray':
-                image = np.ones((sz, sz), dtype=float) * bg
-            else:   
-                image = [np.ones((sz, sz), dtype=float) * bg[i] for i in range(3)]
-
-            for _ in range(n_particles):
-                # Randomly draw the position of the particle, avoiding the edges of the image
-                x = np.random.rand() * (sz - psf_sigma * 4) + psf_sigma * 2 - 0.5
-                y = np.random.rand() * (sz - psf_sigma * 4) + psf_sigma * 2 - 0.5
-
-                # Randomly draw the relative intensity of the particle (mean: 1, std: amp_sd)
+    with tqdm(total=num_total_images, desc="Generating Images", unit="image") as pbar:
+        for n_particles in range(minimum_number_of_particles, maximum_number_of_particles+1):
+            for img_idx in range(number_of_images_per_count):
+                # Initialize the image and the chosen mean intensity(s)
                 if color_mode == 'gray':
-                    particle_intensity = np.random.normal(particle_intensity_mean, particle_intensity_sd)
-                    if particle_intensity < 0:
-                        raise ValueError("Randomly drawn particle intensity is less than 0, which is not allowed.")
+                    image = np.ones((sz, sz), dtype=float) * bg
+                else:   
+                    image = [np.ones((sz, sz), dtype=float) * bg[i] for i in range(3)]
 
-                    # Create peak info dictionary
-                    peak_info = {'x': x, 'y': y, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
+                for _ in range(n_particles):
+                    # Randomly draw the position of the particle, avoiding the edges of the image
+                    x = np.random.rand() * (sz - psf_sigma * 4) + psf_sigma * 2 - 0.5
+                    y = np.random.rand() * (sz - psf_sigma * 4) + psf_sigma * 2 - 0.5
 
-                else: # Case : rgb
-                    particle_intensities = np.array([np.random.normal(particle_intensity_mean, particle_intensity_sd) for i in range(3)])
-                    if np.any(particle_intensities < 0):
-                        raise ValueError("Randomly drawn particle intensity (at least one of r, g, or b) is less than 0, which is not allowed.")
+                    # Randomly draw the relative intensity of the particle (mean: 1, std: amp_sd)
+                    if color_mode == 'gray':
+                        particle_intensity = np.random.normal(particle_intensity_mean, particle_intensity_sd)
+                        if particle_intensity < 0:
+                            raise ValueError("Randomly drawn particle intensity is less than 0, which is not allowed.")
 
-                    # Create peak info dictionary
-                    peak_info = {'x': x, 'y': y, 'prefactor': particle_intensities, 'psf_sigma': psf_sigma}
+                        # Create peak info dictionary
+                        peak_info = {'x': x, 'y': y, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
 
-                # Add the point spread function of the particle to the image
-                image += psfconvolution(peak_info, sz)
+                    else: # Case : rgb
+                        particle_intensities = np.array([np.random.normal(particle_intensity_mean, particle_intensity_sd) for i in range(3)])
+                        if np.any(particle_intensities < 0):
+                            raise ValueError("Randomly drawn particle intensity (at least one of r, g, or b) is less than 0, which is not allowed.")
 
-            # Add Poisson noise
-            image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
+                        # Create peak info dictionary
+                        peak_info = {'x': x, 'y': y, 'prefactor': particle_intensities, 'psf_sigma': psf_sigma}
 
-            # Adjust the shape of the image to match that of png or tiff
-            if image.ndim == 3 and image.shape[0] == 3:
-                image = np.transpose(image, (1, 2, 0))
+                    # Add the point spread function of the particle to the image
+                    image += psfconvolution(peak_info, sz)
 
-            # Save the image
-            img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
-            img_filepath = os.path.join(image_folder_path, img_filename)
-            imageio.imwrite(img_filepath, image)
+                # Add Poisson noise
+                image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
+
+                # Adjust the shape of the image to match that of png or tiff
+                if image.ndim == 3 and image.shape[0] == 3:
+                    image = np.transpose(image, (1, 2, 0))
+
+                # Save the image
+                img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
+                img_filepath = os.path.join(image_folder_path, img_filename)
+                imageio.imwrite(img_filepath, image)
+
+                # Update the progress bar
+                pbar.update(1)
     
     # Save the content of the config file
     if config_content is not None:
