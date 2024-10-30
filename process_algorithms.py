@@ -1162,8 +1162,6 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                 # print("Here is the last (denorm) theta snapshot:")
                 # print(denormalize(theta_snapshots[-1], hypothesis_index, roi_min, roi_max, psf_sigma, szx, szy))
 
-                
-
             # print(f'H{hypothesis_index} converged?: {result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
             snapshot_length = len(fn_snapshots)
@@ -1465,7 +1463,11 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             weighted_fisher_mat = fisher_mat * theta**2
             fisher_mat = weighted_fisher_mat.copy()
 
-        _, log_det_fisher_mat = np.linalg.slogdet(fisher_mat)
+        try:
+            _, log_det_fisher_mat = np.linalg.slogdet(fisher_mat)
+        except np.linalg.LinAlgError as e:
+            print(f"Error occurred during the calculation of log determinant of the Fisher Information Matrix: {e}")
+            log_det_fisher_mat = np.nan
 
         prev_xi_assigned = False
         if len(xi) > 0:
@@ -1473,9 +1475,9 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             prev_xi_assigned = True
 
         if hypothesis_index != 0 and zero_diag_count > 0:
-            penalty += [1e10]
+            penalty += [1e10] # Adding to the list
         else:
-            penalty += [0.5 * log_det_fisher_mat]
+            penalty += [0.5 * log_det_fisher_mat] # Adding to the list
         if np.isinf(penalty[-1]):
             penalty[-1] = np.nan
         lli += [sum_loglikelihood]

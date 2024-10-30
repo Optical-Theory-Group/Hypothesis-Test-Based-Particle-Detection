@@ -1,4 +1,3 @@
-from main import make_specific_images
 from process_algorithms import generalized_maximum_likelihood_rule_on_rgb
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -341,15 +340,17 @@ def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
 	plt.savefig('expected_overlap_pairs_per_area_vs_surface_density_all_psfs.png')
 	plt.show(block=False)
 
-def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./config_for_remote_exec/', psfs=[0.5, 1.0, 1.5, 2.0, 3.0]):
+def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./config_for_remote_exec/', psfs=[1, 2, 3], multipliers=[1, 4, 9]):
 	
-	separations = np.arange(0.0, 7.0, 0.2)
-	for psf in psfs:
-		for sep in separations:
+	# Set the random seed for reproducibility
+	np.random.seed(0)
+
+	separation_ratios_to_psf_sigma = np.arange(0.0, 7.0, 0.2)
+	for psf, mul in zip(psfs, multipliers):
+		for sep in separation_ratios_to_psf_sigma:
 			# Define the source and destination paths
-			psf_str = f"{psf:.1f}".replace('.', '_')
+			psf_str = f"{psf:.3f}".replace('.', '_')
 			sep_str = f"{sep:.1f}".replace('.', '_')
-			dest_path = os.path.join(dest_folder_path, f"psf{psf_str}_sep{sep_str}.json")
 			# Read the JSON file
 			if ref_json_path != '':
 				with open(ref_json_path, 'r') as file:
@@ -357,44 +358,40 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 			else:
 				config_data = {}
 
-			# set the following fields
-			config_data['image_folder_namebase'] = f'psf{psf_str}_sep{sep_str}'
-			config_data['code_version_date'] = '2024-07-31'
+			# Most important field settings
+			config_data['image_folder_namebase'] = f'16bit_psf{psf_str}_sep{sep_str}'
 
-			# Set the fields for separation test image generation
-			config_data['separation_test_image_generation?'] = True
 			config_data['sep_psf_sigma'] = psf
-			config_data['sep_psf_ratio'] = round(sep, 2)
+			config_data['sep_distance_ratio_to_psf_sigma'] = round(sep, 2)
 			config_data['sep_image_count'] = 10000
-			config_data['sep_intensity_prefactor_to_bg_level'] = 5.0
-			if psf == 3.0:
-				config_data['sep_intensity_prefactor_to_bg_level'] = 20.0
-			config_data['sep_img_width'] = 40
-			config_data['sep_bg_level'] = 500
-			config_data['sep_random_seed'] = 722 
+			config_data['sep_random_seed'] = np.random.randint(0, 100000)
 
-			# Set the field for dataset generation to False
-			config_data['generate_the_dataset?'] = False
+			config_data['ana_predefined_psf_sigma'] = psf
+			config_data['ana_random_seed'] = np.random.randint(0, 100000)
 
-			# Set the field for analysis to True and set the (pre-defined) psf 
+			# The following fields should be already set to the following values in the reference json file, but just in case
+			config_data['separation_test_image_generation?'] = True
+			# config_data['sep_intensity_prefactor_to_bg_level'] *= mul
+			config_data['sep_bg_level'] /= mul
+			config_data['generate_regular_dataset?'] = False
 			config_data['analyze_the_dataset?'] = True
-			config_data['ana_predefined_psf_sd'] = psf
-			config_data['ana_random_seed'] = 723	
 			config_data['ana_use_premature_hypothesis_choice?'] = False
 			config_data['ana_maximum_hypothesis_index'] = 5
 			config_data['ana_delete_the_dataset_after_analysis?'] = True 
 
 
 			# Save the modified JSON to the new file
+			dest_path = os.path.join(dest_folder_path, f"{config_data['image_folder_namebase']}.json")
 			os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 			with open(dest_path, 'w') as file:
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
 
-# create_config_files_for_separation_tests(ref_json_path='config_sep_test_remote_2/psf3_0_sep6_8.json', dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
+# psfs = np.array([0.707, 1, 1.41, 2, 2.83, 4, 5.66])
+# multipliers = np.array([0.125, 0.25, 0.5, 1, 2, 4, 8])
+# create_config_files_for_separation_tests(ref_json_path='config_submission/baseline/16bit_sep_baseline.json', dest_folder_path='config_submission/', psfs=psfs, multipliers=multipliers)
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_random_offset_center/', psfs=[0.5])
-# psfs = np.array([.5, 1, 1.5, 2, 3])
 # psfs = np.array([0.5, 3])
 # for psf in psfs:
 # 	process_separation_test_results(subdir='2024-08-19', prefix=f"psf{psf}".replace('.', '_'))
@@ -406,22 +403,130 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 # # plot_estimate_1s()
 # pass
 
-
-
-img_param = [
-            {'bg': [50, 40, 30], 'sz': 20, 'psf': 1},
-            {'x': 5, 'y': 5, 'intensity': [1000, 100, 10]},
-            {'x': 10, 'y': 10, 'intensity': [20, 2000, 200]},
-            {'x': 15, 'y': 15, 'intensity': [25, 250, 2500]},
-            ]
-foldername = 'specific_images'
-filename = 'count3-index0.tiff'
-random_seed = 0
-roi_image = make_specific_images(foldername, img_param, random_seed)
-fit_results = generalized_maximum_likelihood_rule_on_rgb(roi_image, img_param[0]['psf'], last_h_index=5, random_seed=0, display_fit_results=True, display_xi_graph=False, use_exit_condi=False)
 # res = analyze_image(os.path.join('./dataset/', foldername, filename), img_param[0]['psf'], 5, 0, './analyses/specific_images', display_fit_results=True, display_xi_graph=True)
 # print(f'Actual number of particles: {res["actual_num_particles"]}')
 # print(f'Estimated number of particles: {res["estimated_num_particles"]}')
 # print(f'Determined particle intensities: {res["determined_particle_intensities"]}')
 # print(f'Metrics: {res["metrics"]}')
-pass
+# pass
+
+def plot_matrix():
+	# Define the 4x4 matrix
+	matrix = np.array([
+		[289372323.646, 29980.498, -6643.966, -3239.173],
+		[29980.498, 5526.693, 2527.446, 1232.221],
+		[-6643.966, 2527.446, 107633383.996, 5618.796],
+		[-3239.173, 1232.221, 5618.796, 107856657.173]
+	])
+
+	# Plotting the matrix with grayscale color mapping
+	fig, ax = plt.subplots(figsize=(6, 6))
+	cax = ax.imshow(matrix, cmap='gray', interpolation='nearest')
+
+	# Adding text annotations for each cell with two decimal precision
+	for i in range(matrix.shape[0]):
+		for j in range(matrix.shape[1]):
+			# Determine the text color based on the background intensity
+			color = 'white' if matrix[i, j] < 1e7 else 'black'
+			ax.text(j, i, f"{matrix[i, j]:.2f}", ha='center', va='center', color=color, fontsize=8)
+
+	# Adding a colorbar to show the grayscale mapping
+	fig.colorbar(cax, ax=ax, orientation='vertical')
+	ax.set_title("2D Array in Grayscale")
+
+	plt.show()
+ 
+# plot_matrix()
+
+def plot_criterion_vs_H():
+	# Criterion values from the user-provided data
+	criterion_values = [
+		-66644.74753,
+		-59196.89673,
+		-59209.19794,
+		-59219.60837,
+		-59227.69342,
+		-59239.64075
+	]
+	criterion_values = [
+		-209266.1253,
+		-138214.881,
+		-66247.78738,
+		-106654.2942,
+		-143948.1689,
+		-178505.52
+	]
+
+	# Generating x-axis values as a simple index for H values
+	H_values = range(len(criterion_values))
+
+	# Plotting Criterion vs H
+	plt.figure(figsize=(5, 3))
+	plt.plot(H_values, criterion_values, marker='o', linestyle='-', color='k')
+
+	# Adding labels and title
+	plt.xlabel("H")
+	plt.ylabel("Criterion")
+	plt.title("Criterion vs H")
+	plt.grid(True)
+	# plt.ylim(-60000, -59000)
+	plt.tight_layout()
+	# plt.legend()
+	plt.gca().yaxis.set_major_formatter(plt.NullFormatter())
+	plt.show()
+	pass
+
+# plot_criterion_vs_H()
+
+def plot_random():
+	# Adjust y-values to create a concave curve where the gradient is near 0 at x=0 and gradually becomes more negative
+	# Define the range of x-values (Surface Density) from 0 to 1
+	x_surface_density = np.linspace(0, 1, 7)
+
+	# Use exponential decay to create the concave down shape with specified start and end points
+	y_base = 1 - np.exp(x_surface_density) * 0.1
+	y_line_2 = 1 - np.exp(x_surface_density + 0.3) * 0.1 
+	y_line_3 = 1 - np.exp(x_surface_density + 0.6) * 0.1
+	y_line_4 = 1 - np.exp(x_surface_density + 0.9) * 0.1
+
+	# Harmonious colors for each line
+	colors = ['#3498DB', '#E74C3C', '#2ECC71', '#F39C12']
+
+	# Create the plot
+	plt.figure(figsize=(6, 4))
+
+	# Plot each line with concave downward shape
+	plt.plot(x_surface_density, y_base, 'o-', color=colors[0], label='Blue Line')
+	plt.plot(x_surface_density, y_line_2, 'o-', color=colors[1], label='Red Line')
+	plt.plot(x_surface_density, y_line_3, 'o-', color=colors[2], label='Green Line')
+	plt.plot(x_surface_density, y_line_4, 'o-', color=colors[3], label='Orange Line')
+
+	# Labels without legend for clarity
+	plt.xlabel('Surface Density')
+	plt.ylabel('Weighted Accuracy')
+	plt.ylim(0, 1)  # Full range from y=0 to y=1
+
+	# Show the plot
+	plt.tight_layout()
+	plt.show(block=False)
+	pass
+
+import concurrent.futures
+import time
+
+def long_running_task():
+	time.sleep(10)
+	return "Task Completed"
+
+def outer():
+	return long_running_task()
+
+with concurrent.futures.ThreadPoolExecutor() as executor:
+	futures = [executor.submit(outer) for _ in range(2)]
+	# for cfresult in concurrent.futures.as_completed(futures):
+	for cfresult in futures:
+		try:
+			result = cfresult.result(timeout=5)
+			print(result)
+		except concurrent.futures.TimeoutError:
+			print("The task timed out")
