@@ -43,6 +43,7 @@ or
     "gen_particle_intensity_sd": 0,</br>
 </br>
     "analyze_the_dataset?": true,</br>
+    "ana_timeout_per_image?": 2 (optional),</br>
     "ana_random_seed": 0,</br>
     "ana_predefined_psf_sigma": 1,</br>
     "ana_use_premature_hypothesis_choice?": false,</br>

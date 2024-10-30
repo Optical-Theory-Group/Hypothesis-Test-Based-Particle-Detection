@@ -322,7 +322,7 @@ def update_progress(progress, status='', barlength=20):
     sys.stdout.write(clear_line + text)
     sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout=120):
+def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout_per_image=120):
     '''Analyzes all the images in the dataset folder.
 
     Parameters:
@@ -335,7 +335,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         config_content (str): The content of the config file.
         parallel (bool): Whether to analyze the images in parallel.
         display_xi_graph (bool): Whether to display the xi graph.
-        timeout (int): The maximum time allowed for the analysis of each image in seconds.
+        timeout_per_image (int): The maximum time allowed for processing each image. (sec)
 
     Returns:
         analyses_folder (str): The path of the folder containing the analyses outputs.
@@ -390,9 +390,6 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
 
     # Prepare the label (=actual count) prediction (=estimated count) log file
     label_prediction_log_file_path = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
-    with open(label_prediction_log_file_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
 
     # Create the "analyses" folder if it doesn't exist
     if not os.path.exists('./analyses'):
@@ -402,12 +399,36 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
     starttime = datetime.now()
     print('Beginning image analysis...')
 
+    # TESTING - MAKE SURE TO REMOVE after 10/31/2024 ---- #
+    TESTING = False
+    image_rand_seeds = list(range(60000))
+    np.random.shuffle(image_rand_seeds)
+    filename = image_files[0]
+    if TESTING:
+        progress = 0
+        for analysis_rand_seed_per_image in image_rand_seeds:
+            analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
+            progress += 1
+            if progress % 500 == 0:
+                print(f"Progress: {progress}/{len(image_files)}")
+    pass
+
+
+    # --------------------------------------------------- #
+    
+
     # Create a list of random seeds for each image
     image_rand_seeds = list(range(len(image_files)))
     np.random.shuffle(image_rand_seeds)
 
+    with open(label_prediction_log_file_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
+
     # Check if the analysis is to be done in parallel (or sequentially).
     if parallel:
+        print("Analyzing images in parallel...")
+
         # Analyze the images in parallel using ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
@@ -416,59 +437,50 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
             # Initialize the progress counter
             progress = 0
             # Write the results to the main log file
-            with open(label_prediction_log_file_path, 'a', newline='') as f:
                 # Iterate over the futures that are completed. 
-                for cfresult in concurrent.futures.as_completed(futures):
-                    # If an exception is raised, print the exception and continue to the next image
-                    if cfresult._exception is not None:
-                        # Check if the exception is a Warning or an Exception
-                        if isinstance(cfresult._exception, Warning):
-                            print("Encountered a Warning:", cfresult._exception)
-                        else:
-                            print("Encountered an Exception:", cfresult._exception)
-                            print("Proceeding without addressing the exception.")
+                # for cfresult in concurrent.futures.as_completed(futures):
+            for future, future_filename in zip(futures, image_files):
+                try:
+                    cfresult = future.result(timeout=timeout_per_image)
 
-                    
-                    try: # Process the result of the future
+                    # analysis_result = cfresult.result(timeout=timeout_per_image)
+                    analysis_result = cfresult
 
-                        # Get the result of the future 
-                        analysis_result = cfresult.result(timeout=timeout)
+                    # Extract the results from the analysis result
+                    actual_num_particles = analysis_result['actual_num_particles']
+                    estimated_num_particles = analysis_result['estimated_num_particles']
+                    input_image_file = analysis_result['image_filename']
+                    determined_particle_intensities = analysis_result['determined_particle_intensities']
 
-                        # Extract the results from the analysis result
-                        actual_num_particles = analysis_result['actual_num_particles']
-                        estimated_num_particles = analysis_result['estimated_num_particles']
-                        input_image_file = analysis_result['image_filename']
-                        determined_particle_intensities = analysis_result['determined_particle_intensities']
-
-                        # Write the results to the label_prediction log file
+                    # Write the results to the label_prediction log file
+                    with open(label_prediction_log_file_path, 'a', newline='') as f:    
                         writer = csv.writer(f)
                         writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
-                        # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
-                        if actual_num_particles == estimated_num_particles:
-                            statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
-                        elif actual_num_particles > estimated_num_particles:
-                            statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}'
-                        else:
-                            statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}'
+                    # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
+                    if actual_num_particles == estimated_num_particles:
+                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
+                    elif actual_num_particles > estimated_num_particles:
+                        statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}'
+                    else:
+                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}'
 
-                    # If the task timed out, print a message and cancel the future
-                    except concurrent.futures.TimeoutError:
-                        print(f"Task exceeded the maximum allowed time of {timeout} seconds and was cancelled.")
-                        cfresult.cancel()  
-                        statusmsg = 'Task cancelled due to timeout.'
-                    # If an exception is raised in the processing of the result, print the exception and continue to the next image
-                    except Exception as e:
-                        print(f"Error in cfresult.result(): {e}")
-                        statusmsg = f'Error: {e}'
+                except concurrent.futures.TimeoutError:
+                    print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {future_filename} ")
+                    # cfresult.cancel()
+                    statusmsg = f'Task cancelled due to timeout. File: {future_filename} '
+                except Exception as e:
+                    print(f"Error in cfresult.result(): {e} File: {future_filename} ")
+                    statusmsg = f'Error: {e}'
 
-                    # Report the progress
-                    report_progress(progress, len(image_files), starttime, statusmsg)
+                # Report the progress
+                report_progress(progress, len(image_files), starttime, statusmsg)
 
-                    # Increment the progress counter
-                    progress += 1
+                # Increment the progress counter
+                progress += 1
 
     else: # If the analysis is to be done sequentially
+        print("Analyzing images sequentially...")
 
         # Initialize the progress counter
         progress = 0
@@ -476,18 +488,19 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
         # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
             # Analyze the image
-            analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
+            try:
+                analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
 
-            # Extract the results from the analysis result
-            actual_num_particles = analysis_result['actual_num_particles']
-            estimated_num_particles = analysis_result['estimated_num_particles']
-            input_image_file = analysis_result['image_filename']
-            determined_particle_intensities = analysis_result['determined_particle_intensities']
+                # Extract the results from the analysis result
+                actual_num_particles = analysis_result['actual_num_particles']
+                estimated_num_particles = analysis_result['estimated_num_particles']
+                input_image_file = analysis_result['image_filename']
+                determined_particle_intensities = analysis_result['determined_particle_intensities']
 
-            # Write the results to the label_prediction log file
-            with open(label_prediction_log_file_path, 'a', newline='') as f: 
-                writer = csv.writer(f)
-                writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                # Write the results to the label_prediction log file
+                with open(label_prediction_log_file_path, 'a', newline='') as f: 
+                    writer = csv.writer(f)
+                    writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                 # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                 if actual_num_particles == estimated_num_particles:
@@ -496,6 +509,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_cond
                     statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
                 else:
                     statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
+
+            except:
+                print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {filename} ")
+                statusmsg = f'Error: {e} File: {filename} '
 
             # Report the progress
             report_progress(progress, len(image_files), starttime, statusmsg)
@@ -749,6 +766,8 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
     """
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
+    if df.empty:
+        raise ValueError("The CSV file is empty. No data to process.")
     # Extract the actual and estimated particle numbers
     try:
         actual = df['Actual Particle Count']
@@ -1035,13 +1054,12 @@ def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2
         plt.close(fig)  # Close the figure to free memory
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
-def process(config_files_dir, parallel=False, timeout=120):
+def process(config_files_dir, parallel=False):
     ''' Process the config files in the config_files_dir directory.
     
     Parameters:
         config_files_dir (str): The path of the directory containing the config files.
         parallel (bool): Whether to run the processing in parallel. Default is False.
-        timeout (int): The timeout in seconds for each process. Default is 120.
         
     Returns:
         analyses_folder (str): The path of the folder containing the analyses outputs.
@@ -1183,6 +1201,7 @@ def process(config_files_dir, parallel=False, timeout=120):
         # Analyze dataset
         if config['analyze_the_dataset?']:
             # parallel = False # Debug purpose
+            timeout = config.get('ana_timeout_per_image', 600)
             analyses_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
                                                 code_version_date=config['code_version_date'], 
                                                 use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
@@ -1191,7 +1210,7 @@ def process(config_files_dir, parallel=False, timeout=120):
                                                 psf_sigma=config['ana_predefined_psf_sigma'], 
                                                 config_content=json.dumps(config), 
                                                 parallel=parallel, 
-                                                timeout=timeout)
+                                                timeout_per_image=timeout)
             # Get the dataset name and code version date
             image_folder_namebase = config['image_folder_namebase']
             code_version_date = config['code_version_date']
@@ -1202,7 +1221,10 @@ def process(config_files_dir, parallel=False, timeout=120):
             
             # Generate confusion matrix
             label_prediction_log_file_path = os.path.join(analyses_folder_path, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
-            generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
+            try:
+                generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
+            except Exception as e:
+                print(f"Error generating confusion matrix: {e}")
             # generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
 
             # Delete the dataset after analysis
@@ -1256,8 +1278,8 @@ if __name__ == '__main__':
     # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
     # Run the main function without parallel processing ('-p' option value is False)
-    # sys.argv = ['main.py', '-c', './config_submission/'] # -p for profiling. Default is False, and it will run on multiple processes.
     sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+    # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
     main()
