@@ -322,7 +322,7 @@ def update_progress(progress, status='', barlength=20):
     sys.stdout.write(clear_line + text)
     sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_namebase, code_version_date, use_exit_condi=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False, timeout_per_image=120):
+def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_image, use_exit_condi=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False):
     '''Analyzes all the images in the dataset folder.
 
     Parameters:
