@@ -434,12 +434,17 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
             # Create a list of futures for each image
             futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condi=use_exit_condi )
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
+            print(f"Number of futures submitted: {len(futures)}")
             # Initialize the progress counter
             progress = 0
             # Write the results to the main log file
                 # Iterate over the futures that are completed. 
                 # for cfresult in concurrent.futures.as_completed(futures):
+            first_future_flag = True
             for future, future_filename in zip(futures, image_files):
+                if first_future_flag:
+                    print(f"First future processing: {future_filename}")
+                    first_future_flag = False
                 try:
                     cfresult = future.result(timeout=timeout_per_image)
 
