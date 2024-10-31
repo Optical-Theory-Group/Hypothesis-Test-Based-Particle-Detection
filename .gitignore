@@ -10,10 +10,11 @@ runs/
 analyses/
 analyses/*
 config_files/
+configs/
+config_submission/
 *.prof
 profile_results.prof
 *.png
-config*/
 *.zip
 *.png
 *.csv
