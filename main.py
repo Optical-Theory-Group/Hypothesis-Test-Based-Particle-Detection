@@ -121,21 +121,23 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
                     image += psfconvolution(peak_info, sz)
 
                 # Add Poisson noise
-                image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
+                image = np.random.poisson(image).astype(float) # keeping it as float disallows overflowing.
+                img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
+                if np.any(image) > 65535:
+                    print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Such values will be clipped. This mimics saturation in the camera.")
+                    image = np.clip(image, 0, 65535)
 
                 # Adjust the shape of the image to match that of png or tiff
                 if image.ndim == 3 and image.shape[0] == 3:
                     image = np.transpose(image, (1, 2, 0))
 
                 # Save the image
-                img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
                 img_filepath = os.path.join(image_folder_path, img_filename)
-                imageio.imwrite(img_filepath, image)
+                imageio.imwrite(img_filepath, image.astype(np.uint16))
 
                 # Update the progress bar
                 pbar.update(1)
-    
-    # Save the content of the config file
+
     if config_content is not None:
         config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
         with open(config_file_save_path, 'w') as f:
@@ -1146,11 +1148,11 @@ def process(config_files_dir, parallel=False):
                 # Assign the required fields based on the type of processing
                 required_fields = required_fields_common
 
-                if config['separation_test_image_generation?']:
+                if 'separation_test_image_generation?' in config and config['separation_test_image_generation?']:
                     required_fields += required_fields_for_separation_test
-                elif config['generate_regular_dataset?']:
+                elif 'generate_regular_dataset?' in config and config['generate_regular_dataset?']:
                     required_fields += required_fields_for_generation
-                elif config['analyze_the_dataset?']:
+                elif 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
                     required_fields += required_fields_for_analysis
 
                 # Check if all required fields are present in the config file
@@ -1175,7 +1177,7 @@ def process(config_files_dir, parallel=False):
             continue
 
         # Generate separation test images
-        if config['separation_test_image_generation?']:
+        if 'separation_test_image_generation?' in config and config['separation_test_image_generation?']:
             generate_separation_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                             # code_ver=config['code_version_date'],
                                             sep_distance_ratio_to_psf_sigma = config['sep_distance_ratio_to_psf_sigma'],
@@ -1189,7 +1191,7 @@ def process(config_files_dir, parallel=False):
                                             )
 
         # Generate regular dataset
-        elif config['generate_regular_dataset?']:
+        elif 'generate_regular_dataset?' in config and config['generate_regular_dataset?']:
             generate_test_images(image_folder_namebase=config['image_folder_namebase'], 
                                 # code_ver=config['code_version_date'],
                                 n_total_image_count=config['gen_total_image_count'],
@@ -1204,7 +1206,7 @@ def process(config_files_dir, parallel=False):
                                 config_content=json.dumps(config))
 
         # Analyze dataset
-        if config['analyze_the_dataset?']:
+        if 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
             # parallel = False # Debug purpose
             timeout = config.get('ana_timeout_per_image', 600)
             analyses_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
