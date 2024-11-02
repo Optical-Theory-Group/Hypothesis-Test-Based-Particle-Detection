@@ -511,22 +511,14 @@ def plot_random():
 	plt.show(block=False)
 	pass
 
-import concurrent.futures
-import time
+image = np.array([[65536, 65536], [65536, 65536]], dtype=float)
 
-def long_running_task():
-	time.sleep(10)
-	return "Task Completed"
+image += np.array([[-1, 0], [1, 2]])
 
-def outer():
-	return long_running_task()
+# print(np.any(image > 65536))
 
-with concurrent.futures.ThreadPoolExecutor() as executor:
-	futures = [executor.submit(outer) for _ in range(2)]
-	# for cfresult in concurrent.futures.as_completed(futures):
-	for cfresult in futures:
-		try:
-			result = cfresult.result(timeout=5)
-			print(result)
-		except concurrent.futures.TimeoutError:
-			print("The task timed out")
+image2 = np.random.poisson(image).astype(float)
+print(image2.dtype)
+
+print(image2)
+print(np.any(image2 > 65536))
