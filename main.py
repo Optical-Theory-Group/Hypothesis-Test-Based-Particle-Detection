@@ -121,7 +121,7 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
                     image += psfconvolution(peak_info, sz)
 
                 # Add Poisson noise
-                image = np.random.poisson(image).astype(float) # keeping it as float disallows overflowing.
+                image = np.random.poisson(image) # keeping it as float disallows overflowing.
                 img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
                 if np.any(image) > 65535:
                     print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Such values will be clipped. This mimics saturation in the camera.")
@@ -245,15 +245,21 @@ def generate_separation_test_images(image_folder_namebase='separation_test', sep
             image += psfconvolution(peak_info, sz)
 
             # Add Poisson noise to the whole image
-            image = np.random.poisson(image).astype(np.uint16) # This is the end of image processing.
-
+            image = np.random.poisson(image) # This is the end of image processing.
+                
+            if np.any(image) > 65535:
+                print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Such values will be clipped. This mimics saturation in the camera.")
+                image = np.clip(image, 0, 65535)
+            
             # Save the image
             img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{img_idx}.{file_format}"
             img_filepath = os.path.join(image_folder_path, img_filename)
-            imageio.imwrite(img_filepath, image)
+            imageio.imwrite(img_filepath, image.astype(np.uint16))
 
             # Update the progress bar
             pbar.update(1)
+
+            
 
     # Print the completion of image generation
     print(f"Image generation completed (total: {n_total_image_count}). Images saved to {image_folder_path}.")
