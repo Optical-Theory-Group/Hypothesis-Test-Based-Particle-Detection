@@ -1,23 +1,20 @@
 {
-    "image_folder_namebase": "16bit_2sqrt2x_zoom",
-    "code_version_date": "2024-11-01",
-
+    "image_folder_namebase": "16bit_1o_32x_scatter",
+    "code_version_date": "2024-11-12",
     "file_format": "png",
-
     "generate_regular_dataset?": true,
     "gen_random_seed": 0,
     "gen_total_image_count": 50000,
     "gen_minimum_particle_count": 0,
     "gen_maximum_particle_count": 4,
-    "gen_psf_sigma": 5.66,
+    "gen_psf_sigma": 2.0,
     "gen_img_width": 100,
-    "gen_bg_level": 256,
-    "gen_particle_intensity_mean": 32768,
+    "gen_bg_level": 2048,
+    "gen_particle_intensity_mean": 1024,
     "gen_particle_intensity_sd": 0,
-
     "analyze_the_dataset?": true,
     "ana_random_seed": 0,
-    "ana_predefined_psf_sigma": 5.66,
+    "ana_predefined_psf_sigma": 2.0,
     "ana_use_premature_hypothesis_choice?": false,
     "ana_maximum_hypothesis_index": 5,
     "ana_delete_the_dataset_after_analysis?": true
