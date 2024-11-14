@@ -110,7 +110,6 @@ def calculate_mae(conf_matrix):
     return mae / np.sum(conf_matrix)
 
 def calculate_weighted_rmse(folder_path, lam, order):
-    weighted_rmse = 0
     
     # Calculate Poisson weights for counts 0 to 4 based on expected count
     poisson_weights = {k: poisson.pmf(k, lam) for k in range(5)}
@@ -322,22 +321,78 @@ def calculate_avg_estimate_per_count(folder_path, tags):
 
     return avg_estimates
 
+def calculate_weighted_estimated_counts(folder_path, lam, order):
+    w_est_count_dict = {}
+    
+    # Calculate Poisson weights for counts 0 to 4 based on expected count
+    poisson_weights = {k: poisson.pmf(k, lam) for k in range(10)}
+    print(f"{lam=}")
+
+    subfolders = [f.path for f in os.scandir(folder_path) if f.is_dir()]
+    for subfolder_path in subfolders:
+        for filename in os.listdir(subfolder_path):
+            if filename.endswith("confusion_mat.csv"):
+                # Load the confusion matrix from CSV
+                filepath = os.path.join(subfolder_path, filename)
+                conf_matrix = pd.read_csv(filepath, header=None).values
+                conf_matrix = conf_matrix[1:,:]
+    
+                basename = os.path.basename(filename)
+                parts = basename.split('_')
+                xnames = format_xname(parts)
+
+                weighted_sum = 0
+                for actual_count in range(10):
+                    if actual_count > 4: 
+                        if poisson_weights[actual_count] > 1e-4:
+                            weighted_sum += actual_count * poisson_weights[actual_count]
+                    else:
+                        total_count = np.sum(conf_matrix[actual_count, :])
+                        if total_count > 0:
+                            calc = np.sum([estimated_count * conf_matrix[actual_count, estimated_count] for estimated_count in range(conf_matrix.shape[1])]) / total_count
+                            p_of_actual_count = poisson_weights[actual_count]
+                            weighted_sum += calc * p_of_actual_count
+                print(f"{xnames=}, {weighted_sum=}")
+                w_est_count_dict[xnames] = weighted_sum
+
+    # Reorder w_est_count_dict based on names
+    ordered_w_est_count_dict = {key: w_est_count_dict[key] for key in order if key in w_est_count_dict}
+    w_est_count_dict = ordered_w_est_count_dict
+                
+    return w_est_count_dict
+
+    
+def plot_p2to1_vs_lambda(r_value=3.6):
+    # Define a very narrow range for lambda values
+    lambda_values_narrow = np.linspace(0, 4/10000, 1000)  # range of lambda from 0 to 0.0004
+    y_values_narrow = np.pi * np.sqrt(lambda_values_narrow) * np.special.erf(np.sqrt(np.pi) * r_value * np.sqrt(lambda_values_narrow))
+
+    # Plot the function in the narrow range
+    plt.figure(figsize=(10, 6))
+    plt.plot(lambda_values_narrow, y_values_narrow, label=r"$\pi\sqrt{\lambda}\mathrm{erf}(\sqrt{\pi}R\sqrt{\lambda})$")
+    plt.xlabel(r"$\lambda$")
+    plt.ylabel(r"$\pi\sqrt{\lambda}\mathrm{erf}(\sqrt{\pi}R\sqrt{\lambda})$")
+    plt.title(r"Plot of $\pi\sqrt{\lambda}\mathrm{erf}(\sqrt{\pi}R\sqrt{\lambda})$ as a function of $\lambda$ (R = 3.6, $\lambda$ from 0 to 0.0004)")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
 # # Folder path containing the CSV files
 # folder_path = './11112024-analyses/psfwidth_test'
 # folder_path = './11112024-analyses/snr_test'
-folder_path = './11112024-analyses/zoom_test'
+# folder_path = './11112024-analyses/zoom_test'
 # folder_path = './11112024-analyses/scatterstrength_test'
-# folder_path = './11112024-analyses/background_test'
+folder_path = './11112024-analyses/background_test'
 
-# label = "Background (Data 3)"
+label = "Background (Data 3)"
 # label = "PSFwidth, peak pixel value kept constant (Data 3)"
 # label = "Scatter Strength (Data 3)"
 # label = "SNR Factor (Data 3)"
-label = "Zoom Factor (Data 3)"
+# label = "Zoom Factor (Data 3)"
 
-# x_vals = ['0.125x', '0.25x', '0.5x', '1x', '2x', '4x', '8x']
+x_vals = ['0.125x', '0.25x', '0.5x', '1x', '2x', '4x', '8x']
 # x_vals = ['1/8x', '1/4x', '1/2x', '1x', '2x']
-x_vals = ['1/2sqrt(2)x', '1/2x', '1/sqrt(2)x', '1x', 'sqrt(2)x', '2x', '2sqrt(2)x']
+# x_vals = ['1/2sqrt(2)x', '1/2x', '1/sqrt(2)x', '1x', 'sqrt(2)x', '2x', '2sqrt(2)x']
 
 tags = x_vals
 
@@ -352,8 +407,31 @@ lams = [0.5, 1, 2]
 #     all_accuracies[lam] = weighted_accuracy
 # plot_all_accuracies(all_accuracies, x_vals, xlabel=label) 
 
-calculate_relative_measures(folder_path, x_vals, xlabel=label)
+# calculate_relative_measures(folder_path, x_vals, xlabel=label)
+def plot_weighted_counts_against_lam(weighted_counts, lams, xlabel):
+    fig, axs = plt.subplots(1, 2, figsize=(10, 6))
+    
+    for lam, w in zip(lams, weighted_counts):
+        label = f'assuming avg count per area={lam}'
+        axs[0].plot(w.keys(), w.values(), label=label, marker='o')
+        axs[0].axhline(y=lam, color='gray', linestyle='--', label=f'lambda={lam}')
+        axs[1].semilogy(list(w.keys()), list(w.values()), label=label, marker='o')
+        axs[1].axhline(y=lam, color='gray', linestyle='--', label=f'lambda={lam}')
+    
+    for ax in axs:
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel('Estimated Count')
+        ax.legend(fontsize='small')
+    
+    axs[0].set_title('Estimated Count vs Actual')
+    axs[1].set_title('Estimated Count vs Actual (Semilog)')
+    
+    plt.suptitle(f'Estimated Count vs Actual, if avg count per area follows Poisson distribution with different lambdas\nSince we don\'t have data for actual_counts > 4, we assume 100% accuracy for those low occurence (approximation)\n')
+    plt.show(block=False)
+    pass
 
+weighted_counts = [calculate_weighted_estimated_counts(folder_path, lam=lam, order=x_vals) for lam in lams]
+plot_weighted_counts_against_lam(weighted_counts, lams, xlabel=label)
 
 
 # flat_rmse = calculate_flat_rmse(folder_path, order=x_vals)

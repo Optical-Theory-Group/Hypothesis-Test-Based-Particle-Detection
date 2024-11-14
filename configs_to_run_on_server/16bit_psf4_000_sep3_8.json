@@ -1,0 +1,19 @@
+{
+    "image_folder_namebase": "16bit_psf4_000_sep3_8",
+    "code_version_date": "2024-11-12",
+    "file_format": "png",
+    "separation_test_image_generation?": true,
+    "sep_distance_ratio_to_psf_sigma": 3.8,
+    "sep_image_count": 10000,
+    "sep_intensity_prefactor_to_bg_level": 16,
+    "sep_psf_sigma": 4.0,
+    "sep_img_width": 100,
+    "sep_bg_level": 2048,
+    "sep_random_seed": 53,
+    "analyze_the_dataset?": true,
+    "ana_random_seed": 39829,
+    "ana_predefined_psf_sigma": 4.0,
+    "ana_use_premature_hypothesis_choice?": false,
+    "ana_maximum_hypothesis_index": 5,
+    "ana_delete_the_dataset_after_analysis?": true
+}
