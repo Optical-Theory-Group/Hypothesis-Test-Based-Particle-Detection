@@ -1247,7 +1247,7 @@ def process(config_files_dir, parallel=False):
                 print('Deleting image data.')
         
         # Move the processed config file to the "finished configs" subfolder
-        finished_configs_dir = os.path.join(config_files_dir, "finished configs")
+        finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
         os.makedirs(finished_configs_dir, exist_ok=True)
         shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
             
