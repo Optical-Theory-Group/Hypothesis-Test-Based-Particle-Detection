@@ -407,24 +407,6 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
     starttime = datetime.now()
     print('Beginning image analysis...')
 
-    # TESTING - MAKE SURE TO REMOVE after 10/31/2024 ---- #
-    TESTING = False
-    image_rand_seeds = list(range(60000))
-    np.random.shuffle(image_rand_seeds)
-    filename = image_files[0]
-    if TESTING:
-        progress = 0
-        for analysis_rand_seed_per_image in image_rand_seeds:
-            analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
-            progress += 1
-            if progress % 500 == 0:
-                print(f"Progress: {progress}/{len(image_files)}")
-    pass
-
-
-    # --------------------------------------------------- #
-    
-
     # Create a list of random seeds for each image
     image_rand_seeds = list(range(len(image_files)))
     np.random.shuffle(image_rand_seeds)
