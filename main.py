@@ -400,8 +400,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
     label_prediction_log_file_path = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_label_prediction_log.csv')
 
     # Create the "analyses" folder if it doesn't exist
-    if not os.path.exists('./analyses'):
-        os.makedirs('./analyses')
+    os.makedirs('./analyses', exist_ok=True)
 
     # Mark the start time and print a message indicating the beginning of the image analysis
     starttime = datetime.now()
@@ -411,9 +410,15 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
     image_rand_seeds = list(range(len(image_files)))
     np.random.shuffle(image_rand_seeds)
 
-    with open(label_prediction_log_file_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
+    print("Creating the label_prediction log file...")
+    # Create the folder to store the label_prediction log file
+    os.makedirs(os.path.dirname(label_prediction_log_file_path), exist_ok=True)
+    try:
+        with open(label_prediction_log_file_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
+    except e:
+        print("Error in creating the label_prediction log. Could be that the folder/file name is too long. Error: ", e)
 
     # Check if the analysis is to be done in parallel (or sequentially).
     if parallel:
@@ -424,6 +429,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
             # Create a list of futures for each image
             futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condi=use_exit_condi )
                         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
+            # futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condi=use_exit_condi)
+            #             for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files) if os.path.basename(filename).startswith('count1') and 0 <= int(filename.split('count1-index')[1].split('.')[0]) < 1000] # For a test on 11/18/2024 - Neil. To be deleted/removed defintely after 11/21/2024.
             print(f"Number of futures submitted: {len(futures)}")
             # Initialize the progress counter
             progress = 0
@@ -469,13 +476,13 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     statusmsg = f'Error: {e}'
 
                 # Report the progress
-                report_progress(progress, len(image_files), starttime, statusmsg)
+                report_progress(progress, len(futures), starttime, statusmsg)
 
                 # Increment the progress counter
                 progress += 1
 
     else: # If the analysis is to be done sequentially
-        print("Analyzing images sequentially...")
+        print("Analyzing images in serial...")
 
         # Initialize the progress counter
         progress = 0
@@ -483,6 +490,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
         # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
             # Analyze the image
+            # if os.path.basename(filename).startswith('count1') and filename.split('count1-index')[1].split('.')[0] in [str(n) for n in range(1001, 1050)]: # For a test on 11/19/2024 - Neil. To be deleted/removed defintely after 11/21/2024.
             try:
                 analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
 
@@ -508,9 +516,13 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
             except:
                 print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {filename} ")
                 statusmsg = f'Error: {e} File: {filename} '
+                pass
 
-            # Report the progress
-            report_progress(progress, len(image_files), starttime, statusmsg)
+            # else:
+            #     continue
+
+            total_count = len(image_files)
+            report_progress(progress, total_count, starttime, statusmsg)
             # Increment the progress counter
             progress += 1
             
@@ -909,7 +921,7 @@ def combine_log_files(analyses_folder, image_folder_namebase, code_version_date,
 
     # Create the fitting_results.csv file
     whole_metrics_log_filename = os.path.join(analyses_folder, f'{image_folder_namebase}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
-    print(f"{whole_metrics_log_filename=}")
+    print(f"Creating log with all metrics: {whole_metrics_log_filename}")
     
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
 
@@ -1278,6 +1290,7 @@ if __name__ == '__main__':
 
     # Run the main function without parallel processing ('-p' option value is False)
     sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+    # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
     # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
