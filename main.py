@@ -513,7 +513,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                 else:
                     statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
-            except:
+            except Exception as e:
                 print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {filename} ")
                 statusmsg = f'Error: {e} File: {filename} '
                 pass
@@ -873,7 +873,7 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
 
         folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
         ax = axs[0]
-        sns.heatmap(normalized_matrix, annot=True, fmt='.3f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
+        sns.heatmap(normalized_matrix, annot=True, fmt='.4f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
         ax.set_title(f'{folder_name}')
         ax.set_xlabel('Estimated Particle Count')
         ax.set_ylabel('Actual Particle Count')
