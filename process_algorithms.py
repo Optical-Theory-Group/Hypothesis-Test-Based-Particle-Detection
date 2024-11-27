@@ -215,21 +215,13 @@ def out_of_bounds_particle_penalty(theta, szx, szy):
     penalty = 0
     if isinstance(theta, (np.ndarray, list)): # Case: grayscale image
         for i in range(1, len(theta)):
-            intensity_term = intensity_penalty_function(theta[i][0])
-
-            if ABS_INTENSITY_FLAG:
-                intensity_term = 0
+            intensity_term = intensity_penalty_function(theta[i][0]) if not ABS_INTENSITY_FLAG else 0
             x_term = position_penalty_function(theta[i][1], szx)
-
             y_term = position_penalty_function(theta[i][2], szy)
             penalty += intensity_term + x_term + y_term
     elif isinstance(theta, dict): # Case: rgb image
         for i in range(len(theta['particle'])):
-            intensity_term = intensity_penalty_function(theta['particle'][i]['I'])
-
-            if ABS_INTENSITY_FLAG:
-                intensity_term = 0
-
+            intensity_term = intensity_penalty_function(theta['particle'][i]['I']) if not ABS_INTENSITY_FLAG else 0
             x_term = position_penalty_function(theta['particle'][i]['x'], szx)
             y_term = position_penalty_function(theta['particle'][i]['y'], szy)
             penalty += intensity_term + x_term + y_term
@@ -247,11 +239,7 @@ def jac_oob_penalty(theta, szx, szy, alpha):
         # Treat the particle terms
         for i in range(1, len(theta)):
             # ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
-            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * alpha # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
-
-            if ABS_INTENSITY_FLAG:
-                ddt_oob[i][0] = 0
-
+            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * alpha if not ABS_INTENSITY_FLAG else 0
             ddt_oob[i][1] = ddt_position_penalty_function(theta[i][1], szx) * szx # szx is the normalization factor for the x-coordinate
             ddt_oob[i][2] = ddt_position_penalty_function(theta[i][2], szy) * szy # szy is the normalization factor for the y-coordinate
     else: # Case: rgb image - the below code is yet to be tested closely. (2024/11/26)
@@ -262,11 +250,7 @@ def jac_oob_penalty(theta, szx, szy, alpha):
         ddt_oob[0][3] = ddt_oob[0][4] = np.nan
         # Treat the particle terms
         for i in range(len(theta['particle'])):
-            ddt_oob[i] = [ddt_intensity_penalty_function(theta['particle'][i]['I'][0]) * alpha[j] for j in range(3)]
-
-            if ABS_INTENSITY_FLAG:
-                ddt_oob[i] = [0, 0, 0]
-
+            ddt_oob[i] = [ddt_intensity_penalty_function(theta['particle'][i]['I'][0]) * alpha[j] for j in range(3)] if not ABS_INTENSITY_FLAG else [0, 0, 0]
             ddt_oob[i][4] = ddt_intensity_penalty_function(theta['particle'][i]['x']) * szx
             ddt_oob[i][5] = ddt_intensity_penalty_function(theta['particle'][i]['y']) * szy
 
@@ -281,11 +265,7 @@ def hess_oob_penalty(theta, szx, szy, alpha):
         # Treat the particle terms
         for pidx in range(1, len(theta)):
             # Below is for i0, i0
-            d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0]) * alpha**2 
-
-            if ABS_INTENSITY_FLAG:
-                d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
-
+            d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0]) * alpha**2 if not ABS_INTENSITY_FLAG else 0
             # i0, i1, # i0, i2 # i1, i1 # i1, i2 are all zeros already.
             # Belos is for i1, i1
             d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_position_penalty_function(theta[pidx][1], szx) * szx**2
@@ -299,14 +279,9 @@ def hess_oob_penalty(theta, szx, szy, alpha):
         # Treat the background term - they are already zeros
         # Treat the particle terms
         for pidx in range(len(theta['particle'])):
-            d2dt2_oob_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][0]) * alpha[0]**2
-            d2dt2_oob_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][1]) * alpha[1]**2
-            d2dt2_oob_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][2]) * alpha[2]**2
-
-            if ABS_INTENSITY_FLAG:
-                d2dt2_oob_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = 0
-                d2dt2_oob_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = 0
-                d2dt2_oob_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = 0
+            d2dt2_oob_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][0]) * alpha[0]**2 if not ABS_INTENSITY_FLAG else 0
+            d2dt2_oob_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][1]) * alpha[1]**2 if not ABS_INTENSITY_FLAG else 0
+            d2dt2_oob_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][2]) * alpha[2]**2 if not ABS_INTENSITY_FLAG else 0
 
             d2dt2_oob_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 6] = d2dt2_position_penalty_function(theta['particle'][pidx]['x'], szx) * szx**2
             d2dt2_oob_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 7] = d2dt2_position_penalty_function(theta['particle'][pidx]['y'], szy) * szy**2
@@ -491,11 +466,11 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
 
         for p_idx in range(1, hypothesis_index + 1):
-            ddt_nll[p_idx][0] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * alpha) # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
-            ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta[p_idx][0] * szx) # szx is the normalization factor for the x-coordinate
-            ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta[p_idx][0] * szy) # szy is the normalization factor for the y-coordinate
-
-            if ABS_INTENSITY_FLAG:
+            if not ABS_INTENSITY_FLAG:
+                ddt_nll[p_idx][0] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * alpha) # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
+                ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta[p_idx][0] * szx) # szx is the normalization factor for the x-coordinate
+                ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta[p_idx][0] * szy) # szy is the normalization factor for the y-coordinate
+            else:
                 ddt_nll[p_idx][0] = np.sum(one_minus_image_over_model * np.sign(theta[p_idx][0]) * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * alpha) # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
                 ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * np.abs(theta[p_idx][0]) * szx) # szx is the normalization factor for the x-coordinate
                 ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * np.abs(theta[p_idx][0]) * szy) # szy is the normalization factor for the y-coordinate
@@ -594,11 +569,17 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
         d2dt2_nll_2d[0][0] = d2dt2_nll_00_00
                 
         for pidx in range(1, hypothesis_index + 1):
+            if ABS_INTENSITY_FLAG:
+                original_sign_of_theta_pidx_0 = np.sign(theta[pidx][0])
+                theta[pidx][0] = np.abs(theta[pidx][0])
+            else:
+                original_sign_of_theta_pidx_0 = 1
+
             # 2. i0, 00
             d2dt2_nll_i0_00 = np.sum(pixelval_over_model_squared * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) * alpha * (roi_max) )
 
-            if ABS_INTENSITY_FLAG:
-                d2dt2_nll_i0_00 *= -1
+            # Treatment for theta_pidx_0 -> |theta_pidx_0|
+            d2dt2_nll_i0_00 *= original_sign_of_theta_pidx_0
 
             d2dt2_nll_2d[0][(pidx - 1) * 3 + 1] = d2dt2_nll_i0_00
             d2dt2_nll_2d[(pidx - 1) * 3 + 1][0] = d2dt2_nll_i0_00
@@ -616,16 +597,18 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
             # 6. i1, i0
             d2dt2_nll_i1_i0 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) \
                                     * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * (alpha) )
-            if ABS_INTENSITY_FLAG:
-                d2dt2_nll_i1_i0 *= -1
+
+            # Treatment for theta_pidx_0 -> |theta_pidx_0|
+            d2dt2_nll_i1_i0 *= original_sign_of_theta_pidx_0
 
             d2dt2_nll_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 1] = d2dt2_nll_i1_i0
             d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 2] = d2dt2_nll_i1_i0
             # 7. i2, i0
             d2dt2_nll_i2_i0 = np.sum((pixelval_over_model_squared * theta[pidx][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image / Model_xy)) \
                                     * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * (alpha) )
-            if ABS_INTENSITY_FLAG:
-                d2dt2_nll_i2_i0 *= -1
+
+            # Treatment for theta_pidx_0 -> |theta_pidx_0|
+            d2dt2_nll_i2_i0 *= original_sign_of_theta_pidx_0
 
             d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 1] = d2dt2_nll_i2_i0
             d2dt2_nll_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i0
