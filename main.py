@@ -838,12 +838,12 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
 
     # Prepare metrics for saving
     scores = {
-        'Accuracy': accuracy,
+        'Flat weight Accuracy': accuracy,
+        'Within-One Accuracy': miss_by_one_rate,
         'Overestimation Rate': overestimation_rate,
         'Underestimation Rate': underestimation_rate,
-        'Miss-by-One Rate': miss_by_one_rate,
-        'Mean Absolute Error': mae,
-        'Root Mean Squared Error': rmse
+        'Mean Absolute Error (flat weight)': mae,
+        'Root Mean Squared Error (flat weight)': rmse
     }
 
     # Save the metrics as a CSV file ending with '_scores.csv'
