@@ -12,6 +12,8 @@ import diplib as dip
 POSITION_PENALTY_FACTOR = 1e5
 INTENSITY_PENALTY_FACTOR = 1e0
 
+ABS_INTENSITY_FLAG = True
+
 # Print numpy arrays with 3 decimal points
 np.set_printoptions(precision=4, formatter={'float': '{:0.6f}'.format}, linewidth=np.inf)
 
@@ -227,12 +229,20 @@ def out_of_bounds_particle_penalty(theta, szx, szy):
     if isinstance(theta, (np.ndarray, list)): # Case: grayscale image
         for i in range(1, len(theta)):
             intensity_term = intensity_penalty_function(theta[i][0])
+
+            if ABS_INTENSITY_FLAG:
+                intensity_term = 0
             x_term = position_penalty_function(theta[i][1], szx)
+
             y_term = position_penalty_function(theta[i][2], szy)
             penalty += intensity_term + x_term + y_term
     elif isinstance(theta, dict): # Case: rgb image
         for i in range(len(theta['particle'])):
             intensity_term = intensity_penalty_function(theta['particle'][i]['I'])
+
+            if ABS_INTENSITY_FLAG:
+                intensity_term = 0
+
             x_term = position_penalty_function(theta['particle'][i]['x'], szx)
             y_term = position_penalty_function(theta['particle'][i]['y'], szy)
             penalty += intensity_term + x_term + y_term
@@ -241,7 +251,7 @@ def out_of_bounds_particle_penalty(theta, szx, szy):
 
     return penalty
 
-def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sigma):
+def jac_oob_penalty(theta, szx, szy, alpha):
     """ Returns the derivative of the out of bounds penalty."""
     if isinstance(theta, (np.ndarray, list)): # Case: grayscale image
         ddt_oob = np.zeros((len(theta), 3))
@@ -249,9 +259,14 @@ def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sigma):
         ddt_oob[0][1] = ddt_oob[0][2] = np.nan
         # Treat the particle terms
         for i in range(1, len(theta)):
-            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
+            # ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
+            ddt_oob[i][0] = ddt_intensity_penalty_function(theta[i][0]) * alpha # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
+
+            if ABS_INTENSITY_FLAG:
+                ddt_oob[i][0] = 0
+
             ddt_oob[i][1] = ddt_position_penalty_function(theta[i][1], szx) * szx # szx is the normalization factor for the x-coordinate
-            ddt_oob[i][2] = ddt_position_penalty_function(theta[i][2], szy) * szx # szy is the normalization factor for the y-coordinate
+            ddt_oob[i][2] = ddt_position_penalty_function(theta[i][2], szy) * szy # szy is the normalization factor for the y-coordinate
     else: # Case: rgb image
         # REF - Format of nf_th: [Bg_r, Bg_g, Bg_b, i_r1, i_g1, i_b1, x1, y1, ...]
         # REF - ddt_nll_rgb = np.zeros((hypothesis_index + 1, 5))  # row: particle index (starts from 1 while 0 is for background), col: I_r, I_g, I_b, x, y
@@ -260,7 +275,11 @@ def jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sigma):
         ddt_oob[0][3] = ddt_oob[0][4] = np.nan
         # Treat the particle terms
         for i in range(len(theta['particle'])):
-            ddt_oob[i][0] = ddt_intensity_penalty_function(theta['particle'][i]['I'][0]) * (roi_max[0] - roi_min[0]) * 2 * np.pi * psf_sigma**2
+            ddt_oob[i][0] = ddt_intensity_penalty_function(theta['particle'][i]['I'][0]) * alpha
+
+            if ABS_INTENSITY_FLAG:
+                ddt_oob[i][0] = 0
+
             ddt_oob[i][1] = ddt_intensity_penalty_function(theta['particle'][i]['x']) * szx
             ddt_oob[i][2] = ddt_intensity_penalty_function(theta['particle'][i]['y']) * szy
 
@@ -274,11 +293,18 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sigma):
         d2dt2_oob_2d[0, :] = d2dt2_oob_2d[:, 0] = 0 # No penalty for the background
         # Treat the particle terms
         for pidx in range(1, len(theta)):
-            # i0, i0
+            # Below is for i0, i0
             d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = d2dt2_intensity_penalty_function(theta[pidx][0]) * ((roi_max - roi_min) * 2 * np.pi * psf_sigma**2)**2 
+
+            if ABS_INTENSITY_FLAG:
+                d2dt2_oob_2d[(pidx - 1) * 3 + 1][(pidx - 1) * 3 + 1] = 0
+
             # i0, i1, # i0, i2 # i1, i1 # i1, i2 are all zeros already.
-            # i2, i2
-            d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_position_penalty_function(theta[pidx][2], szy) * szx**2 
+            # Belos is for i1, i1
+            d2dt2_oob_2d[(pidx - 1) * 3 + 2][(pidx - 1) * 3 + 2] = d2dt2_position_penalty_function(theta[pidx][1], szx) * szx**2
+            # Below is for i2, i2
+            d2dt2_oob_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_position_penalty_function(theta[pidx][2], szy) * szy**2 
+
     else: # Case: rgb image
         # REF - Format of nf_th: [Bg_r, Bg_g, Bg_b, i_r1, i_g1, i_b1, x1, y1, ...]
         # REF - d2dt2_nll_2d = np.zeros((hypothesis_index * 5 + 3, hypothesis_index * 5 + 3))
@@ -289,6 +315,12 @@ def hess_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sigma):
             d2dt2_oob_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][0]) * ((roi_max[0] - roi_min[0]) * 2 * np.pi * psf_sigma**2)**2
             d2dt2_oob_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][1]) * ((roi_max[1] - roi_min[1]) * 2 * np.pi * psf_sigma**2)**2
             d2dt2_oob_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = d2dt2_intensity_penalty_function(theta['particle'][pidx]['I'][2]) * ((roi_max[2] - roi_min[2]) * 2 * np.pi * psf_sigma**2)**2
+
+            if ABS_INTENSITY_FLAG:
+                d2dt2_oob_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = 0
+                d2dt2_oob_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = 0
+                d2dt2_oob_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = 0
+
             d2dt2_oob_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 6] = d2dt2_position_penalty_function(theta['particle'][pidx]['x'], szx) * szx**2
             d2dt2_oob_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 7] = d2dt2_position_penalty_function(theta['particle'][pidx]['y'], szy) * szy**2
 
@@ -476,6 +508,11 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
             ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta[p_idx][0] * szx) # szx is the normalization factor for the x-coordinate
             ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta[p_idx][0] * szy) # szy is the normalization factor for the y-coordinate
 
+            if ABS_INTENSITY_FLAG:
+                ddt_nll[p_idx][0] = np.sum(one_minus_image_over_model * np.sign(theta[p_idx][0]) * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * (roi_max - roi_min) * 2 * np.pi * psf_sigma**2) # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
+                ddt_nll[p_idx][1] = np.sum(one_minus_image_over_model * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * np.abs(theta[p_idx][0]) * szx) # szx is the normalization factor for the x-coordinate
+                ddt_nll[p_idx][2] = np.sum(one_minus_image_over_model * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * np.abs(theta[p_idx][0]) * szy) # szy is the normalization factor for the y-coordinate
+
         jacobian = ddt_nll.flatten()
         jacobian = jacobian[~np.isnan(jacobian)]
     
@@ -501,7 +538,8 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         jacobian = jacobian.reshape(norm_flat_trimmed_theta.shape)
 
     # Add the out-of-bounds penalty to the Jacobian
-    ddt_oob = jac_oob_penalty(theta, szx, szy, roi_max, roi_min, psf_sigma) 
+    alpha = (roi_max - roi_min) * 2 * np.pi * psf_sigma**2
+    ddt_oob = jac_oob_penalty(theta, szx, szy, alpha) 
     jac_oob = ddt_oob.flatten()
     jac_oob = jac_oob[~np.isnan(jac_oob)]
     jacobian += jac_oob
@@ -1232,6 +1270,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
 
             # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
             try:
+                # opt = 'abs'
                 minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy),
                                 method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             except Exception as e:
@@ -1473,11 +1512,13 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     # Determine the most likely hypothesis
     # qualifying_xi_indices = [i for i, x in enumerate(xi) if np.all(fit_results[i]['theta'][0, :] > 0)] # If a particle intensity is estimated as negative, consider it a non-valid hypothesis.
 
-    qualifying_xi_indices = [
-        i for i in range(len(xi))
-        if (np.ndim(fit_results[i]['theta']) == 0 and fit_results[i]['theta'] > 0) or
-        (np.ndim(fit_results[i]['theta']) == 2 and np.all(fit_results[i]['theta'][:, 0] > 0))
-        ]
+    # qualifying_xi_indices = [
+    #     i for i in range(len(xi))
+    #     if (np.ndim(fit_results[i]['theta']) == 0 and fit_results[i]['theta'] > 0) or
+    #     (np.ndim(fit_results[i]['theta']) == 2 and np.all(fit_results[i]['theta'][:, 0] > 0))
+    #     ]
+    
+    qualifying_xi_indices = [i for i in range(len(xi))]
 
     if qualifying_xi_indices:
         estimated_num_particles = qualifying_xi_indices[np.nanargmax([xi[i] for i in qualifying_xi_indices])]
