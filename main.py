@@ -123,8 +123,8 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
                 # Add Poisson noise
                 image = np.random.poisson(image) # keeping it as float disallows overflowing.
                 img_filename = f"count{n_particles}-index{img_idx}.{file_format}"
-                if np.any(image) > 65535:
-                    print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Such values will be clipped. This mimics saturation in the camera.")
+                if file_format == 'png' and np.any(image > 65535):
+                    print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Since png can store max 16-bits, such values will be clipped. This mimics saturation in the camera.")
                     image = np.clip(image, 0, 65535)
 
                 # Adjust the shape of the image to match that of png or tiff
@@ -133,7 +133,11 @@ def generate_test_images(image_folder_namebase, maximum_number_of_particles, par
 
                 # Save the image
                 img_filepath = os.path.join(image_folder_path, img_filename)
-                imageio.imwrite(img_filepath, image.astype(np.uint16))
+                if file_format == 'png':
+                    imageio.imwrite(img_filepath, image.astype(np.uint16))
+                elif file_format == 'tiff':
+                    imageio.imwrite(img_filepath, image.astype(np.float32))
+                    # imageio.imwrite(img_filepath, image.astype(np.uint32)) # For some reason this renders analysis very slow.
 
                 # Update the progress bar
                 pbar.update(1)
