@@ -511,14 +511,81 @@ def plot_random():
 	plt.show(block=False)
 	pass
 
-image = np.array([[65536, 65536], [65536, 65536]], dtype=float)
+def expand_baseline_config(filepath, outconfig_values_dict):
+	"""
+    Args:
+		filepath (str): The path to the baseline configuration file.
+		output_info (dict): A dictionary containing the values to be varied for each output configuration.
+			keys: filename, field1, field2, values1, values2
+	"""
+	# Read the baseline configuration file
+	with open(filepath, 'r') as file:
+		config_data = json.load(file)
+	
+	# Create a list of dictionaries containing the values to be varied for each output configuration
+	for i in range(len(outconfig_values_dict['filename'])):
+		output_config = config_data.copy()
+		for field_idx in range(50):
+			if f'field{field_idx}' in outconfig_values_dict:
+				output_config[outconfig_values_dict[f'field{field_idx}']] = outconfig_values_dict[f'values{field_idx}'][i]
+		# Save the output configuration to a new file
+		output_filename = outconfig_values_dict['filename'][i]
+		with open(output_filename, 'w') as file:
+			json.dump(output_config, file, indent=4)
 
-image += np.array([[-1, 0], [1, 2]])
+def change_for_all_configs(directory, field, value):
+	# Iterate through each file in the directory
+	count = 0
+	for filename in os.listdir(directory):
+		if filename.endswith('.json'):
+			file_path = os.path.join(directory, filename)
 
-# print(np.any(image > 65536))
+			# Open and load the JSON file
+			with open(file_path, 'r') as file:
+				data = json.load(file)
 
-image2 = np.random.poisson(image).astype(float)
-print(image2.dtype)
+			# Change the field value
+			data[field] = value
 
-print(image2)
-print(np.any(image2 > 65536))
+			# Save the modified JSON back to the file
+			with open(file_path, 'w') as file:
+				json.dump(data, file, indent=4)
+			count += 1
+
+	print(f"Modifications for {count} files completed.")
+
+# change_for_all_configs('./configs_to_run_on_server/', 'code_version_date', '2024-11-29')
+change_for_all_configs('./configs/', 'gen_total_image_count', 50)
+
+
+# filepath = './configs/d4-baseline.json'
+# prefixes = ['d4-snr-1o_sqrt16x', 'd4-snr-1o_sqrt8x', 'd4-snr-1o_sqrt4x', 'd4-snr-1o_sqrt2x', 'd4-snr-sqrt2']
+# info_dict = {}
+# info_dict['filename'] = [f'./configs/{prefix}.json' for prefix in prefixes]
+# info_dict['field1'] = 'image_folder_namebase'
+# info_dict['values1'] = prefixes
+# info_dict['field2'] = 'gen_random_seed'
+# info_dict['values2'] = [int(np.random.randint(0, 10000)) for _ in prefixes]
+# info_dict['field3'] = 'gen_bg_level'
+# info_dict['values3'] = [125, 250, 500, 1000, 4000]
+# info_dict['field5'] = 'gen_particle_intensity_mean'
+# info_dict['values5'] = [1250, 2500, 5000, 10000, 40000]
+# info_dict['field6'] = 'ana_random_seed'
+# info_dict['values6'] = [int(np.random.randint(0, 10000)) for _ in prefixes]
+# expand_baseline_config(filepath, info_dict)
+
+
+	
+
+# image = np.array([[65536, 65536], [65536, 65536]], dtype=float)
+
+# image += np.array([[-1, 0], [1, 2]])
+
+# # print(np.any(image > 65536))
+
+# image2 = np.random.poisson(image).astype(float)
+# print(image2.dtype)
+
+# print(image2)
+# print(np.any(image2 > 65536))
+
