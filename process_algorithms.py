@@ -456,6 +456,7 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
     Ddt_integrated_psf_1d_x = np.insert(Ddt_integrated_psf_1d_x, 0, None, axis=0)
     Ddt_integrated_psf_1d_y = np.insert(Ddt_integrated_psf_1d_y, 0, None, axis=0)
 
+
     if isinstance(theta, (list, np.ndarray)): # Case: grayscale image. If it was RGB, theta would have been a dictionary.
 
         # Pre-calculate the ratio of the image to the model intensity
@@ -478,19 +479,20 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
         jacobian = ddt_nll.flatten()
         jacobian = jacobian[~np.isnan(jacobian)]
     
-    else: # Case: rgb image
-        one_minus_image_over_model_rgb = np.array([(1 - roi_image[ch] / Model_xy[ch]) for ch in range(3)]) # This will be used many times in the following calculations. "1" will act as a matrix of ones.
-        # ddt_nll_rgb[0][:3] = np.sum([one_minus_image_over_model_rgb * roi_max[ch] for ch in range(3)], axis=(1, 2, 3))
-        ddt_nll_rgb[0][:3] = np.sum(one_minus_image_over_model_rgb * np.array([np.ones((szy, szx)) * 1 * roi_max[ch] for ch in range(3)]), axis=(1, 2))
-        # Check: is the following the same as the above? : ddt_nll_rgb[0][:3] = np.sum([one_minus_image_over_model_rgb * roi_max[ch] for ch in range(3)]), axis=(1, 2))
+    else: # Case: rgb image - rgb code not updated to work with the absolute values of particle intensities yet. (2024/11/29)
+        # one_minus_image_over_model_rgb = np.array([(1 - roi_image[ch] / Model_xy[ch]) for ch in range(3)]) # This will be used many times in the following calculations. "1" will act as a matrix of ones.
+        # # ddt_nll_rgb[0][:3] = np.sum([one_minus_image_over_model_rgb * roi_max[ch] for ch in range(3)], axis=(1, 2, 3))
+        # ddt_nll_rgb[0][:3] = np.sum(one_minus_image_over_model_rgb * np.array([np.ones((szy, szx)) * 1 * roi_max[ch] for ch in range(3)]), axis=(1, 2))
+        # # Check: is the following the same as the above? : ddt_nll_rgb[0][:3] = np.sum([one_minus_image_over_model_rgb * roi_max[ch] for ch in range(3)]), axis=(1, 2))
 
-        for p_idx in range(1, hypothesis_index + 1):
-            ddt_nll_rgb[p_idx][:3] = [np.sum(one_minus_image_over_model_rgb[ch] * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * alpha[ch]) for ch in range(3)] # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
-            # Check really carefully here:
-            ddt_nll_rgb[p_idx][3] = np.sum([one_minus_image_over_model_rgb[ch] * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta['particle'][p_idx - 1]['I'][ch] * szx for ch in range(3)]) # szx is the normalization factor for the x-coordinate
-            ddt_nll_rgb[p_idx][4] = np.sum([one_minus_image_over_model_rgb[ch] * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta['particle'][p_idx - 1]['I'][ch] * szy for ch in range(3)]) # szy is the normalization factor for the y-coordinate
+        # for p_idx in range(1, hypothesis_index + 1):
+        #     ddt_nll_rgb[p_idx][:3] = [np.sum(one_minus_image_over_model_rgb[ch] * np.outer(Integrated_psf_y[p_idx], Integrated_psf_x[p_idx]) * alpha[ch]) for ch in range(3)] # (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is the normalization factor for particle intensity
+        #     # Check really carefully here:
+        #     ddt_nll_rgb[p_idx][3] = np.sum([one_minus_image_over_model_rgb[ch] * np.outer(Integrated_psf_y[p_idx], Ddt_integrated_psf_1d_x[p_idx]) * theta['particle'][p_idx - 1]['I'][ch] * szx for ch in range(3)]) # szx is the normalization factor for the x-coordinate
+        #     ddt_nll_rgb[p_idx][4] = np.sum([one_minus_image_over_model_rgb[ch] * np.outer(Ddt_integrated_psf_1d_y[p_idx], Integrated_psf_x[p_idx]) * theta['particle'][p_idx - 1]['I'][ch] * szy for ch in range(3)]) # szy is the normalization factor for the y-coordinate
         
-        jacobian = np.array(ddt_nll_rgb[~np.isnan(ddt_nll_rgb)]).flatten()
+        # jacobian = np.array(ddt_nll_rgb[~np.isnan(ddt_nll_rgb)]).flatten()
+        pass
         
 
     # Check the shape of the gradient
@@ -541,20 +543,21 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
         D2dt2_integrated_psf_1d_x = np.array([d2dt2_integrated_psf_1d(np.arange(szx), theta[p_idx][1], psf_sigma) for p_idx in range(1, hypothesis_index + 1)])
         D2dt2_integrated_psf_1d_y = np.array([d2dt2_integrated_psf_1d(np.arange(szy), theta[p_idx][2], psf_sigma) for p_idx in range(1, hypothesis_index + 1)])
     
-    else: # Case: rgb image
-        # Neg log likelihood is
-        # sum( [model[ch] * roi[ch] * log(model[ch] for ch in range(3)] )
-        # While model is a 3x2D array, NLL is a scalar. 
-        # ddt_nll_rgb = np.zeros((hypothesis_index * 5 + 3, hypothesis_index * 5 + 3))  
-        # ddt_nll_rgb[0][3] = ddt_nll_rgb[0][4] = np.nan
+    else: # Case: rgb image - not updated to work with the absolute values of particle intensities yet. (2024/11/29)
+        # # Neg log likelihood is
+        # # sum( [model[ch] * roi[ch] * log(model[ch] for ch in range(3)] )
+        # # While model is a 3x2D array, NLL is a scalar. 
+        # # ddt_nll_rgb = np.zeros((hypothesis_index * 5 + 3, hypothesis_index * 5 + 3))  
+        # # ddt_nll_rgb[0][3] = ddt_nll_rgb[0][4] = np.nan
 
-        d2dt2_nll_2d = np.zeros((hypothesis_index * 5 + 3, hypothesis_index * 5 + 3))
+        # d2dt2_nll_2d = np.zeros((hypothesis_index * 5 + 3, hypothesis_index * 5 + 3))
         
-        # Refer to the explanation written inside ddt_integrated_psf_1d function for better understanding of the below two lines.
-        Ddt_integrated_psf_1d_x = np.array([ddt_integrated_psf_1d(np.arange(szx), theta['particle'][p_idx]['x'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: x-position
-        Ddt_integrated_psf_1d_y = np.array([ddt_integrated_psf_1d(np.arange(szy), theta['particle'][p_idx]['y'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: y-position
-        D2dt2_integrated_psf_1d_x = np.array([d2dt2_integrated_psf_1d(np.arange(szx), theta['particle'][p_idx]['x'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: x-position
-        D2dt2_integrated_psf_1d_y = np.array([d2dt2_integrated_psf_1d(np.arange(szy), theta['particle'][p_idx]['y'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: y-position
+        # # Refer to the explanation written inside ddt_integrated_psf_1d function for better understanding of the below two lines.
+        # Ddt_integrated_psf_1d_x = np.array([ddt_integrated_psf_1d(np.arange(szx), theta['particle'][p_idx]['x'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: x-position
+        # Ddt_integrated_psf_1d_y = np.array([ddt_integrated_psf_1d(np.arange(szy), theta['particle'][p_idx]['y'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: y-position
+        # D2dt2_integrated_psf_1d_x = np.array([d2dt2_integrated_psf_1d(np.arange(szx), theta['particle'][p_idx]['x'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: x-position
+        # D2dt2_integrated_psf_1d_y = np.array([d2dt2_integrated_psf_1d(np.arange(szy), theta['particle'][p_idx]['y'], psf_sigma) for p_idx in range(0, hypothesis_index)]) # 2d array with row: pindex, col: y-position
+        pass
     
     # add extra entry at beginning so indices match pidx
     Ddt_integrated_psf_1d_x = np.insert(Ddt_integrated_psf_1d_x, 0, None, axis=0)
@@ -1271,6 +1274,10 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
 
             # Retrieve the estimated parameters.
             theta = denormalize(norm_theta, hypothesis_index, roi_max, szx, szy, alpha)           
+
+            # If the converged particle intensity is negative, turn it to positive.
+            for pidx in range(1, hypothesis_index + 1):
+                theta[pidx][0] = np.abs(theta[pidx][0]) # The minimization algorithm may have converged to a negative particle intensity all involved landscapes are a mirror image of the positive particle intensity.
                             
         # Store fit results
         if hypothesis_index == 0:
