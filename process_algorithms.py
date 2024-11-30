@@ -306,7 +306,7 @@ def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi
     Returns:
         float: The modified negative log-likelihood value.
     """
-    # Denormalize theta to calculate model_xy
+# Denormalize theta to calculate model_xyr ba Wa5a 55a tg
     theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_max, szx, szy, alpha)
     # Calculate the model value at each pixel position
     model_xy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy), hypothesis_index, min_model_xy, psf_sigma)
@@ -366,9 +366,9 @@ def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy,
             # modelhk_at_xxyy = background + (i_0 * psf_x_0 * psf_y_0) + (i_1 * psf_x_1 * psf_y_1) + ...
             modelhk_at_xxyy = 0
             if isinstance(xx, int) and isinstance(yy, int):
-                modelhk_at_xxyy = theta[0][0]
+                modelhk_at_xxyy = np.abs(theta[0][0])
             else:
-                modelhk_at_xxyy += theta[0][0] * np.ones((len(yy), len(xx))) # Add the background contribution to the model intensity
+                modelhk_at_xxyy += np.abs(theta[0][0]) * np.ones((len(yy), len(xx))) # Add the background contribution to the model intensity
 
             for particle_index in range(1, hypothesis_index + 1):
                 # Calculate the integral (over the pixel) of the normalized 1D psf function for x and y each, for the xx-th column and the yy-th row, respectivly.
@@ -434,6 +434,7 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
     Model_xy, Integrated_psf_x, Integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy), hypothesis_index, min_model_xy, psf_sigma)
     
     # derivative of the negative log-likelihood (ddt_nll) with respect to the parameters
+    # Calculate the ingredients for the derivatives
     if isinstance(theta, (list, np.ndarray)): # Case: grayscale image
         ddt_nll = np.zeros((hypothesis_index + 1, 3)) 
         ddt_nll[0][1] = ddt_nll[0][2] = np.nan
@@ -464,7 +465,11 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
 
         # We need to calculate the derivatives of the modified negative log-likelihood function with respect to the normalized parameters 
         # - These derivative will be the derivatives with respect to unnormalized parameters times the "normalization factor"
-        ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
+        if not ABS_INTENSITY_FLAG:
+            ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
+        else:
+            ddt_nll[0][0] = np.sum(one_minus_image_over_model * np.sign(theta[0][0])) * roi_max
+
 
         for p_idx in range(1, hypothesis_index + 1):
             if not ABS_INTENSITY_FLAG:
@@ -534,6 +539,7 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
     # Precalculate intensity and derivatives
     Model_xy, Integrated_psf_x, Integrated_psf_y = calculate_modelxy_ipsfx_ipsfy(theta, np.arange(szx), np.arange(szy), hypothesis_index, min_model_xy, psf_sigma)
 
+    # Calculate ingredients for the Hessian matrix
     if isinstance(theta, (list, np.ndarray)): # Case: grayscale image
         # nll: negloglikelihood
         d2dt2_nll_2d = np.zeros((hypothesis_index * 3 + 1, hypothesis_index * 3 + 1))
@@ -629,118 +635,119 @@ def hessian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, ro
                                     + (1 - roi_image / Model_xy) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]))   * theta[pidx][0] * szy**2  )
             d2dt2_nll_2d[(pidx - 1) * 3 + 3][(pidx - 1) * 3 + 3] = d2dt2_nll_i2_i2
 
-    else: # Case: rgb image
-        if roi_image.shape[0] != 3:
-            roi_image = np.transpose(roi_image, (2, 0, 1))
-        # 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1 = 36 combinations total.
-        # 8: 00r-00r, 00r-00g, 00r-00b, 00r-i0r, 00r-i0g, 00r-i0b, 00r-ix, 00r-iy
-        # 7:          00g-00g, 00g-00b, 00g-i0r, 00g-i0g, 00g-i0b, 00g-ix, 00g-iy
-        # 6:                   00b-00b, 00b-i0r, 00b-i0g, 00b-i0b, 00b-ix, 00b-iy
-        # 5:                            i0r-i0r, i0r-i0g, i0r-i0b, i0r-ix, i0r-iy
-        # 4:                                     i0g-i0g, i0g-i0b, i0g-ix, i0g-iy
-        # 3:                                              i0b-i0b, i0b-ix, i0b-iy
-        # 2:                                                        ix-ix,  ix-iy
-        # 1:                                                                iy-iy
+    else: # Case: rgb image - not updated to work with the absolute values of particle intensities yet. (2024/11/29)
+        # if roi_image.shape[0] != 3:
+        #     roi_image = np.transpose(roi_image, (2, 0, 1))
+        # # 8 + 7 + 6 + 5 + 4 + 3 + 2 + 1 = 36 combinations total.
+        # # 8: 00r-00r, 00r-00g, 00r-00b, 00r-i0r, 00r-i0g, 00r-i0b, 00r-ix, 00r-iy
+        # # 7:          00g-00g, 00g-00b, 00g-i0r, 00g-i0g, 00g-i0b, 00g-ix, 00g-iy
+        # # 6:                   00b-00b, 00b-i0r, 00b-i0g, 00b-i0b, 00b-ix, 00b-iy
+        # # 5:                            i0r-i0r, i0r-i0g, i0r-i0b, i0r-ix, i0r-iy
+        # # 4:                                     i0g-i0g, i0g-i0b, i0g-ix, i0g-iy
+        # # 3:                                              i0b-i0b, i0b-ix, i0b-iy
+        # # 2:                                                        ix-ix,  ix-iy
+        # # 1:                                                                iy-iy
 
-        pixelval_over_model_squared = roi_image / Model_xy**2
+        # pixelval_over_model_squared = roi_image / Model_xy**2
 
-        # 00r-related
-        d2dt2_nll_00r_00r = np.sum([ pixelval_over_model_squared[0] * (roi_max[0])**2 ])
-        # d2dt2_nll_00r_00g = d2dt2_nll_00r_00b = 0
+        # # 00r-related
+        # d2dt2_nll_00r_00r = np.sum([ pixelval_over_model_squared[0] * (roi_max[0])**2 ])
+        # # d2dt2_nll_00r_00g = d2dt2_nll_00r_00b = 0
 
-        # 00g-related
-        d2dt2_nll_00g_00g = np.sum([ pixelval_over_model_squared[1] * (roi_max[1])**2 ])
-        # d2dt2_nll_00g_00b = 0
+        # # 00g-related
+        # d2dt2_nll_00g_00g = np.sum([ pixelval_over_model_squared[1] * (roi_max[1])**2 ])
+        # # d2dt2_nll_00g_00b = 0
 
-        # 00b-related
-        d2dt2_nll_00b_00b = np.sum([ pixelval_over_model_squared[2] * (roi_max[2])**2 ])
+        # # 00b-related
+        # d2dt2_nll_00b_00b = np.sum([ pixelval_over_model_squared[2] * (roi_max[2])**2 ])
 
-        # Assign to the relevant places in the Hessian matrix.
-        d2dt2_nll_2d[0][0] = d2dt2_nll_00r_00r # 00r takes the 0th index
-        d2dt2_nll_2d[1][1] = d2dt2_nll_00g_00g # 00g takes the 1st index
-        d2dt2_nll_2d[2][2] = d2dt2_nll_00b_00b # 00b takes the 2nd indej
+        # # Assign to the relevant places in the Hessian matrix.
+        # d2dt2_nll_2d[0][0] = d2dt2_nll_00r_00r # 00r takes the 0th index
+        # d2dt2_nll_2d[1][1] = d2dt2_nll_00g_00g # 00g takes the 1st index
+        # d2dt2_nll_2d[2][2] = d2dt2_nll_00b_00b # 00b takes the 2nd indej
 
-        for pidx in range(1, hypothesis_index + 1):
+        # for pidx in range(1, hypothesis_index + 1):
 
-            # 00r-related
-            d2dt2_nll_00r_i0r = np.sum([ pixelval_over_model_squared[0] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) * (alpha[0]) * (roi_max[0]) ])
-            # d2dt2_nll_00r_i0g = d2dt2_nll_00r_i0b = 0
-            d2dt2_nll_00r_ix  = np.sum([ pixelval_over_model_squared[0] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][0] * szx * roi_max[0] ])
-            d2dt2_nll_00r_iy  = np.sum([ pixelval_over_model_squared[0] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][0] * szy * roi_max[0] ])
+        #     # 00r-related
+        #     d2dt2_nll_00r_i0r = np.sum([ pixelval_over_model_squared[0] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) * (alpha[0]) * (roi_max[0]) ])
+        #     # d2dt2_nll_00r_i0g = d2dt2_nll_00r_i0b = 0
+        #     d2dt2_nll_00r_ix  = np.sum([ pixelval_over_model_squared[0] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][0] * szx * roi_max[0] ])
+        #     d2dt2_nll_00r_iy  = np.sum([ pixelval_over_model_squared[0] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][0] * szy * roi_max[0] ])
 
-            # 00g-related
-            # d2dt2_nll_00g_i0r = 0 
-            d2dt2_nll_00g_i0g = np.sum([ pixelval_over_model_squared[1] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) * (alpha[1]) * (roi_max[1]) ])
-            # d2dt2_nll_00g_i0b =  0
-            d2dt2_nll_00g_ix  = np.sum([ pixelval_over_model_squared[1] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][1] * szx * roi_max[1] ])
-            d2dt2_nll_00g_iy  = np.sum([ pixelval_over_model_squared[1] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][1] * szy * roi_max[1] ])
+        #     # 00g-related
+        #     # d2dt2_nll_00g_i0r = 0 
+        #     d2dt2_nll_00g_i0g = np.sum([ pixelval_over_model_squared[1] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) * (alpha[1]) * (roi_max[1]) ])
+        #     # d2dt2_nll_00g_i0b =  0
+        #     d2dt2_nll_00g_ix  = np.sum([ pixelval_over_model_squared[1] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][1] * szx * roi_max[1] ])
+        #     d2dt2_nll_00g_iy  = np.sum([ pixelval_over_model_squared[1] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][1] * szy * roi_max[1] ])
 
-            # 00b-related
-            # d2dt2_nll_00b_i0r = d2dt2_nll_00b_i0g = 0
-            d2dt2_nll_00b_i0b = np.sum([ pixelval_over_model_squared[2] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) * (alpha[2]) * (roi_max[2]) ])
-            d2dt2_nll_00b_ix  = np.sum([ pixelval_over_model_squared[2] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szx * roi_max[2] ])
-            d2dt2_nll_00b_iy  = np.sum([ pixelval_over_model_squared[2] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szy * roi_max[2] ])
+        #     # 00b-related
+        #     # d2dt2_nll_00b_i0r = d2dt2_nll_00b_i0g = 0
+        #     d2dt2_nll_00b_i0b = np.sum([ pixelval_over_model_squared[2] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) * (alpha[2]) * (roi_max[2]) ])
+        #     d2dt2_nll_00b_ix  = np.sum([ pixelval_over_model_squared[2] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szx * roi_max[2] ])
+        #     d2dt2_nll_00b_iy  = np.sum([ pixelval_over_model_squared[2] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szy * roi_max[2] ])
 
 
-            # i0r-related
-            d2dt2_nll_i0r_i0r = np.sum(pixelval_over_model_squared[0] * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * alpha[0]**2) 
-            # d2dt2_nll_i0r_i0g = d2dt2_nll_i0r_i0b = 0
-            d2dt2_nll_i0r_ix  = np.sum( ( pixelval_over_model_squared[0] * theta['particle'][pidx-1]['I'][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[0] / Model_xy[0])) * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * (roi_max[0] - roi_min[0]) * 2 * np.pi * psf_sigma**2 )
-            d2dt2_nll_i0r_iy  = np.sum( ( pixelval_over_model_squared[0] * theta['particle'][pidx-1]['I'][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[0] / Model_xy[0])) * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * (roi_max[0] - roi_min[0]) * 2 * np.pi * psf_sigma**2 )
+        #     # i0r-related
+        #     d2dt2_nll_i0r_i0r = np.sum(pixelval_over_model_squared[0] * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * alpha[0]**2) 
+        #     # d2dt2_nll_i0r_i0g = d2dt2_nll_i0r_i0b = 0
+        #     d2dt2_nll_i0r_ix  = np.sum( ( pixelval_over_model_squared[0] * theta['particle'][pidx-1]['I'][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[0] / Model_xy[0])) * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * (roi_max[0] - roi_min[0]) * 2 * np.pi * psf_sigma**2 )
+        #     d2dt2_nll_i0r_iy  = np.sum( ( pixelval_over_model_squared[0] * theta['particle'][pidx-1]['I'][0] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[0] / Model_xy[0])) * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * (roi_max[0] - roi_min[0]) * 2 * np.pi * psf_sigma**2 )
 
-            # i0g-related
-            d2dt2_nll_i0g_i0g = np.sum(pixelval_over_model_squared[1] * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * alpha[1]**2)
-            # d2dt2_nll_i0g_i0b = 0
-            d2dt2_nll_i0g_ix  = np.sum( ( pixelval_over_model_squared[1] * theta['particle'][pidx-1]['I'][1] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[1] / Model_xy[1])) * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * (roi_max[1] - roi_min[1]) * 2 * np.pi * psf_sigma**2 )
-            d2dt2_nll_i0g_iy =  np.sum( ( pixelval_over_model_squared[1] * theta['particle'][pidx-1]['I'][1] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[1] / Model_xy[1])) * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * (roi_max[1] - roi_min[1]) * 2 * np.pi * psf_sigma**2 )
+        #     # i0g-related
+        #     d2dt2_nll_i0g_i0g = np.sum(pixelval_over_model_squared[1] * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * alpha[1]**2)
+        #     # d2dt2_nll_i0g_i0b = 0
+        #     d2dt2_nll_i0g_ix  = np.sum( ( pixelval_over_model_squared[1] * theta['particle'][pidx-1]['I'][1] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[1] / Model_xy[1])) * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * (roi_max[1] - roi_min[1]) * 2 * np.pi * psf_sigma**2 )
+        #     d2dt2_nll_i0g_iy =  np.sum( ( pixelval_over_model_squared[1] * theta['particle'][pidx-1]['I'][1] * np.outer(Integrated_psf_y[pidx], Integrated_psf_x[pidx]) + (1 - roi_image[1] / Model_xy[1])) * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * szy * (roi_max[1] - roi_min[1]) * 2 * np.pi * psf_sigma**2 )
 
-            # i0b-related
-            d2dt2_nll_i0b_i0b = np.sum(pixelval_over_model_squared[2] * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * alpha[2]**2)
-            d2dt2_nll_i0b_ix  = np.sum(pixelval_over_model_squared[2] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szx * (roi_max[2] - roi_min[2]) * 2 * np.pi * psf_sigma**2)
-            d2dt2_nll_i0b_iy  = np.sum(pixelval_over_model_squared[2] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szy * (roi_max[2] - roi_min[2]) * 2 * np.pi * psf_sigma**2)
+        #     # i0b-related
+        #     d2dt2_nll_i0b_i0b = np.sum(pixelval_over_model_squared[2] * np.outer(Integrated_psf_y[pidx]**2, Integrated_psf_x[pidx]**2) * alpha[2]**2)
+        #     d2dt2_nll_i0b_ix  = np.sum(pixelval_over_model_squared[2] * np.outer(Integrated_psf_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szx * (roi_max[2] - roi_min[2]) * 2 * np.pi * psf_sigma**2)
+        #     d2dt2_nll_i0b_iy  = np.sum(pixelval_over_model_squared[2] * np.outer(Ddt_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx]) * theta['particle'][pidx-1]['I'][2] * szy * (roi_max[2] - roi_min[2]) * 2 * np.pi * psf_sigma**2)
             
-            # ix-related
-            d2dt2_nll_ix_ix   = np.sum([(pixelval_over_model_squared[ch] * theta['particle'][pidx-1]['I'][ch] * np.outer(Ddt_integrated_psf_1d_x[pidx]**2, Ddt_integrated_psf_1d_x[pidx]**2) + (1 - roi_image[ch] / Model_xy[ch]) * np.outer(Integrated_psf_y[pidx], D2dt2_integrated_psf_1d_x[pidx])) * theta['particle'][pidx-1]['I'][ch] * szx**2 for ch in range(3)])
-            d2dt2_nll_ix_iy   = np.sum([(pixelval_over_model_squared[ch] * theta['particle'][pidx-1]['I'][ch] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) + (1 - roi_image[ch] / Model_xy[ch])) * theta['particle'][pidx-1]['I'][ch] * np.outer(Ddt_integrated_psf_1d_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * szy for ch in range(3)])
+        #     # ix-related
+        #     d2dt2_nll_ix_ix   = np.sum([(pixelval_over_model_squared[ch] * theta['particle'][pidx-1]['I'][ch] * np.outer(Ddt_integrated_psf_1d_x[pidx]**2, Ddt_integrated_psf_1d_x[pidx]**2) + (1 - roi_image[ch] / Model_xy[ch]) * np.outer(Integrated_psf_y[pidx], D2dt2_integrated_psf_1d_x[pidx])) * theta['particle'][pidx-1]['I'][ch] * szx**2 for ch in range(3)])
+        #     d2dt2_nll_ix_iy   = np.sum([(pixelval_over_model_squared[ch] * theta['particle'][pidx-1]['I'][ch] * np.outer(Integrated_psf_x[pidx], Integrated_psf_y[pidx]) + (1 - roi_image[ch] / Model_xy[ch])) * theta['particle'][pidx-1]['I'][ch] * np.outer(Ddt_integrated_psf_1d_y[pidx], Ddt_integrated_psf_1d_x[pidx]) * szx * szy for ch in range(3)])
 
-            # ix-related
-            d2dt2_nll_iy_iy   = np.sum([(pixelval_over_model_squared[ch] * theta['particle'][pidx-1]['I'][ch] * np.outer(Ddt_integrated_psf_1d_y[pidx]**2, Ddt_integrated_psf_1d_y[pidx]**2) + (1 - roi_image[ch] / Model_xy[ch]) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx])) * theta['particle'][pidx-1]['I'][ch] * szy**2 for ch in range(3)])
+        #     # ix-related
+        #     d2dt2_nll_iy_iy   = np.sum([(pixelval_over_model_squared[ch] * theta['particle'][pidx-1]['I'][ch] * np.outer(Ddt_integrated_psf_1d_y[pidx]**2, Ddt_integrated_psf_1d_y[pidx]**2) + (1 - roi_image[ch] / Model_xy[ch]) * np.outer(D2dt2_integrated_psf_1d_y[pidx], Integrated_psf_x[pidx])) * theta['particle'][pidx-1]['I'][ch] * szy**2 for ch in range(3)])
 
-            # Assign to the relevant places in the Hessian matrix.
-            d2dt2_nll_2d[0][(pidx-1)*5 + 3] = d2dt2_nll_2d[(pidx-1)*5 + 3][0] = d2dt2_nll_00r_i0r # 00r takes the 0th index, i0r takes the '3 + (pidx - 1) * 5'th index
-            # d2dt2_nll_2d[0][(pidx-1)*5 + 4] and its transpose element is 0. # 00r takes the 0th index, i0g takes the '4 + (pidx - 1) * 5'th index
-            # d2dt2_nll_2d[0][(pidx-1)*5 + 5] and its transpose element is 0. # 00r takes the 0th index, i0b takes the '5 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[0][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][0] = d2dt2_nll_00r_ix  # 00r takes the 0th index, ix  takes the '6 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[0][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][0] = d2dt2_nll_00r_iy  # 00r takes the 0th index, iy  takes the '7 + (pidx - 1) * 5'th index
+        #     # Assign to the relevant places in the Hessian matrix.
+        #     d2dt2_nll_2d[0][(pidx-1)*5 + 3] = d2dt2_nll_2d[(pidx-1)*5 + 3][0] = d2dt2_nll_00r_i0r # 00r takes the 0th index, i0r takes the '3 + (pidx - 1) * 5'th index
+        #     # d2dt2_nll_2d[0][(pidx-1)*5 + 4] and its transpose element is 0. # 00r takes the 0th index, i0g takes the '4 + (pidx - 1) * 5'th index
+        #     # d2dt2_nll_2d[0][(pidx-1)*5 + 5] and its transpose element is 0. # 00r takes the 0th index, i0b takes the '5 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[0][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][0] = d2dt2_nll_00r_ix  # 00r takes the 0th index, ix  takes the '6 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[0][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][0] = d2dt2_nll_00r_iy  # 00r takes the 0th index, iy  takes the '7 + (pidx - 1) * 5'th index
 
-            # d2dt2_nll_2d[1][(pidx-1)*5 + 3] and its transpose element is 0. # 00g takes the 0th index, i0r takes the '4 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[1][(pidx-1)*5 + 4] = d2dt2_nll_2d[(pidx-1)*5 + 4][1] = d2dt2_nll_00g_i0g # 00g takes the 1th index, i0g takes the '4 + (pidx - 1) * 5'th index
-            # d2dt2_nll_2d[1][(pidx-1)*5 + 5] and its transpose element is 0. # 00g takes the 0th index, i0b takes the '5 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[1][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][1] = d2dt2_nll_00g_ix  # 00g takes the 1th index, ix  takes the '6 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[1][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][1] = d2dt2_nll_00g_iy  # 00g takes the 1th index, iy  takes the '7 + (pidx - 1) * 5'th index
+        #     # d2dt2_nll_2d[1][(pidx-1)*5 + 3] and its transpose element is 0. # 00g takes the 0th index, i0r takes the '4 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[1][(pidx-1)*5 + 4] = d2dt2_nll_2d[(pidx-1)*5 + 4][1] = d2dt2_nll_00g_i0g # 00g takes the 1th index, i0g takes the '4 + (pidx - 1) * 5'th index
+        #     # d2dt2_nll_2d[1][(pidx-1)*5 + 5] and its transpose element is 0. # 00g takes the 0th index, i0b takes the '5 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[1][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][1] = d2dt2_nll_00g_ix  # 00g takes the 1th index, ix  takes the '6 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[1][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][1] = d2dt2_nll_00g_iy  # 00g takes the 1th index, iy  takes the '7 + (pidx - 1) * 5'th index
 
-            # d2dt2_nll_2d[2][(pidx-1)*5 + 3] and its transpose element is 0. # 00b takes the 2th index, i0r takes the '3 + (pidx - 1) * 5'th index
-            # d2dt2_nll_2d[2][(pidx-1)*5 + 4] and its transpose element is 0. # 00b takes the 2th index, i0g takes the '4 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[2][(pidx-1)*5 + 5] = d2dt2_nll_2d[(pidx-1)*5 + 3][2] = d2dt2_nll_00b_i0b # 00b takes the 1th index, i0b takes the '5 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[2][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][2] = d2dt2_nll_00b_ix  # 00b takes the 1th index, ix  takes the '6 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[2][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][2] = d2dt2_nll_00b_iy  # 00b takes the 1th index, iy  takes the '7 + (pidx - 1) * 5'th index
+        #     # d2dt2_nll_2d[2][(pidx-1)*5 + 3] and its transpose element is 0. # 00b takes the 2th index, i0r takes the '3 + (pidx - 1) * 5'th index
+        #     # d2dt2_nll_2d[2][(pidx-1)*5 + 4] and its transpose element is 0. # 00b takes the 2th index, i0g takes the '4 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[2][(pidx-1)*5 + 5] = d2dt2_nll_2d[(pidx-1)*5 + 3][2] = d2dt2_nll_00b_i0b # 00b takes the 1th index, i0b takes the '5 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[2][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][2] = d2dt2_nll_00b_ix  # 00b takes the 1th index, ix  takes the '6 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[2][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][2] = d2dt2_nll_00b_iy  # 00b takes the 1th index, iy  takes the '7 + (pidx - 1) * 5'th index
 
-            d2dt2_nll_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = d2dt2_nll_i0r_i0r # i0r takes the '3 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 3] = d2dt2_nll_i0r_ix  # ix  takes the '6 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 3] = d2dt2_nll_i0r_iy  # iy  takes the '7 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 3] = d2dt2_nll_i0r_i0r # i0r takes the '3 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 3] = d2dt2_nll_i0r_ix  # ix  takes the '6 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 3][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 3] = d2dt2_nll_i0r_iy  # iy  takes the '7 + (pidx - 1) * 5'th index
 
-            d2dt2_nll_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = d2dt2_nll_i0g_i0g # i0g takes the '4 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 4] = d2dt2_nll_i0g_ix  # ix  takes the '6 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 4] = d2dt2_nll_i0g_iy  # iy  takes the '7 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 4] = d2dt2_nll_i0g_i0g # i0g takes the '4 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 4] = d2dt2_nll_i0g_ix  # ix  takes the '6 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 4][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 4] = d2dt2_nll_i0g_iy  # iy  takes the '7 + (pidx - 1) * 5'th index
         
-            d2dt2_nll_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = d2dt2_nll_i0b_i0b # i0b takes the '5 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 5] = d2dt2_nll_i0b_ix  # ix  takes the '6 + (pidx - 1) * 5'th index
-            d2dt2_nll_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 5] = d2dt2_nll_i0b_iy  # iy  takes the '7 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 5] = d2dt2_nll_i0b_i0b # i0b takes the '5 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 6] = d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 5] = d2dt2_nll_i0b_ix  # ix  takes the '6 + (pidx - 1) * 5'th index
+        #     d2dt2_nll_2d[(pidx-1)*5 + 5][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 5] = d2dt2_nll_i0b_iy  # iy  takes the '7 + (pidx - 1) * 5'th index
 
-            d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 6] = d2dt2_nll_ix_ix
-            d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 6] = d2dt2_nll_ix_iy
+        #     d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 6] = d2dt2_nll_ix_ix
+        #     d2dt2_nll_2d[(pidx-1)*5 + 6][(pidx-1)*5 + 7] = d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 6] = d2dt2_nll_ix_iy
 
-            d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 7] = d2dt2_nll_iy_iy
+        #     d2dt2_nll_2d[(pidx-1)*5 + 7][(pidx-1)*5 + 7] = d2dt2_nll_iy_iy
+        pass
 
     d2dt2_nll_2d += hess_oob_penalty(theta, szx, szy, psf_sigma) # newly added line (2nd July 2024)
 
