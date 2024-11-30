@@ -1282,9 +1282,12 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             # Retrieve the estimated parameters.
             theta = denormalize(norm_theta, hypothesis_index, roi_max, szx, szy, alpha)           
 
-            # If the converged particle intensity is negative, turn it to positive.
-            for pidx in range(1, hypothesis_index + 1):
-                theta[pidx][0] = np.abs(theta[pidx][0]) # The minimization algorithm may have converged to a negative particle intensity all involved landscapes are a mirror image of the positive particle intensity.
+            if ABS_INTENSITY_FLAG:
+                # If the converged particle intensity is negative, turn it to positive.
+                for pidx in range(1, hypothesis_index + 1):
+                    theta[pidx][0] = np.abs(theta[pidx][0]) # The minimization algorithm may have converged to a negative particle intensity all involved landscapes are a mirror image of the positive particle intensity.
+                # If the converged background intensity is negative, turn it to positive.
+                theta[0][0] = np.abs(theta[0][0])
                             
         # Store fit results
         if hypothesis_index == 0:
