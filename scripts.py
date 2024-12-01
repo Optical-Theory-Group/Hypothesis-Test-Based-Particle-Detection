@@ -544,6 +544,8 @@ def change_for_all_configs(directory, field, value):
 			with open(file_path, 'r') as file:
 				data = json.load(file)
 
+			# print the filename and before and after values
+			print(f'{filename}: {data[field]} -> {value}')
 			# Change the field value
 			data[field] = value
 
@@ -555,7 +557,7 @@ def change_for_all_configs(directory, field, value):
 	print(f"Modifications for {count} files completed.")
 
 # change_for_all_configs('./configs_to_run_on_server/', 'code_version_date', '2024-11-29')
-change_for_all_configs('./configs/', 'gen_total_image_count', 50)
+change_for_all_configs('./configs/', 'gen_total_image_count', 100)
 
 
 # filepath = './configs/d4-baseline.json'
