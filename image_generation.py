@@ -1,5 +1,5 @@
 import numpy as np
-import cv2
+# import cv2
 from process_algorithms import integrate_gauss_1d
 
 def psfconvolution(peak_info, image_width=512):
@@ -49,32 +49,32 @@ def lowfreq_background(image_width, x_freq, y_freq, amplitude=100, phase=0):
 
     return outputimg
 
-def apply_vignette(image, strength=0.5, vignette_factor_min=0.5):
-    """ Applies a vignette effect to the input image
-    Args:
-        image (numpy.array): input image
-        strength (float): strength of the vignette effect
-        vignette_factor_min (float): minimum value of the vignette factor
-    Returns:
-        numpy.array(dtype=float): image with the vignette effect applied
-    """
+# def apply_vignette(image, strength=0.5, vignette_factor_min=0.5):
+#     """ Applies a vignette effect to the input image
+#     Args:
+#         image (numpy.array): input image
+#         strength (float): strength of the vignette effect
+#         vignette_factor_min (float): minimum value of the vignette factor
+#     Returns:
+#         numpy.array(dtype=float): image with the vignette effect applied
+#     """
 
-    # Assumes `image` is a grayscale image (2D numpy array)
-    if len(image.shape) == 2:
-        rows, cols = image.shape
-    else: # If image is RGB
-        raise ValueError("Input image t be a 2D numpy array. RGB images are not supported at this time.")
+#     # Assumes `image` is a grayscale image (2D numpy array)
+#     if len(image.shape) == 2:
+#         rows, cols = image.shape
+#     else: # If image is RGB
+#         raise ValueError("Input image t be a 2D numpy array. RGB images are not supported at this time.")
 
-    # Create a vignette mask using Gaussian kernels
-    kernel_x = cv2.getGaussianKernel(cols, cols/4)
-    kernel_y = cv2.getGaussianKernel(rows, rows/4)
-    kernel = kernel_y * kernel_x.T
-    mask = kernel / np.linalg.norm(kernel)
-    mask = cv2.GaussianBlur(mask, (0, 0), strength*cols/4)
-    # Normalize mask to range from 0.5 to 1
-    rescaled_mask = (mask - np.min(mask)) / (np.max(mask) - np.min(mask)) * (1 - vignette_factor_min) + vignette_factor_min
+#     # Create a vignette mask using Gaussian kernels
+#     kernel_x = cv2.getGaussianKernel(cols, cols/4)
+#     kernel_y = cv2.getGaussianKernel(rows, rows/4)
+#     kernel = kernel_y * kernel_x.T
+#     mask = kernel / np.linalg.norm(kernel)
+#     mask = cv2.GaussianBlur(mask, (0, 0), strength*cols/4)
+#     # Normalize mask to range from 0.5 to 1
+#     rescaled_mask = (mask - np.min(mask)) / (np.max(mask) - np.min(mask)) * (1 - vignette_factor_min) + vignette_factor_min
 
-    # Apply the mask to the image
-    vignetted_image = image * rescaled_mask
+#     # Apply the mask to the image
+#     vignetted_image = image * rescaled_mask
 
-    return vignetted_image
+#     return vignetted_image
