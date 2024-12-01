@@ -296,7 +296,7 @@ def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=
     remaintime = remaintime - timedelta(microseconds=remaintime.microseconds)
 
     strmsg = '{}/{}' \
-            ' in : {} ({:.4f}/s  Remaining time estimate: {}). {}'.format(progresscount, totalrealisations,
+            ' in : {} ({:.2f}/s  Remaining estimate: {}). {}'.format(progresscount, totalrealisations,
                                                     runtime, progresscount / runtimesecs, remaintime, statusmsg)
 
     update_progress(progresscount / totalrealisations, strmsg)
@@ -323,7 +323,7 @@ def update_progress(progress, status='', barlength=20):
         status = 'Halt...\r\n'
     if progress >= 1:
         progress = 1
-        status += ' Done.\r\n'
+        status += ' \nReached 100 percent.\r\n'
     block = int(round(barlength * progress))
     text = '\rPercent: [{0}] {1:.2f}% {2}'.format('#' * block + '-' * (barlength - block), progress * 100, status)
     try:
@@ -464,12 +464,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                         writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                     # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
-                    if actual_num_particles == estimated_num_particles:
-                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}'
-                    elif actual_num_particles > estimated_num_particles:
-                        statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}'
-                    else:
-                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}'
+                    sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
+                    statusmsg = f'\"{input_image_file}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
                 except concurrent.futures.TimeoutError:
                     print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {future_filename} ")
@@ -833,12 +829,12 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
     mae = mean_absolute_error(actual_repeats, estimated_repeats)
     rmse = np.sqrt(mean_squared_error(actual_repeats, estimated_repeats))
 
-    print(f"Accuracy: {accuracy:.3f}")
+    print(f"Flat weight Accuracy: {accuracy:.3f}")
+    print(f"Within-One Accuarcy: {miss_by_one_rate:.3f}")
     print(f"Overestimation Rate: {overestimation_rate:.3f}")
     print(f"Underestimation Rate: {underestimation_rate:.3f}")
-    print(f"Miss-by-One Rate: {miss_by_one_rate:.3f}")
-    print(f"Mean Absolute Error: {mae:.3f}")
-    print(f"Root Mean Squared Error: {rmse:.3f}")
+    print(f"Mean Absolute Error (flat weight): {mae:.3f}")
+    print(f"Root Mean Squared Error (flat weight): {rmse:.3f}")
 
     # Prepare metrics for saving
     scores = {
@@ -1243,6 +1239,7 @@ def process(config_files_dir, parallel=False):
                 dir_path =os.path.join("datasets", f"{config['image_folder_namebase']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
+                print('-------------------------------------')
         
         # Move the processed config file to the "finished configs" subfolder
         finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
