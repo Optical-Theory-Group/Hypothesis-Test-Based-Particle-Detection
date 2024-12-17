@@ -560,6 +560,7 @@ def change_for_all_configs(directory, field, value):
 change_for_all_configs('./configs/', 'gen_total_image_count', 100)
 
 
+
 # filepath = './configs/d4-baseline.json'
 # prefixes = ['d4-snr-1o_sqrt16x', 'd4-snr-1o_sqrt8x', 'd4-snr-1o_sqrt4x', 'd4-snr-1o_sqrt2x', 'd4-snr-sqrt2']
 # info_dict = {}

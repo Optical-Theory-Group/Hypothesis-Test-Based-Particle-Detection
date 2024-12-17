@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import poisson
 import os
+from mpl_toolkits.mplot3d import Axes3D
 
 # Function to calculate accuracy from a confusion matrix
 def calculate_avg_accuracy(conf_matrix):
@@ -430,8 +431,9 @@ def plot_weighted_counts_against_lam(weighted_counts, lams, xlabel):
     plt.show(block=False)
     pass
 
-weighted_counts = [calculate_weighted_estimated_counts(folder_path, lam=lam, order=x_vals) for lam in lams]
-plot_weighted_counts_against_lam(weighted_counts, lams, xlabel=label)
+# weighted_counts = [calculate_weighted_estimated_counts(folder_path, lam=lam, order=x_vals) for lam in lams]
+# plot_weighted_counts_against_lam(weighted_counts, lams, xlabel=label)
+
 
 
 # flat_rmse = calculate_flat_rmse(folder_path, order=x_vals)
@@ -449,3 +451,80 @@ plot_weighted_counts_against_lam(weighted_counts, lams, xlabel=label)
 # 
 
 pass
+
+def plot_3d_surface_with_peaks(x_range, y_range, background_level, peaks):
+    """
+    Plot a 3D surface with a flat background and multiple Gaussian peaks.
+    
+    Parameters:
+    x_range (tuple): Range of x values (min, max).
+    y_range (tuple): Range of y values (min, max).
+    background_level (float): The level of the flat background surface.
+    peaks (list of dict): List of dictionaries, each containing 'x', 'y', 'height', and 'sigma' for a peak.
+    """
+    x = np.linspace(x_range[0], x_range[1], 100)
+    y = np.linspace(y_range[0], y_range[1], 100)
+    x, y = np.meshgrid(x, y)
+    z = np.full_like(x, background_level)
+    
+    for peak in peaks:
+        x0, y0, height, sigma = peak['x'], peak['y'], peak['height'], peak['sigma']
+        z += height * np.exp(-((x - x0)**2 + (y - y0)**2) / (2 * sigma**2))
+    
+    # fig = plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(3,3))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(x, y, z, cmap='Greys')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    current_zlim = ax.get_zlim()
+    # ax.set_zlim(current_zlim[-1] * -0.5, 1.5 * current_zlim[1])
+    ax.set_zlim(current_zlim[-1] * -0.1, 2.5 * current_zlim[1])
+    # ax.set_zlim(0, 1.5 * current_zlim[1])
+    ax.set_zticks([])
+    # ax.set_xlabel('X')
+    # ax.set_ylabel('Y')
+    # ax.set_zlabel('Z')
+    plt.tight_layout()
+    plt.show(block=False)
+    pass
+
+# # Example usage
+# x_range = (0, 100)
+# y_range = (0, 100)
+# background_level = 32000
+# peaks = [
+#     # {'x': 40, 'y': 51, 'height': 20000*25, 'sigma': 2.0},
+#     # {'x': 57, 'y': 63, 'height': 20000*25, 'sigma': 2.0},
+# ]
+
+# plot_3d_surface_with_peaks(x_range, y_range, background_level, peaks)
+
+def plot_xi_values(xi_values):
+    """
+    Plot xi values against their indices.
+    
+    Parameters:
+    xi_values (list or array): List or array of xi values to plot.
+    """
+    x_values = list(range(len(xi_values)))
+    plt.figure(figsize=(5,4))
+    plt.plot(x_values, xi_values, marker='o', color='black')
+    plt.xlabel('Hypothesis', fontsize=12 * 1.5)
+    plt.ylabel(r'$\xi$', fontsize=12 * 1.5, rotation=0, labelpad=20)
+    plt.xticks(fontsize=12 * 1.5)
+    plt.yticks([])
+    plt.tight_layout()
+    plt.show(block=False)
+    pass
+
+
+xi_values = [-66382.125,
+-66291.35499,
+-66204.44662,
+-66214.60394,
+-66224.66774,
+-66232.63556,
+]
+
+plot_xi_values(xi_values)
