@@ -1,0 +1,19 @@
+{
+    "image_folder_namebase": "d5_psf5_660_sep3_6",
+    "code_version_date": "2024-11-29",
+    "file_format": "tiff",
+    "separation_test_image_generation?": true,
+    "sep_distance_ratio_to_psf_sigma": 3.6,
+    "sep_image_count": 10000,
+    "sep_intensity_prefactor_to_bg_level": 80.0,
+    "sep_psf_sigma": 5.66,
+    "sep_img_width": 100,
+    "sep_bg_level": 2000,
+    "sep_random_seed": 21266,
+    "analyze_the_dataset?": true,
+    "ana_random_seed": 93557,
+    "ana_predefined_psf_sigma": 5.66,
+    "ana_use_premature_hypothesis_choice?": false,
+    "ana_maximum_hypothesis_index": 5,
+    "ana_delete_the_dataset_after_analysis?": true
+}

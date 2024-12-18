@@ -340,12 +340,12 @@ def plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs():
 	plt.savefig('expected_overlap_pairs_per_area_vs_surface_density_all_psfs.png')
 	plt.show(block=False)
 
-def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./config_for_remote_exec/', psfs=[1, 2, 3], multipliers=[1, 4, 9]):
+def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path='./configs_sep/', psfs=[1, 2, 3], multipliers=[1, 4, 9]):
 	
 	# Set the random seed for reproducibility
 	np.random.seed(0)
 
-	separation_ratios_to_psf_sigma = np.arange(0.0, 7.0, 0.2)
+	separation_ratios_to_psf_sigma = np.arange(0.0, 5.6, 0.2)
 	for psf, mul in zip(psfs, multipliers):
 		for sep in separation_ratios_to_psf_sigma:
 			# Define the source and destination paths
@@ -359,22 +359,22 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 				config_data = {}
 
 			# Most important field settings
-			config_data['image_folder_namebase'] = f'16bit_psf{psf_str}_sep{sep_str}'
+			config_data['image_folder_namebase'] = f'd5_psf{psf_str}_sep{sep_str}'
+			config_data['code_version_date'] = "2024-11-29"
+			config_data['file_format'] = 'tiff'
 
-			config_data['sep_psf_sigma'] = psf
+			config_data['separation_test_image_generation?'] = True
 			config_data['sep_distance_ratio_to_psf_sigma'] = round(sep, 2)
 			config_data['sep_image_count'] = 10000
+			config_data['sep_intensity_prefactor_to_bg_level'] = 10 * mul # Here's I'm assuming that the user changed zoom and changed exposure time so as to match the pixel value of background and signal peak is the same.
+			config_data['sep_psf_sigma'] = psf
+			config_data['sep_img_width'] = 100
+			config_data['sep_bg_level'] = 2000 
 			config_data['sep_random_seed'] = np.random.randint(0, 100000)
 
-			config_data['ana_predefined_psf_sigma'] = psf
-			config_data['ana_random_seed'] = np.random.randint(0, 100000)
-
-			# The following fields should be already set to the following values in the reference json file, but just in case
-			config_data['separation_test_image_generation?'] = True
-			# config_data['sep_intensity_prefactor_to_bg_level'] *= mul
-			config_data['sep_bg_level'] /= mul
-			config_data['generate_regular_dataset?'] = False
 			config_data['analyze_the_dataset?'] = True
+			config_data['ana_random_seed'] = np.random.randint(0, 100000)
+			config_data['ana_predefined_psf_sigma'] = psf
 			config_data['ana_use_premature_hypothesis_choice?'] = False
 			config_data['ana_maximum_hypothesis_index'] = 5
 			config_data['ana_delete_the_dataset_after_analysis?'] = True 
@@ -387,9 +387,10 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
 
-# psfs = np.array([0.707, 1, 1.41, 2, 2.83, 4, 5.66])
-# multipliers = np.array([0.125, 0.25, 0.5, 1, 2, 4, 8])
-# create_config_files_for_separation_tests(ref_json_path='config_submission/baseline/16bit_sep_baseline.json', dest_folder_path='config_submission/', psfs=psfs, multipliers=multipliers)
+psfs = 			np.array([0.707, 1, 	1.41, 	2, 2.83, 	4, 5.66])
+multipliers = 	np.array([0.125, 0.25, 	0.5, 	1, 2, 		4, 8])
+create_config_files_for_separation_tests(ref_json_path='configs_to_run_on_server/16bit_psf0_707_sep0_0.json', dest_folder_path='configs', psfs=psfs, multipliers=multipliers)
+pass
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_random_offset_center/', psfs=[0.5])
 # psfs = np.array([0.5, 3])
