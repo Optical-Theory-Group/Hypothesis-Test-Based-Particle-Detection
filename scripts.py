@@ -1,3 +1,4 @@
+from image_generation import psfconvolution
 from process_algorithms import generalized_maximum_likelihood_rule_on_rgb
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -7,6 +8,7 @@ import json
 import re
 import pandas as pd
 from collections import defaultdict
+import datetime
 
 pd.options.display.float_format = '{:.4f}'.format
 
@@ -80,7 +82,7 @@ def correct_json_files(directory):
 						json.dump(data, file, indent=4)
 	print("Corrections completed.")
 
-def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",):
+def process_separation_test_results(directory='', prefix="separation_test_psf0_5", show_legend=False):
 	""" Extracts the count of each estimated particle count as a function of separation from the log files in the given directory.
 		Generates a CSV file containing the extracted data and plots the results.
 	
@@ -90,8 +92,9 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 		Returns:
 			tuple: A tuple containing the probability of overlap per particle, probability of overlap per area, and surface densities.
 	"""
-	directory = os.path.join('./analyses/', subdir)
+	# directory = os.path.join('./analyses/', dir)
 	# Dictionary to store the count of each estimated particle count vs. separation
+	directory = os.path.join(directory)
 	counts = defaultdict(lambda: defaultdict(int))
 	pattern = re.compile(r'_sep(\d+(\_\d+)?)')
 
@@ -146,37 +149,105 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 	# Plotting the count of each estimated particle count as a function of separation
 
 	# _, axs = plt.subplots(2, 1, figsize=(12, 7))
-	_, axs = plt.subplots(figsize=(12, 4))
-	# plt.sca(axs[0]) # sca: set current axis
+	# sep_to_psf_ratios = np.array(sorted({f"{float(sep):.1f}" for est_dict in counts.values() for sep in est_dict.keys()}))
+	_, axs = plt.subplots(figsize=(7, 3))
 	for estimation in range(6):
-		plt.plot(sep_to_psf_ratios, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', color=palette[estimation])
+		plt.plot(sep_to_psf_ratios, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', 
+				 color=palette[estimation], alpha=0.7, linewidth=2, markersize=9)
 
-	plt.xlabel('Separation/Psf (ratio)', fontsize=14)
-	plt.xticks(fontsize=10)
+	plt.xlabel('Separation to PSF width ratio', fontsize=14)
+	plt.xticks(fontsize=12)
 	plt.ylabel('Count', fontsize=14)
-	plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
-	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
-	plt.grid(True)
+	plt.yticks(fontsize=12)
+	if show_legend:
+		plt.legend(loc='center left', framealpha = 0.8, fontsize='small')
 	plt.tight_layout()
-	plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
-	# plt.show(block=False)
-	plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation_in_psf.png')
+	# plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
+	plt.grid(True, linestyle='--', alpha=0.3)
+	
+	# Make the bounding box darker
+	ax = plt.gca()
+	for spine in ax.spines.values():
+		spine.set_edgecolor('dimgray')
+		spine.set_linewidth(1)
+	
+	plt.show(block=False)
+	pass
 
-	_, axs = plt.subplots(figsize=(12, 4))
-	# plt.sca(axs[1]) # sca: set current axis
-	for estimation in range(6):
-		plt.plot(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', markersize=1, color=palette[estimation])
-	plt.xlabel('Separation (px)', fontsize=14)
-	plt.xlim([-.5, 21.5])
-	plt.xticks(fontsize=10)
-	plt.ylabel('Count', fontsize=14)
-	plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
-	plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
-	plt.grid(True)
-	plt.tight_layout()
-	plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
-	# plt.show(block=False)
-	plt.savefig(f'psf{prefix.split("psf")[-1]}_particle_count_vs_separation_in_px.png')
+
+	# Prompt the user whether to save the plot or not
+	save_plot = input("Do you want to save this plot? (y/n): ").strip().lower()
+
+	current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+	if save_plot == 'y':
+		# Generate a filename with the current date and time
+		filename = f"particle_count_vs_separation(psf)_{current_time}.png"
+		
+		# Save the plot
+		plt.savefig(filename)
+		print(f"Plot saved as {filename}")
+	else:
+		print("Plot not saved.")
+
+	# Save the data points of the final plot to a CSV file
+	# Ask the user whether to save the data points to a CSV file
+	save_csv = input("Do you want to save the data points to a CSV file? (y/n): ").strip().lower()
+
+	if save_csv == 'y':
+		filename = f"particle_count_vs_separation(psf)_data_{current_time}.csv"
+		with open(filename, 'w') as file:
+			file.write("Estimation,Separation,Count\n")
+			for estimation in range(6):
+				for sep, count in zip(sep_to_psf_ratios, data[f'estimation=={estimation}']):
+					file.write(f"{estimation},{sep},{count}\n")
+		print(f"Data points saved as {filename}")
+	else:
+		print("Data points not saved.")
+
+
+
+# 	_, axs = plt.subplots(figsize=(6, 2))
+# 	# plt.sca(axs[1]) # sca: set current axis
+# 	for estimation in range(6):
+# 		plt.plot(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}'], label=f'estimation={estimation}', color=palette[estimation])
+# 	plt.xlabel('Separation (px)', fontsize=14)
+# 	plt.xlim([-.5, 21.5])
+# 	plt.xticks(fontsize=10)
+# 	plt.ylabel('Count', fontsize=14)
+# 	# plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
+# 	if show_legend:
+# 		plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
+# 	plt.grid(True)
+# 	plt.tight_layout()
+# 	plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
+# 	# plt.show(block=False)
+#  #
+#  # # Prompt the user whether to save the plot or not
+# 	save_plot = input("Do you want to save this plot? (y/n): ").strip().lower()
+
+# 	current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+# 	if save_plot == 'y':
+# 		# Generate a filename with the current date and time
+# 		filename = f"particle_count_vs_separation(px)_{current_time}.png"
+		
+# 		# Save the plot
+# 		plt.savefig(filename)
+# 		print(f"Plot saved as {filename}")
+# 	else:
+# 		print("Plot not saved.")
+
+# 	# Save the data points of the final plot to a CSV file
+# 	filename = f"particle_count_vs_separation_data(px)_{current_time}.csv"
+# 	with open(filename, 'w') as file:
+# 		file.write("Estimation,Separation,Count\n")
+# 		for estimation in range(6):
+# 			for sep, count in zip(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}']):
+# 				file.write(f"{estimation},{sep},{count}\n")
+# 	print(f"Data points saved as {filename}")
+
+	pass
+	plt.close('all')
+	return 0
 
 	# surface_densities = np.array([0, 0.001, 0.01, 0.1, 1, 10])
 	radiuses = sep_to_psf_ratios * psf_float
@@ -213,36 +284,36 @@ def process_separation_test_results(subdir='', prefix="separation_test_psf0_5",)
 	pass
 
 
-	# for surf_den in enumerate(surface_densities):
+	# # for surf_den in enumerate(surface_densities):
 
-	# 	prev_r = 0
+	# # 	prev_r = 0
 		
-	# 	for i, r_over_psf in enumerate(sep_to_psf_ratios):
-	# 		r = r_over_psf * psf_float
-	# 		dr = r - prev_r
-	# 		lam = surf_den * np.pi * r**2
-	# 		p_est_1_per_particle[j] += percentage_data['estimation==1'][i] / 100 * 2 * np.pi * lam * r * np.exp(-lam*np.pi*r**2) * dr
-	# 		prev_r = r
+	# # 	for i, r_over_psf in enumerate(sep_to_psf_ratios):
+	# # 		r = r_over_psf * psf_float
+	# # 		dr = r - prev_r
+	# # 		lam = surf_den * np.pi * r**2
+	# # 		p_est_1_per_particle[j] += percentage_data['estimation==1'][i] / 100 * 2 * np.pi * lam * r * np.exp(-lam*np.pi*r**2) * dr
+	# # 		prev_r = r
 	
-	# plt.close('all')
-	# plt.figure(figsize=(8, 4))
-	# plt.plot(surface_densities, p_est_1_per_particle, label='p_est_1_per_particle', color='blue')
-	# plt.xlabel('Surface Density (num of particle/pixel)', fontsize=14)
-	# plt.ylabel('p_est_1_per_particle', fontsize=14)
-	# plt.ylim(0, 1.0)
-	# plt.title(f'PSF{prefix.split("psf")[-1]} Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
-	# plt.legend(fontsize=12)
-	# plt.grid(True)
-	# plt.tight_layout()
-	# # plt.show(block=False)
-	# plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density).png')
+	# # plt.close('all')
+	# # plt.figure(figsize=(8, 4))
+	# # plt.plot(surface_densities, p_est_1_per_particle, label='p_est_1_per_particle', color='blue')
+	# # plt.xlabel('Surface Density (num of particle/pixel)', fontsize=14)
+	# # plt.ylabel('p_est_1_per_particle', fontsize=14)
+	# # plt.ylim(0, 1.0)
+	# # plt.title(f'PSF{prefix.split("psf")[-1]} Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
+	# # plt.legend(fontsize=12)
+	# # plt.grid(True)
+	# # plt.tight_layout()
+	# # # plt.show(block=False)
+	# # plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density).png')
 
-	# p_est_1_per_area = p_est_1_per_particle * surface_densities
+	# # p_est_1_per_area = p_est_1_per_particle * surface_densities
 
-	# return cdf_w, p_est_1_per_area, surface_densities
+	# # return cdf_w, p_est_1_per_area, surface_densities
 	return cdf_w, radiuses, data[f'estimation==1']
 
-def plot_estimate_1s():
+def plot_prob_of_estimating_two_as_one():
 	est_1 = {}
 	radiuses = {} 
 	psfs = [0.5, 1.0, 1.5, 2.0, 3.0]
@@ -387,21 +458,30 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 				json.dump(config_data, file, indent=4)
 			print(f'Saved modified config to {dest_path}')
 
-psfs = 			np.array([0.707, 1, 	1.41, 	2, 2.83, 	4, 5.66])
-multipliers = 	np.array([0.125, 0.25, 	0.5, 	1, 2, 		4, 8])
-create_config_files_for_separation_tests(ref_json_path='configs_to_run_on_server/16bit_psf0_707_sep0_0.json', dest_folder_path='configs', psfs=psfs, multipliers=multipliers)
-pass
+# psfs = 			np.array([0.707, 1, 	1.41, 	2, 2.83, 	4, 5.66])
+# multipliers = 	np.array([0.125, 0.25, 	0.5, 	1, 2, 		4, 8])
+# create_config_files_for_separation_tests(ref_json_path='configs_to_run_on_server/16bit_psf0_707_sep0_0.json', dest_folder_path='configs', psfs=psfs, multipliers=multipliers)
+# pass
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_scale_intensity/', psfs=[3.0])
 # create_config_files_for_separation_tests(dest_folder_path='./config_sep_test_random_offset_center/', psfs=[0.5])
-# psfs = np.array([0.5, 3])
+# psfs = np.array([0.707, 1.000, 1.410, 2.000, 2.830, 5.660])
+
+
+
+# psfs = np.array(['0_707', '1_000', '1_410', '2_000', '2_830', '4_000', '5_660'])
 # for psf in psfs:
-# 	process_separation_test_results(subdir='2024-08-19', prefix=f"psf{psf}".replace('.', '_'))
+# 	process_separation_test_results(directory='./processing/d5-separation/', prefix=f"d5_psf{psf}", show_legend=False)
+# 	pass
+
+
+
+
 # 	# process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
 # 	# plt.close('all')
 # # pass
 # # plot_unresolv_prob_per_particle_vs_surface_density_for_all_psfs()
 # # plot_unresolv_prob_per_particle_vs_radius_all_psfs()
-# # plot_estimate_1s()
+# # plot_prob_of_estimating_two_as_one()
 # pass
 
 # res = analyze_image(os.path.join('./dataset/', foldername, filename), img_param[0]['psf'], 5, 0, './analyses/specific_images', display_fit_results=True, display_xi_graph=True)
@@ -439,9 +519,9 @@ def plot_matrix():
  
 # plot_matrix()
 
-def plot_criterion_vs_H():
-	# Criterion values from the user-provided data
-	criterion_values = [
+def plot_xi_vs_H():
+	# xi values from the user-provided data
+	xi_values = [
 		-66644.74753,
 		-59196.89673,
 		-59209.19794,
@@ -449,7 +529,7 @@ def plot_criterion_vs_H():
 		-59227.69342,
 		-59239.64075
 	]
-	criterion_values = [
+	xi_values = [
 		-209266.1253,
 		-138214.881,
 		-66247.78738,
@@ -459,16 +539,16 @@ def plot_criterion_vs_H():
 	]
 
 	# Generating x-axis values as a simple index for H values
-	H_values = range(len(criterion_values))
+	H_values = range(len(xi_values))
 
 	# Plotting Criterion vs H
 	plt.figure(figsize=(5, 3))
-	plt.plot(H_values, criterion_values, marker='o', linestyle='-', color='k')
+	plt.plot(H_values, xi_values, marker='o', linestyle='-', color='k')
 
 	# Adding labels and title
 	plt.xlabel("H")
-	plt.ylabel("Criterion")
-	plt.title("Criterion vs H")
+	plt.ylabel("Xi")
+	plt.title("Xi vs H")
 	plt.grid(True)
 	# plt.ylim(-60000, -59000)
 	plt.tight_layout()
@@ -476,8 +556,6 @@ def plot_criterion_vs_H():
 	plt.gca().yaxis.set_major_formatter(plt.NullFormatter())
 	plt.show()
 	pass
-
-# plot_criterion_vs_H()
 
 def plot_random():
 	# Adjust y-values to create a concave curve where the gradient is near 0 at x=0 and gradually becomes more negative
@@ -558,7 +636,7 @@ def change_for_all_configs(directory, field, value):
 	print(f"Modifications for {count} files completed.")
 
 # change_for_all_configs('./configs_to_run_on_server/', 'code_version_date', '2024-11-29')
-change_for_all_configs('./configs/', 'gen_total_image_count', 100)
+# change_for_all_configs('./configs/', 'gen_total_image_count', 100)
 
 
 
@@ -593,3 +671,39 @@ change_for_all_configs('./configs/', 'gen_total_image_count', 100)
 # print(image2)
 # print(np.any(image2 > 65536))
 
+
+def test_image(color_mode='gray', sz=25, bg=2000, n_particles=10, psf_sigma=1.5, particle_intensity_mean=20000, particle_intensity_sd=0):
+	if color_mode == 'gray':
+		image = np.ones((sz, sz), dtype=float) * bg
+	else:   
+		image = [np.ones((sz, sz), dtype=float) * bg[i] for i in range(3)]
+
+	for _ in range(n_particles):
+		# Randomly draw the position of the particle, avoiding the edges of the image
+		x = np.random.rand() * (sz - psf_sigma * 4) + psf_sigma * 2 - 0.5
+		y = np.random.rand() * (sz - psf_sigma * 4) + psf_sigma * 2 - 0.5
+
+		# Randomly draw the relative intensity of the particle (mean: 1, std: amp_sd)
+		if color_mode == 'gray':
+			particle_intensity = np.random.normal(particle_intensity_mean, particle_intensity_sd)
+			if particle_intensity < 0:
+				raise ValueError("Randomly drawn particle intensity is less than 0, which is not allowed.")
+
+			# Create peak info dictionary
+			peak_info = {'x': x, 'y': y, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
+
+		else: # Case : rgb
+			particle_intensities = np.array([np.random.normal(particle_intensity_mean, particle_intensity_sd) for i in range(3)])
+			if np.any(particle_intensities < 0):
+				raise ValueError("Randomly drawn particle intensity (at least one of r, g, or b) is less than 0, which is not allowed.")
+
+			# Create peak info dictionary
+			peak_info = {'x': x, 'y': y, 'prefactor': particle_intensities, 'psf_sigma': psf_sigma}
+
+		# Add the point spread function of the particle to the image
+		image += psfconvolution(peak_info, sz)
+	plt.imshow(image, cmap='gray')
+	plt.show()
+	pass
+
+test_image()
