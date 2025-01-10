@@ -294,7 +294,20 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
             plt.legend(fontsize='xx-small', framealpha=0.8, loc=legend_loc)
         else:
             plt.legend(fontsize='xx-small', framealpha=0.8)
+
+
+
     plt.tight_layout()
+
+    # Add horizontal dotted lines
+    # add_lines = False
+    add_lines = True
+    if add_lines:
+        y_values = [0.4868, 0.4549, 0.3679]
+        for y_val, color in zip(y_values, colors[:len(y_values)]):
+            plt.axhline(y=y_val, color=color, linestyle='--', linewidth=1, dashes=(7, 7))
+    
+    pass
 
     # Save the plot as an image file
     save_plot = input("Do you want to save the plot as an image file? (y/n): ").strip().lower()
@@ -588,13 +601,13 @@ def generate_x_sequence(min_val, max_val):
 
 # # Folder path containing the CSV files
 # folder_path = './processing/scatterstr_test'
-# folder_path = './processing/background_test'
+folder_path = './processing/background_test'
 # folder_path = './processing/psfwidth_test_const_peakval_bg'
 # folder_path = './processing/snr_test'
 # folder_path = './processing/zoom_test'
 # folder_path = './processing/psfwidth_test_const_peaksum_bg'
 
-# xlabel = "Background Level"
+xlabel = "Background Level"
 # xlabel = "Scatter Strength"
 # xlabel = "Signal-to-Noise Ratio"
 # xlabel = "Zoom Factor"
@@ -614,21 +627,23 @@ def generate_x_sequence(min_val, max_val):
 
 # # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2))
 # x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
+# x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
+x_vals = generate_x_sequence(1/2, 256)
 
-# tags = x_vals
+tags = x_vals
 
-# lams = [0.25, 0.5, 1]
+lams = [0.25, 0.5, 1]
 
 # # # # Calculate and print the accuracy for each CSV file
 # # avg_accuracies = calculate_avg_accuracies(folder_path)
-# weighted_accuracies = [calculate_weighted_accuracies(folder_path, lam) for lam in lams]
-# all_accuracies = {}
+weighted_accuracies = [calculate_weighted_accuracies(folder_path, lam) for lam in lams]
+all_accuracies = {}
 # # all_accuracies['avg'] = avg_accuracies
-# for lam, weighted_accuracy in zip(lams, weighted_accuracies):
-#     all_accuracies[lam] = weighted_accuracy
-# plot_all_accuracies(all_accuracies, x_vals, xlabel=xlabel, show_legend=False, legend_loc='lower right') 
+for lam, weighted_accuracy in zip(lams, weighted_accuracies):
+    all_accuracies[lam] = weighted_accuracy
+plot_all_accuracies(all_accuracies, x_vals, xlabel=xlabel, show_legend=False, legend_loc='lower right') 
 # # x_vals = generate_x_sequence(1/8, 8)  # Generates: ['1/8x', '1/4x', '1/sqrt(8)x', '1/2x', '1/sqrt(2)x', '1x', 'sqrt(2)x', '2x', 'sqrt(8)x', '4x', '8x']
-# pass
+pass
 
 # calculate_relative_measures(folder_path, x_vals, xlabel=label)
 def plot_weighted_counts_against_lam(weighted_counts, lams, xlabel):
