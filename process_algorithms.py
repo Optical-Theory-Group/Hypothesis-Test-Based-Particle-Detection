@@ -1461,7 +1461,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
         lli += [sum_loglikelihood]
         if np.isinf(lli[-1]):
             lli[-1] = np.nan
-        if penalty[hypothesis_index] < 0 or hypothesis_index == 0:
+        if penalty[hypothesis_index] < 0 and hypothesis_index == 0:
             xi += [lli[-1]]
         else:
             xi += [lli[-1] - penalty[-1]]
