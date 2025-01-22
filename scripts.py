@@ -9,6 +9,7 @@ import re
 import pandas as pd
 from collections import defaultdict
 import datetime
+import csv
 
 pd.options.display.float_format = '{:.4f}'.format
 
@@ -706,4 +707,65 @@ def test_image(color_mode='gray', sz=25, bg=2000, n_particles=10, psf_sigma=1.5,
 	plt.show()
 	pass
 
-test_image()
+# test_image()
+
+def plot_xi_distributions(csv_file_path):
+	xi0 = []
+	xi1 = []
+	xi1_xi0_diff = []
+
+	with open(csv_file_path, 'r') as file:
+		reader = csv.DictReader(file)
+		rows = [row for row in reader if int(row['true_count']) == 0]
+
+	for row in rows:
+		image_filename = row['image_filename (h number)'][:-5]
+		h_number = int(row['h number'])
+		xi_value = float(row['xi'])
+
+		if h_number == 0:
+			xi0.append((image_filename, xi_value))
+		elif h_number == 1:
+			xi1.append((image_filename, xi_value))
+
+	xi0_dict = {filename: xi for filename, xi in xi0}
+	xi1_dict = {filename: xi for filename, xi in xi1}
+
+	for filename in xi0_dict:
+		if filename in xi1_dict:
+			xi1_xi0_diff.append(xi1_dict[filename] - xi0_dict[filename])
+
+	fig, axs = plt.subplots(3, 1, figsize=(4, 5))
+
+	ax = axs[0]
+	n, bins, patches = axs[0].hist([xi for _, xi in xi0], bins=30, alpha=0.7, label='xi0')
+	ax.tick_params(axis='x', labelsize=7)
+	# ax.set_title('Distribution of xi0')
+	ax.set_yscale('log')
+	ax.legend()
+
+	ax = axs[1]
+	ax.hist([xi for _, xi in xi1], bins=bins, alpha=0.7, label='xi1')
+	ax.tick_params(axis='x', labelsize=7)
+	ax.set_yscale('log')
+	# ax.set_title('Distribution of xi1')
+	ax.legend()
+
+	ax = axs[2]
+	n, bins, patches = axs[2].hist(xi1_xi0_diff, bins=60, alpha=0.7, label='xi1 - xi0')
+	ax.tick_params(axis='x', labelsize=10)
+	ax.set_yscale('log')
+	# ax.set_title('Distribution of xi1 - xi0')
+	ax.legend()
+
+	plt.tight_layout()
+	plt.show(block=False)
+	pass
+
+
+# file_path = r"C:\github_repos\Hypothesis-Test-Based-Particle-Detection\processing\background_test\d4-baseline_code_ver2024-11-29\d4-baseline_code_ver2024-11-29_metrics_log_per_image_hypothesis.csv"
+# file_path = r"C:\github_repos\Hypothesis-Test-Based-Particle-Detection\processing\background_test\d4-background-8x_code_ver2024-11-29\d4-background-8x_code_ver2024-11-29_metrics_log_per_image_hypothesis.csv"
+# file_path = r"C:\github_repos\Hypothesis-Test-Based-Particle-Detection\processing\background_test\d4-background-4x_code_ver2024-11-29\d4-background-4x_code_ver2024-11-29_metrics_log_per_image_hypothesis.csv"
+file_path = r"C:\github_repos\Hypothesis-Test-Based-Particle-Detection\processing\background_test\d4-background-2x_code_ver2024-11-29\d4-background-2x_code_ver2024-11-29_metrics_log_per_image_hypothesis.csv"
+plot_xi_distributions(file_path)
+pass
