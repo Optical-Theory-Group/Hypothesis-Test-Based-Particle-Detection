@@ -579,8 +579,15 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
 
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
+        xi_aic = test_metrics['xi_aic']
+        xi_bic = test_metrics['xi_bic']
+
         lli = test_metrics['lli']
+
         penalty = test_metrics['penalty']
+        penalty_aic = test_metrics['penalty_aic']
+        penalty_bic = test_metrics['penalty_bic']
+
         fisher_info = test_metrics['fisher_info']
         fit_parameters = [result['theta'] for result in fit_results]
 
@@ -598,7 +605,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         determined_particle_intensities
 
         # Combine variables into list named metric_data 
-        metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
+        metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters, xi_aic, xi_bic, penalty_aic, penalty_bic))
 
         # Save the results to a CSV file ending with '_analysis_log.csv'
         image_analysis_log_filename = f"{analyses_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
@@ -608,7 +615,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         with open(image_analysis_log_filename, 'w', newline='') as file:
             writer = csv.writer(file)
             # writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
-            writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+            writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic'])
             writer.writerows(metric_data)
 
         image_analysis_results = {
@@ -931,7 +938,7 @@ def combine_log_files(analyses_folder, image_folder_namebase, code_version_date,
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic'])
 
         # Iterate over the fittings_files
         for log_file in individual_image_log_files:

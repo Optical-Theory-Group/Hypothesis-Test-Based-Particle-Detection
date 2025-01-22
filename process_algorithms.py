@@ -1145,8 +1145,12 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     
     # Initialize test scores
     xi = [] # Which will be lli - penalty
+    xi_aic = [] # AIC score
+    xi_bic = [] # BIC score
     lli = [] # log likelihood
-    penalty = [] # penalty term
+    penalty_laplace = [] # penalty_laplace term
+    penalty_aic = []
+    penalty_bic = []
     
     fisher_info = [] # Fisher Information Matrix
 
@@ -1453,20 +1457,32 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             prev_xi_assigned = True
 
         if hypothesis_index != 0 and zero_diag_exists:
-            penalty += [1e10] # Adding to the list
+            penalty_laplace += [1e10] # Adding to the list
+            penalty_aic += [1e10]
+            penalty_bic += [1e10]
+
         else:
-            penalty += [0.5 * log_det_fisher_mat] # Adding to the list
-        if np.isinf(penalty[-1]):
-            penalty[-1] = np.nan
+            penalty_laplace += [0.5 * log_det_fisher_mat] # Adding to the list
+            penalty_aic += [2*n_hk_params]
+            penalty_bic += [2*n_hk_params * np.log(szy*szx)]
+        if np.isinf(penalty_laplace[-1]):
+            penalty_laplace[-1] = np.nan
+        if np.isinf(penalty_aic[-1]):
+            penalty_aic[-1] = np.nan
+        if np.isinf(penalty_bic[-1]):
+            penalty_bic[-1] = np.nan
+
         lli += [sum_loglikelihood]
+
         if np.isinf(lli[-1]):
             lli[-1] = np.nan
-        if penalty[hypothesis_index] < 0 and hypothesis_index == 0:
+        if penalty_laplace[hypothesis_index] < 0 and hypothesis_index == 0:
             xi += [lli[-1]]
         else:
-            xi += [lli[-1] - penalty[-1]]
-            # print(f'Warning: penalty < 0. {hypothesis_index=} assigning "xi = lli", instead of "xi = lli - penalty".')
-            # break
+            xi += [lli[-1] - penalty_laplace[-1]]
+        
+        xi_aic += [2 * lli[-1] - penalty_aic[-1]]
+        xi_bic += [2 * lli[-1] - penalty_bic[-1]]
 
         if prev_xi_assigned and prev_xi > xi[-1]:
             xi_drop_count += 1
@@ -1478,11 +1494,15 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
 
         fisher_info.append(fisher_mat)
 
-    # Store xi, lli and penalty to test_metric
+    # Store xi, lli and penalty_laplace to test_metric
     test_metrics = {
         'xi': xi,
+        'xi_aic': xi_aic,
+        'xi_bic': xi_bic,
         'lli': lli,
-        'penalty': penalty,
+        'penalty': penalty_laplace,
+        'penalty_aic': penalty_aic,
+        'penalty_bic': penalty_bic,
         'fisher_info': fisher_info,
     }
 
@@ -1493,16 +1513,16 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
         ax = axs[0]
         hypothesis_list_length = len(xi)
         ax.plot(range(hypothesis_list_length), xi, 'o-', color='purple')              
-        ax.set_ylabel('xi\n(logL- penalty)')
+        ax.set_ylabel('xi\n(logL- penalty_laplace)')
         ax.axvline(x=max_xi_index, color='gray', linestyle='--')
         ax = axs[1]
         ax.plot(range(hypothesis_list_length), lli, 'o-', color='navy')
         ax.set_ylabel('loglikelihood')
         ax = axs[2]
         ax.axhline(y=0, color='black', linestyle='--')
-        # ax.plot(range(last_h_index + 1), np.exp(penalty * 2), 'o-', color='crimson') 
-        ax.plot(range(hypothesis_list_length), penalty, 'o-', color='crimson') 
-        ax.set_ylabel('penalty')
+        # ax.plot(range(last_h_index + 1), np.exp(penalty_laplace * 2), 'o-', color='crimson') 
+        ax.plot(range(hypothesis_list_length), penalty_laplace, 'o-', color='crimson') 
+        ax.set_ylabel('penalty_laplace')
         ax.set_xlabel('hypothesis_index')
         plt.tight_layout()
         plt.show(block=False)
