@@ -420,7 +420,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
     try:
         with open(label_prediction_log_file_path, 'w', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities"])
+            writer.writerow(['Input Image File', 'Actual Particle Count', 'Estimated Particle Count', "Determined Particle Intensities", "aic estimated count", "bic estimated count", "xms estimated count"])
     except e:
         print("Error in creating the label_prediction log. Could be that the folder/file name is too long. Error: ", e)
 
@@ -455,13 +455,16 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     # Extract the results from the analysis result
                     actual_num_particles = analysis_result['actual_num_particles']
                     estimated_num_particles = analysis_result['estimated_num_particles']
+                    estimated_aic_num_particles = analysis_result['est_aic_num']
+                    estimated_bic_num_particles = analysis_result['est_bic_num']
+                    estimated_xms_num_particles = analysis_result['est_xms_num']
                     input_image_file = analysis_result['image_filename']
                     determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                     # Write the results to the label_prediction log file
                     with open(label_prediction_log_file_path, 'a', newline='') as f:    
                         writer = csv.writer(f)
-                        writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                        writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities, estimated_aic_num_particles, estimated_bic_num_particles, estimated_xms_num_particles])
 
                     # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                     sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
@@ -503,7 +506,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                 # Write the results to the label_prediction log file
                 with open(label_prediction_log_file_path, 'a', newline='') as f: 
                     writer = csv.writer(f)
-                    writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                    writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities, analysis_result['est_aic_num'], analysis_result['est_bic_num'], analysis_result['est_xms_num']])
 
                 # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                 if actual_num_particles == estimated_num_particles:
@@ -572,7 +575,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
     if sz < tiling_width_threshold: 
 
         # Call the generalized_maximum_likelihood_rule (GMLR) function to analyze the image
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, psf_sigma=psf_sigma, 
+        estimated_num_particles, fit_results, test_metrics, estimated_aic_num_particles, estimated_bic_num_particles, estimated_xms_num_particles = generalized_maximum_likelihood_rule(roi_image=image, psf_sigma=psf_sigma, 
                                                                 last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, 
                                                                 display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
 
@@ -581,12 +584,14 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         xi = test_metrics['xi']
         xi_aic = test_metrics['xi_aic']
         xi_bic = test_metrics['xi_bic']
+        xi_minus_small = test_metrics['xi_minus_small']
 
         lli = test_metrics['lli']
 
         penalty = test_metrics['penalty']
         penalty_aic = test_metrics['penalty_aic']
         penalty_bic = test_metrics['penalty_bic']
+        penalty_xms = test_metrics['penalty_xms']
 
         fisher_info = test_metrics['fisher_info']
         fit_parameters = [result['theta'] for result in fit_results]
@@ -605,7 +610,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         determined_particle_intensities
 
         # Combine variables into list named metric_data 
-        metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters, xi_aic, xi_bic, penalty_aic, penalty_bic))
+        metric_data = list(zip(file_h_info, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters, xi_aic, xi_bic, penalty_aic, penalty_bic, xi_minus_small, penalty_xms))
 
         # Save the results to a CSV file ending with '_analysis_log.csv'
         image_analysis_log_filename = f"{analyses_folder}/image_log/{os.path.splitext(os.path.basename(image_filename))[0]}_analysis_log.csv"
@@ -615,12 +620,15 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         with open(image_analysis_log_filename, 'w', newline='') as file:
             writer = csv.writer(file)
             # writer.writerow(['image_filename (h number)', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
-            writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic'])
+            writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic', 'xi_minus_small', 'penalty_xms'])
             writer.writerows(metric_data)
 
         image_analysis_results = {
                                 'actual_num_particles': actual_num_particles,
                                 'estimated_num_particles': estimated_num_particles,
+                                'est_aic_num': estimated_aic_num_particles,
+                                'est_bic_num': estimated_bic_num_particles,
+                                'est_xms_num': estimated_xms_num_particles,
                                 'image_filename': image_filename,
                                 'determined_particle_intensities': determined_particle_intensities,
                                 'metric_data': metric_data
@@ -658,7 +666,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
 
         for tile_dict in tile_dicts_array.flatten():
             # Call generalized_maximum_likelihood_rule for each tile
-            est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=True)
+            est_num_particle_tile, fit_results, test_metrics, estimated_aic_num_particles, estimated_bic_num_particles, estimated_xms_num_particles = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=True)
 
             # Use the estimated number of particles to see the fit under the corresponding hypothesis
             chosen_fit = fit_results[est_num_particle_tile]
@@ -764,6 +772,61 @@ def generate_intensity_histogram(label_pred_log_file_path, image_folder_namebase
         png_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_particle_intensities_hist.png'
         png_file_path += png_file_name
         plt.savefig(png_file_path, dpi=300)
+    
+def plot_and_save_confusion_matrix(matrix, row_sums, title, file_path):
+    """ Plot and save the confusion matrix as a PNG file.
+    
+    Parameters:
+        matrix (np.ndarray): The confusion matrix to plot.
+        row_sums (np.ndarray): The sums of the rows of the confusion matrix.
+        title (str): The title of the plot.
+        file_path (str): The path to save the PNG file.
+        
+    Returns:
+        None
+    """
+    normalized_matrix = np.zeros(matrix.shape)
+    
+    # Normalize the confusion matrix
+    for row in range(matrix.shape[0]):
+        normalized_matrix[row] = matrix[row] / row_sums[row] if row_sums[row] != 0 else np.zeros(matrix.shape[1])
+    
+    # Plot the confusion matrix
+    _, axs = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={'height_ratios': [4,1]})
+    ax = axs[0]
+    sns.heatmap(normalized_matrix, annot=True, fmt='.4f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)
+    ax.set_title(title)
+    ax.set_xlabel('Estimated Particle Count')
+    ax.set_ylabel('Actual Particle Count')
+    ytick_labels = [f"{i} (count: {row_sums[i]})" for i in range(len(row_sums))]
+    ax.set_yticklabels(ytick_labels, rotation=0)
+    
+    # Draw lines between rows
+    for i in range(matrix.shape[0]+1):
+        ax.axhline(i, color='black', linewidth=1)
+    
+    # Text messages
+    accuracy = np.diag(matrix).sum() / matrix.sum()
+    overestimation_rate = np.triu(matrix, k=1).sum() / matrix.sum()
+    underestimation_rate = np.tril(matrix, k=-1).sum() / matrix.sum()
+    miss_by_one_rate = (np.diag(matrix, k=1).sum() + np.diag(matrix, k=-1).sum() + np.diag(matrix).sum()) / matrix.sum()
+    mae = np.mean(np.abs(np.repeat(np.arange(matrix.shape[0]), row_sums) - np.repeat(np.arange(matrix.shape[1]), matrix.sum(axis=0))))
+    rmse = np.sqrt(np.mean((np.repeat(np.arange(matrix.shape[0]), row_sums) - np.repeat(np.arange(matrix.shape[1]), matrix.sum(axis=0)))**2))
+    
+    text_message = f"Accuracy: {accuracy:.3f}\n"+ \
+        f"Overestimation Rate: {overestimation_rate:.3f}\n"+ \
+        f"Underestimation Rate: {underestimation_rate:.3f}\n"+ \
+        f"Miss-by-One Rate: {miss_by_one_rate:.3f}\n"+ \
+        f"Mean Absolute Error: {mae:.3f}\n"+ \
+        f"Root Mean Squared Error: {rmse:.3f}"
+    ax = axs[1]
+    ax.axis('off')
+    ax.text(0.01, 0.5, text_message, ha='left', va='center')
+    plt.tight_layout()
+    
+    # Save the plot as a PNG file
+    plt.savefig(file_path, dpi=300)
+    plt.close()   
 
 def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True):
     """ Generate the confusion matrix and calculate the metrics.
@@ -797,12 +860,57 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
             estimated = df['Estimated Particle Number']
         except KeyError:
             raise KeyError("The column name 'Estimated Particle Count' or 'Estimated Particle Number' is not found in the CSV file.")
+
+    try:
+        est_aic = df['aic estimated count']
+    except KeyError:
+        try: 
+            est_aic = df['aic estimated count']
+        except KeyError:
+            raise KeyError("The column name 'aic estimated count' or 'aic estimated count' is not found in the CSV file.")
+    
+    try:
+        est_bic = df['bic estimated count']
+    except KeyError:
+        try: 
+            est_bic = df['bic estimated count']
+        except KeyError:
+            raise KeyError("The column name 'bic estimated count' or 'bic estimated count' is not found in the CSV file.")
+    
+    try:
+        est_xms = df['xms estimated count']
+    except KeyError:
+        try: 
+            est_xms = df['xms estimated count']
+        except KeyError:
+            raise KeyError("The column name 'xms estimated count' or 'xms estimated count' is not found in the CSV file.")
     
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
+    matrix_aic = confusion_matrix(actual, est_aic)
+    matrix_bic = confusion_matrix(actual, est_bic)
+    matrix_xms = confusion_matrix(actual, est_xms)
+
+    row_sums = matrix_aic.sum(axis=1)
+    plot_and_save_confusion_matrix(matrix_aic, row_sums, f'Confusion Matrix (AIC)', f'{label_pred_log_file_path[:-4]}_confusion_mat_aic.png')
+
+    row_sums = matrix_bic.sum(axis=1)
+    plot_and_save_confusion_matrix(matrix_bic, row_sums, f'Confusion Matrix (BIC)', f'{label_pred_log_file_path[:-4]}_confusion_mat_bic.png')
+
+    row_sums = matrix_xms.sum(axis=1)
+    plot_and_save_confusion_matrix(matrix_xms, row_sums, f'Confusion Matrix (XMS)', f'{label_pred_log_file_path[:-4]}_confusion_mat_xms.png')
+
+    row_sums = matrix.sum(axis=1)
+    plot_and_save_confusion_matrix(matrix, row_sums, f'Confusion Matrix (Original)', f'{label_pred_log_file_path[:-4]}_confusion_mat.png')
+
+    print('updated')
     
     # Save the confusion matrix as a CSV file ending with '_confusion_mat.csv'
     matrix_df = pd.DataFrame(matrix)
+    # mat_aic_df = pd.DataFrame(matrix_aic)
+    # mat_bic_df = pd.DataFrame(matrix_bic)
+    # mat_xms_df = pd.DataFrame(matrix_xms)
+
     csv_file_path = os.path.dirname(label_pred_log_file_path)
     csv_file_name = f'/{image_folder_namebase}_code_ver{code_version_date}_confusion_mat.csv'
     csv_file_path += csv_file_name
@@ -913,6 +1021,11 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
             png_file_path += png_file_name
             plt.savefig(png_file_path, dpi=300)
 
+            
+            
+        # # if other xi_scores are available, save those confusion matrices as png as well.
+        # if 'xi_scores' in df.columns:
+
 def combine_log_files(analyses_folder, image_folder_namebase, code_version_date, delete_individual_files=False):
     ''' Combines the log files in the image_log folder into one file called fitting_results.csv.
     
@@ -938,7 +1051,7 @@ def combine_log_files(analyses_folder, image_folder_namebase, code_version_date,
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic'])
+        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic', 'xi_minus_small', 'penalty_xms'])
 
         # Iterate over the fittings_files
         for log_file in individual_image_log_files:
@@ -1249,11 +1362,12 @@ def process(config_files_dir, parallel=False):
                 print('-------------------------------------')
         
         # Move the processed config file to the "finished configs" subfolder
-        finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
-        os.makedirs(finished_configs_dir, exist_ok=True)
-        shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
+        # finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
+        # os.makedirs(finished_configs_dir, exist_ok=True)
+        # shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
             
 def main():
+    print('-------------------------------------')
     """ Main function to run the analysis pipeline. """
     
     # Start the batch job timer

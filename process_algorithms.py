@@ -1130,6 +1130,8 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     - param_type_index: 0, 1, 2        (intensity, x-coordinate, y-coordinate)
     """ 
 
+    const_log2pie = np.log(2 * np.pi * np.e) # Constant term in the log likelihood function
+
     # Find tentative peaks
     tentative_peaks = get_tentative_peaks(roi_image, min_distance=1)
     rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
@@ -1147,10 +1149,12 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     xi = [] # Which will be lli - penalty
     xi_aic = [] # AIC score
     xi_bic = [] # BIC score
+    xi_minus_small = [] # xi - 0.5 * small_penalty
     lli = [] # log likelihood
     penalty_laplace = [] # penalty_laplace term
     penalty_aic = []
     penalty_bic = []
+    penalty_xms = []
     
     fisher_info = [] # Fisher Information Matrix
 
@@ -1458,31 +1462,24 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
 
         if hypothesis_index != 0 and zero_diag_exists:
             penalty_laplace += [1e10] # Adding to the list
-            penalty_aic += [1e10]
-            penalty_bic += [1e10]
-
         else:
             penalty_laplace += [0.5 * log_det_fisher_mat] # Adding to the list
             penalty_aic += [2*n_hk_params]
             penalty_bic += [2*n_hk_params * np.log(szy*szx)]
+            penalty_xms += [0.5 * log_det_fisher_mat - 0.5 * n_hk_params * const_log2pie]
         if np.isinf(penalty_laplace[-1]):
             penalty_laplace[-1] = np.nan
-        if np.isinf(penalty_aic[-1]):
-            penalty_aic[-1] = np.nan
-        if np.isinf(penalty_bic[-1]):
-            penalty_bic[-1] = np.nan
+        # other penalties cannot be infinite.
 
         lli += [sum_loglikelihood]
 
         if np.isinf(lli[-1]):
             lli[-1] = np.nan
-        if penalty_laplace[hypothesis_index] < 0 and hypothesis_index == 0:
-            xi += [lli[-1]]
-        else:
-            xi += [lli[-1] - penalty_laplace[-1]]
-        
+
+        xi += [lli[-1] - penalty_laplace[-1]]
         xi_aic += [2 * lli[-1] - penalty_aic[-1]]
         xi_bic += [2 * lli[-1] - penalty_bic[-1]]
+        xi_minus_small += [lli[-1] - penalty_xms[-1]]
 
         if prev_xi_assigned and prev_xi > xi[-1]:
             xi_drop_count += 1
@@ -1499,10 +1496,12 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
         'xi': xi,
         'xi_aic': xi_aic,
         'xi_bic': xi_bic,
+        'xi_minus_small': xi_minus_small,
         'lli': lli,
         'penalty': penalty_laplace,
         'penalty_aic': penalty_aic,
         'penalty_bic': penalty_bic,
+        'penalty_xms': penalty_xms,
         'fisher_info': fisher_info,
     }
 
@@ -1539,17 +1538,35 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     #     ]
     
     qualifying_xi_indices = [i for i in range(len(xi))]
+    qualifying_xi_aic_indices = [i for i in range(len(xi_aic))]
+    qualifying_xi_bic_indices = [i for i in range(len(xi_bic))]
+    qualifying_xi_minus_small_indices = [i for i in range(len(xi_minus_small))]
 
     if qualifying_xi_indices:
         estimated_num_particles = qualifying_xi_indices[np.nanargmax([xi[i] for i in qualifying_xi_indices])]
     else:
         estimated_num_particles = np.nan
+
+    if qualifying_xi_aic_indices:
+        estimated_num_particles_aic = qualifying_xi_aic_indices[np.nanargmax([xi_aic[i] for i in qualifying_xi_aic_indices])]
+    else:
+        estimated_num_particles_aic = np.nan
+        
+    if qualifying_xi_bic_indices:
+        estimated_num_particles_bic = qualifying_xi_bic_indices[np.nanargmax([xi_bic[i] for i in qualifying_xi_bic_indices])]
+    else:
+        estimated_num_particles_bic = np.nan
+        
+    if qualifying_xi_minus_small_indices:
+        estimated_num_particles_xms = qualifying_xi_minus_small_indices[np.nanargmax([xi_minus_small[i] for i in qualifying_xi_minus_small_indices])]
+    else:
+        estimated_num_particles_xms = np.nan
     # estimated_num_particles = np.argmax(xi)
     # input("End of a single image test - Press any key to continue...")
     if plt.get_fignums():
         plt.close('all')
 
-    return estimated_num_particles, fit_results, test_metrics 
+    return estimated_num_particles, fit_results, test_metrics, estimated_num_particles_aic, estimated_num_particles_bic, estimated_num_particles_xms 
 
     
 
