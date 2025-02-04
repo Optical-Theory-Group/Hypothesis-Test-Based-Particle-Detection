@@ -18,3 +18,11 @@ profile_results.prof
 *.zip
 *.png
 *.csv
+example_config_folder/*
+particle_images/*
+div_images/*
+past_configs/*
+processing/*
+psf4_const_peak_height_bg_test/*
+test_configs/*
+*.tiff
