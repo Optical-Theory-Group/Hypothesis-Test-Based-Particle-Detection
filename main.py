@@ -1255,6 +1255,7 @@ def process(config_files_dir, parallel=False):
             
 def main():
     """ Main function to run the analysis pipeline. """
+
     
     # Start the batch job timer
     batchjobstarttime = datetime.now()
@@ -1264,6 +1265,10 @@ def main():
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
     parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
+
+    print("Arguments provided by the user:")
+    print(f"Config file folder: {args.config_file_folder}")
+    print(f"Profile: {args.profile}")
 
     # Check if config-file-folder is provided
     if (args.config_file_folder is None):
@@ -1293,13 +1298,13 @@ def main():
 # Run the main function if the script is executed from the command line
 if __name__ == '__main__':
 
-    # Run the main function with parallel processing ('-p' option value is True)
-    # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
+    if 'pydevd' in sys.modules or 'debugpy' in sys.modules:
+        # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
-    # Run the main function without parallel processing ('-p' option value is False)
-    sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-    # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
-    # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # Run the main function without parallel processing ('-p' option value is False)
+        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
     main()
