@@ -1,0 +1,22 @@
+{
+    "image_folder_namebase": "d4-background-2x_psf4_psf4_psf4",
+    "code_version_date": "2025-01-27",
+    "file_format": "tiff",
+    "generate_regular_dataset?": true,
+    "gen_random_seed": 4306,
+    "gen_total_image_count": 500,
+    "gen_minimum_particle_count": 0,
+    "gen_maximum_particle_count": 4,
+    "gen_psf_sigma": 4.0,
+    "gen_img_width": 100,
+    "gen_bg_level": 4000,
+    "gen_particle_intensity_mean": 80000,
+    "gen_particle_intensity_sd": 0,
+    "analyze_the_dataset?": true,
+    "ana_random_seed": 4165,
+    "ana_predefined_psf_sigma": 4.0,
+    "ana_use_premature_hypothesis_choice?": false,
+    "ana_maximum_hypothesis_index": 5,
+    "ana_delete_the_dataset_after_analysis?": true,
+    "sep_random_seed": 55302
+}
