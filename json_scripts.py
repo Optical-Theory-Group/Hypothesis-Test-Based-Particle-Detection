@@ -52,18 +52,20 @@ def update_config_json(directory, change_dict):
             json.dump(data, file, indent=4)
 
 # # Directory containing the JSON files
-directory = './example_config_folder'
+# directory = './example_config_folder'
+directory = 'psf4_const_peak_height_bg_test'
 
 # # New value for "sep_bg_level"
 change_dict = {
     # 'sep_bg_level': 2048,
-    'code_version_date': '2025-01-27',
-    'gen_total_image_count': 500,
-    'gen_psf_sigma': 4.0,
-    'ana_predefined_psf_sigma': 4.0,
+    # 'code_version_date': '2025-01-27',
+    # 'gen_total_image_count': 500,
+    # 'gen_psf_sigma': 4.0,
+    # 'ana_predefined_psf_sigma': 4.0,
+    'gen_particle_intensity_mean': 80000,
 }
 
-# update_config_json(directory, change_dict)
+update_config_json(directory, change_dict)
 
 def add_string_to_all_jsons(directory, addstring):
     """ Add a string to the filename of all JSON files in the given directory.
@@ -86,4 +88,27 @@ def add_string_to_all_jsons(directory, addstring):
         os.rename(os.path.join(directory, json_file), os.path.join(directory, new_name))
         print(f"Renamed '{json_file}' to '{new_name}'")
 
-add_string_to_all_jsons(directory, '_psf4')
+def remove_last_n_chars_from_all_jsons(directory, n_chars):
+    """ Remove the last n characters from the filename of all JSON files in the given directory.
+    
+    Parameters
+    ----------
+    directory : str
+        Path to the directory containing the JSON files.
+    n_chars : int
+        Number of characters to remove from the filename of all JSON files.
+    """
+
+    # List of JSON files in the directory
+    json_files = [filename for filename in os.listdir(directory) if filename.endswith('.json')]
+
+    # Iterate over all files in the directory
+    for json_file in json_files:
+        base, ext = os.path.splitext(json_file)
+        new_name = base[:-n_chars] + ext
+        os.rename(os.path.join(directory, json_file), os.path.join(directory, new_name))
+        print(f"Renamed '{json_file}' to '{new_name}'")
+
+# add_string_to_all_jsons(directory, '_psf4')
+# directory = 'psf4_const_peak_height_bg_test'
+# remove_last_n_chars_from_all_jsons(directory, len("_config_used"))
