@@ -381,7 +381,20 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
             raise ValueError(f"No folder starting with '{image_folder_namebase}' found in '{base_dir}'.")
 
     # Read all png and tiff files
-    image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
+    all_image_files = glob.glob(os.path.join(images_folder, '*.png')) + glob.glob(os.path.join(images_folder, '*.tiff'))
+    print(f"Total number of image files in the folder: {len(all_image_files)}")
+    print(f"Number of png files: {len(glob.glob(os.path.join(images_folder, '*.png')))}")
+    print(f"Number of tiff files: {len(glob.glob(os.path.join(images_folder, '*.tiff')))}")
+
+    # Filter files that start with "count"
+    image_files = [f for f in all_image_files if os.path.basename(f).startswith('count')]
+    print(f"Number of image files starting with 'count': {len(image_files)}")
+
+    print("Only png and tiff files starting with 'count' will be analyzed. Count: .", len(image_files))    # If there are no images that start with "count", inform the user and quit the analysis
+
+    if len(image_files) == 0:
+        print("There are no image files starting with 'count'. Quitting the analysis.")
+        raise ValueError("There are no image files starting with 'count'. Quitting the analysis.")
 
     # If there are no images in the folder, raise an error
     if len(image_files) == 0:
@@ -468,11 +481,11 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     statusmsg = f'\"{input_image_file}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
                 except concurrent.futures.TimeoutError:
-                    print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {future_filename} ")
+                    print(f"\nTask exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {future_filename} ")
                     # cfresult.cancel()
                     statusmsg = f'Task cancelled due to timeout. File: {future_filename} '
                 except Exception as e:
-                    print(f"Error in cfresult.result(): {e} File: {future_filename} ")
+                    print(f"\nError in cfresult.result(): {e} File: {future_filename}\n")
                     statusmsg = f'Error: {e}'
 
                 # Report the progress
@@ -514,7 +527,6 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
             except Exception as e:
-                print(f"Task exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {filename} ")
                 statusmsg = f'Error: {e} File: {filename} '
                 pass
 
@@ -1217,18 +1229,18 @@ def process(config_files_dir, parallel=False):
             # parallel = False # Debug purpose
             timeout = config.get('ana_timeout_per_image', 600)
             analyses_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
-                                                code_version_date=config['code_version_date'], 
-                                                use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
-                                                last_h_index=config['ana_maximum_hypothesis_index'], 
-                                                analysis_rand_seed=config['ana_random_seed'], 
-                                                psf_sigma=config['ana_predefined_psf_sigma'], 
-                                                config_content=json.dumps(config), 
-                                                parallel=parallel, 
-                                                timeout_per_image=timeout)
+                                                    code_version_date=config['code_version_date'], 
+                                                    use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
+                                                    last_h_index=config['ana_maximum_hypothesis_index'], 
+                                                    analysis_rand_seed=config['ana_random_seed'], 
+                                                    psf_sigma=config['ana_predefined_psf_sigma'], 
+                                                    config_content=json.dumps(config), 
+                                                    parallel=parallel, 
+                                                    timeout_per_image=timeout)
             # Get the dataset name and code version date
             image_folder_namebase = config['image_folder_namebase']
             code_version_date = config['code_version_date']
-            plt.close('all')
+            # plt.close('all')
 
             # Combine analysis log files into one.
             combine_log_files(analyses_folder_path, image_folder_namebase, code_version_date, delete_individual_files=True)
@@ -1302,8 +1314,8 @@ if __name__ == '__main__':
         # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
         # Run the main function without parallel processing ('-p' option value is False)
-        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
         # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
