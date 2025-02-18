@@ -387,21 +387,20 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
     print(f"Number of tiff files: {len(glob.glob(os.path.join(images_folder, '*.tiff')))}")
 
     # Filter files that start with "count"
-    image_files = [f for f in all_image_files if os.path.basename(f).startswith('count')]
-    print(f"Number of image files starting with 'count': {len(image_files)}")
+    image_files_with_count_label = [f for f in all_image_files if os.path.basename(f).startswith('count')]
+    print(f"Number of image files starting with 'count': {len(image_files_with_count_label)}")
+    print('- These files will have "Actual Particle Count" in the label_prediction log file and "true count" in the metrics log file.')
+    print(f"Number of image files not starting with 'count': {len(all_image_files) - len(image_files_with_count_label)}")
+    print('- These files will have "Actual Particle Count" nor "true count" written in the log files.')
 
-    print("Only png and tiff files starting with 'count' will be analyzed. Count: .", len(image_files))    # If there are no images that start with "count", inform the user and quit the analysis
-
-    if len(image_files) == 0:
-        print("There are no image files starting with 'count'. Quitting the analysis.")
-        raise ValueError("There are no image files starting with 'count'. Quitting the analysis.")
+    # print("Only png and tiff files starting with 'count' will be analyzed. Count: .", len(all_image_files))    # If there are no images that start with "count", inform the user and quit the analysis
 
     # If there are no images in the folder, raise an error
-    if len(image_files) == 0:
+    if len(all_image_files) == 0:
         raise ValueError("There are no images in this folder.")
 
     # Print the number of images loaded
-    print(f"Images loaded (total of {len(image_files)}):")
+    print(f"Images loaded (total of {len(all_image_files)}):")
 
     # Create a folder to store the analysis outputs
     analyses_folder = os.path.join('./analyses', image_folder_namebase + '_code_ver' + code_version_date)
@@ -424,7 +423,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
     print('Beginning image analysis...')
 
     # Create a list of random seeds for each image
-    image_rand_seeds = list(range(len(image_files)))
+    image_rand_seeds = list(range(len(all_image_files)))
     np.random.shuffle(image_rand_seeds)
 
     print("Creating the label_prediction log file...")
@@ -445,7 +444,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
             futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condi=use_exit_condi )
-                        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files)]
+                        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files)]
             # futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condi=use_exit_condi)
             #             for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files) if os.path.basename(filename).startswith('count1') and 0 <= int(filename.split('count1-index')[1].split('.')[0]) < 1000] # For a test on 11/18/2024 - Neil. To be deleted/removed defintely after 11/21/2024.
             print(f"Number of futures submitted: {len(futures)}")
@@ -455,7 +454,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                 # Iterate over the futures that are completed. 
                 # for cfresult in concurrent.futures.as_completed(futures):
             first_future_flag = True
-            for future, future_filename in zip(futures, image_files):
+            for future, future_filename in zip(futures, all_image_files):
                 if first_future_flag:
                     print(f"First future processing: {future_filename}")
                     first_future_flag = False
@@ -478,7 +477,10 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
 
                     # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                     sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
-                    statusmsg = f'\"{input_image_file}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
+                    if actual_num_particles < 0:
+                        statusmsg = f'\"{input_image_file}\" {estimated_num_particles} (actual count not given in the filename)'
+                    else:
+                        statusmsg = f'\"{input_image_file}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
                 except concurrent.futures.TimeoutError:
                     print(f"\nTask exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {future_filename} ")
@@ -501,7 +503,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
         progress = 0
 
         # Iterate over the images
-        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, image_files):
+        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files):
             # Analyze the image
             # if os.path.basename(filename).startswith('count1') and filename.split('count1-index')[1].split('.')[0] in [str(n) for n in range(1001, 1050)]: # For a test on 11/19/2024 - Neil. To be deleted/removed defintely after 11/21/2024.
             try:
@@ -519,12 +521,15 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
 
                 # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
-                if actual_num_particles == estimated_num_particles:
-                    statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
-                elif actual_num_particles > estimated_num_particles:
-                    statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
-                else:
-                    statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                if actual_num_particles < 0: 
+                    statusmsg = f'\"{input_image_file}\" - Actual Count: (not given in the filename), Estimated: {estimated_num_particles}\n'
+                else:   
+                    if actual_num_particles == estimated_num_particles:
+                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
+                    elif actual_num_particles > estimated_num_particles:
+                        statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
+                    else:
+                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
 
             except Exception as e:
                 statusmsg = f'Error: {e} File: {filename} '
@@ -533,7 +538,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
             # else:
             #     continue
 
-            total_count = len(image_files)
+            total_count = len(all_image_files)
             report_progress(progress, total_count, starttime, statusmsg)
             # Increment the progress counter
             progress += 1
@@ -564,18 +569,17 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
 
     # Extract the number of particles from image_filename
     basename = os.path.basename(image_filename)
-    count_part = basename.split('-')[0]
-    foldername = os.path.basename(os.path.dirname(image_filename))
 
-    # If it is a separation test, set the number of particles to 2
-    if count_part.startswith("separation") or os.path.basename(foldername).startswith("separation"):
-        num_particles = 2
+    actual_num_particles = -1
+    # If the image is a separation test, set the number of particles to 2
+    if basename.startswith("separation"):
+        actual_num_particles = 2
+    elif basename.startswith('count'):
+        actual_num_particles = int(basename.split('-')[0].split('count')[1].split('_')[0])
     else:
-        num_particles = count_part.split('count')[1] # Get the part right after 'count'
-        num_particles = num_particles.split('_')[0] # Get the part before '_'
-
-    # Convert the number of particles (str) to an integer
-    actual_num_particles = int(num_particles)
+        actual_num_particles = -1
+    
+    foldername = os.path.basename(os.path.dirname(image_filename))
 
     # Get the size of the image (width and height are both sz)
     sz = image.shape[0]
@@ -792,8 +796,10 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
     """
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
-    if df.empty:
-        raise ValueError("The CSV file is empty. No data to process.")
+    if df.empty or len(df) == 1:
+        print("The CSV file is empty or only contains headers. No data to process.")
+        return
+
     # Extract the actual and estimated particle numbers
     try:
         actual = df['Actual Particle Count']
@@ -1080,6 +1086,34 @@ def make_metrics_histograms(file_path = "./analyses/PSF 1_0_2024-06-13/PSF 1_0_2
         plt.close(fig)  # Close the figure to free memory
         print(f'saved: {metric_of_interest} hist per h for true count {true_count}.png')
 
+def count_occurence(label_pred_log_file_path):
+    """Count occurrences of each estimated particle count and save to CSV."""
+    try:
+        # Read the CSV file
+        df = pd.read_csv(label_pred_log_file_path)
+        
+        # Count occurrences of each estimated count
+        count_series = df['Estimated Particle Count'].value_counts().sort_index()
+        
+        # Convert to DataFrame with columns 'Estimated Count' and 'Frequency'
+        count_df = pd.DataFrame({
+            'Estimated Count': count_series.index,
+            'Frequency': count_series.values
+        })
+        
+        # Generate output path
+        output_path = label_pred_log_file_path.split('label_prediction_log')[0] + 'occurence_count.csv'
+        
+        # Save to CSV
+        count_df.to_csv(output_path, index=False)
+
+        print(count_df)
+        
+        print(f"Occurrence counts saved to: {output_path}")
+        
+    except Exception as e:
+        print(f"Error in counting occurrences: {e}")
+    
 def process(config_files_dir, parallel=False):
     ''' Process the config files in the config_files_dir directory.
     
@@ -1251,6 +1285,11 @@ def process(config_files_dir, parallel=False):
                 generate_confusion_matrix(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
             except Exception as e:
                 print(f"Error generating confusion matrix: {e}")
+
+            # Count occurence
+            count_occurence(label_prediction_log_file_path)
+            pass
+            
             # generate_intensity_histogram(label_prediction_log_file_path, image_folder_namebase, code_version_date, display=False, savefig=True)
 
             # Delete the dataset after analysis
@@ -1267,7 +1306,6 @@ def process(config_files_dir, parallel=False):
             
 def main():
     """ Main function to run the analysis pipeline. """
-
     
     # Start the batch job timer
     batchjobstarttime = datetime.now()
@@ -1314,8 +1352,8 @@ if __name__ == '__main__':
         # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
         # Run the main function without parallel processing ('-p' option value is False)
-        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-        sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
+        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
         # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
