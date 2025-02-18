@@ -376,8 +376,8 @@ def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy,
                 integrated_psf_y[particle_index, :] = integrate_gauss_1d(yy, theta[particle_index][2], psf_sigma)
 
                 # update the particles contributions to the modelhk_at_xxyy value
-                modelhk_at_xxyy += theta[particle_index][0] * np.outer(integrated_psf_y[particle_index],
-                                                                    integrated_psf_x[particle_index]) 
+                modelhk_at_xxyy += theta[particle_index][0] * (np.outer(integrated_psf_y[particle_index],
+                                                                    integrated_psf_x[particle_index]) )
                 
                 # If the model intensity is negative, set it to the minimum model intensity to ensure physicality
                 modelhk_at_xxyy[modelhk_at_xxyy <= 0] = min_model_xy
@@ -1061,8 +1061,8 @@ def calculate_fisher_information_matrix_vectorized(theta, szy, szx, hypothesis_i
     for particle_index in range(1, hypothesis_index + 1):
         # Intensity derivatives
         ddt_modelhk[particle_index, 0] = (
-            integrated_psf_x[particle_index].reshape(-1, 1) @ 
-            integrated_psf_y[particle_index].reshape(1, -1)
+            integrated_psf_y[particle_index].reshape(-1, 1) @ 
+            integrated_psf_x[particle_index].reshape(1, -1)
         )
         
         # X coordinate derivatives
@@ -1132,7 +1132,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
 
     # Find tentative peaks
     tentative_peaks = get_tentative_peaks(roi_image, min_distance=1)
-    rough_peaks_xy = [peak[::-1] for peak in tentative_peaks]
+    rough_peaks_xy = [peak[::-1] for peak in tentative_peaks[:10]]
 
     # Set the minimum model at any x, y coordinate to avoid dividing by zero.
     min_model_xy = 1e-2
