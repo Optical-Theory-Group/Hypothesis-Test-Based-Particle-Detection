@@ -296,8 +296,8 @@ def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=
     remaintime = remaintime - timedelta(microseconds=remaintime.microseconds)
 
     strmsg = '{}/{}' \
-            ' in : {} ({:.2f}/s, Remaining (est): {}). {}'.format(progresscount, totalrealisations,
-                                                    runtime, progresscount / runtimesecs, remaintime, statusmsg)
+            ' in : {} (Remaining: {}). {}'.format(progresscount, totalrealisations,
+                                                    runtime, remaintime, statusmsg)
 
     update_progress(progresscount / totalrealisations, strmsg)
 
@@ -468,6 +468,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     actual_num_particles = analysis_result['actual_num_particles']
                     estimated_num_particles = analysis_result['estimated_num_particles']
                     input_image_file = analysis_result['image_filename']
+                    input_basename = os.path.basename(input_image_file)
                     determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                     # Write the results to the label_prediction log file
@@ -478,17 +479,16 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                     # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                     sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
                     if actual_num_particles < 0:
-                        statusmsg = f'\"{input_image_file}\" {estimated_num_particles} (actual count not given in the filename)'
+                        statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
                     else:
-                        statusmsg = f'\"{input_image_file}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
+                        statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
-                except concurrent.futures.TimeoutError:
-                    print(f"\nTask exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. File: {future_filename} ")
-                    # cfresult.cancel()
-                    statusmsg = f'Task cancelled due to timeout. File: {future_filename} '
-                except Exception as e:
-                    print(f"\nError in cfresult.result(): {e} File: {future_filename}\n")
-                    statusmsg = f'Error: {e}'
+                except concurrent.futures.timeouterror:
+                    # print(f"\ntask exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. file: {future_filename} ")
+                    statusmsg = f'task cancelled due to timeout (file: {future_filename}).'
+                except exception as e:
+                    # print(f"\nerror in cfresult.result(): {e} file: {future_filename}\n")
+                    statusmsg = f'error: {e} (file: {future_filename})'
 
                 # Report the progress
                 report_progress(progress, len(futures), starttime, statusmsg)
@@ -513,6 +513,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                 actual_num_particles = analysis_result['actual_num_particles']
                 estimated_num_particles = analysis_result['estimated_num_particles']
                 input_image_file = analysis_result['image_filename']
+                input_basename = os.path.basename(input_image_file)
                 determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                 # Write the results to the label_prediction log file
@@ -522,14 +523,9 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
 
                 # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                 if actual_num_particles < 0: 
-                    statusmsg = f'\"{input_image_file}\" - Actual Count: (not given in the filename), Estimated: {estimated_num_particles}\n'
+                    statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
                 else:   
-                    if actual_num_particles == estimated_num_particles:
-                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} == Estimated {estimated_num_particles}\n'
-                    elif actual_num_particles > estimated_num_particles:
-                        statusmsg = f'\"{input_image_file}\" - Actual Count: {actual_num_particles} > Estimated {estimated_num_particles}\n'
-                    else:
-                        statusmsg = f'\"{input_image_file}\" - Actual Count {actual_num_particles} < Estimated {estimated_num_particles}\n'
+                    statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
             except Exception as e:
                 statusmsg = f'Error: {e} File: {filename} '
