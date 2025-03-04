@@ -1111,6 +1111,8 @@ def calculate_fisher_information_matrix_vectorized(theta, szy, szx, hypothesis_i
     return fisher_mat
 
 def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=False):
+    # Convert the input image to float32. 
+    roi_image = roi_image.astype(np.float32)
 
     # Set the random seed
     np.random.seed(random_seed)
@@ -1437,7 +1439,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
         # sum_loglikelihood is the sum of loglikelihoods of all pixels
         sum_loglikelihood = 0.0
         Modelhk_at_xxyy, _, _ = calculate_modelxy_ipsfx_ipsfy(theta, range(szx), range(szy), hypothesis_index, min_model_xy, psf_sigma)
-        sum_loglikelihood = np.sum(roi_image * np.log(np.maximum(Modelhk_at_xxyy, 1e-2)) - Modelhk_at_xxyy - gammaln(roi_image + 1))
+        sum_loglikelihood = np.sum(roi_image * np.log(np.maximum(Modelhk_at_xxyy, 1e-2)) - Modelhk_at_xxyy - gammaln(roi_image + 1)) # gammaln(k+1) == ln(k!) (where ! denotes factorial).
         
         # Let's calculate the second term of the Xi_k (GMLR criterion), which is -1/2 * log(det(FIM under Hk))
         if hypothesis_index == 0:

@@ -538,6 +538,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
             report_progress(progress, total_count, starttime, statusmsg)
             # Increment the progress counter
             progress += 1
+            print() # Print a newline after the progress bar
             
     return analyses_folder  # Return the path of the folder containing the analyses outputs
 
@@ -1348,8 +1349,8 @@ if __name__ == '__main__':
         # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
         # Run the main function without parallel processing ('-p' option value is False)
-        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
         # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
