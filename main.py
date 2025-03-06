@@ -1340,7 +1340,7 @@ def main():
     # End the batch job timer
     batchjobendtime = datetime.now()
     # Print the time taken for the batch job
-    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime}')
+    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime:.2f}')
 
 
 # Run the main function if the script is executed from the command line
@@ -1350,8 +1350,8 @@ if __name__ == '__main__':
         # sys.argv = ['main.py', '-c', './example_config_folder/', '-p', 'True'] # -p for profiling. If True, it will run on a single process.
 
         # Run the main function without parallel processing ('-p' option value is False)
-        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-        sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
+        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
         # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
 
 
