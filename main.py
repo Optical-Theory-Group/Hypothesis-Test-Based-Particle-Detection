@@ -525,6 +525,7 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
                 if actual_num_particles < 0: 
                     statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
                 else:   
+                    sign = '+' if estimated_num_particles - actual_num_particles >= 0 else '' # negative sign will automatically be added if the difference is negative
                     statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
             except Exception as e:
