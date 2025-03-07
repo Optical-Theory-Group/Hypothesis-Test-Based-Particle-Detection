@@ -1340,7 +1340,12 @@ def main():
     # End the batch job timer
     batchjobendtime = datetime.now()
     # Print the time taken for the batch job
-    print(f'\nBatch job completed in {batchjobendtime - batchjobstarttime:.2f}')
+    # End the batch job timer
+    batchjobendtime = datetime.now()
+    # Calculate the time taken for the batch job
+    time_taken = batchjobendtime - batchjobstarttime
+    # Print the time taken for the batch job in seconds
+    print(f'\nBatch job completed in {time_taken.total_seconds():.2f} seconds')
 
 
 # Run the main function if the script is executed from the command line
