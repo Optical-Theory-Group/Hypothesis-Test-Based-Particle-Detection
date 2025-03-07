@@ -588,7 +588,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         # Call the generalized_maximum_likelihood_rule (GMLR) function to analyze the image
         estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=image, psf_sigma=psf_sigma, 
                                                                 last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, 
-                                                                display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi) 
+                                                                display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi, filename=image_filename) 
 
 
         # Extract xi, lli, and penalty from test_metrics
@@ -672,7 +672,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
 
         for tile_dict in tile_dicts_array.flatten():
             # Call generalized_maximum_likelihood_rule for each tile
-            est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=True)
+            est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=True, filename=image_filename)
 
             # Use the estimated number of particles to see the fit under the corresponding hypothesis
             chosen_fit = fit_results[est_num_particle_tile]

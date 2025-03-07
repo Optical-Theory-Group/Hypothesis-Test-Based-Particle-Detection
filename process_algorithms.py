@@ -1110,7 +1110,7 @@ def calculate_fisher_information_matrix_vectorized(theta, szy, szx, hypothesis_i
     
     return fisher_mat
 
-def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=False):
+def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condi=False, filename=None):
     # Convert the input image to float32. 
     roi_image = roi_image.astype(np.float32)
 
@@ -1234,7 +1234,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                         theta[particle_index][1] = random.random() * (szx - 1)
                         theta[particle_index][2] = random.random() * (szy - 1)
             except Exception as e:
-                print(f"Error occurred during initialization of theta inside gmlr(): {e}")
+                print(f"Error occurred during initialization of theta inside gmlr(): {e}, filename: {filename}")
                 print(f"theta: {theta}")
 
         # Only do the MLE if k > 0
@@ -1273,7 +1273,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                 minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha),
                                 method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             except Exception as e:
-                print(f"Error occurred during optimization: {e}")
+                print(f"Error occurred during optimization: {e}, filename: {filename}")
                 # print("Here is the last (denorm) theta snapshot:")
                 # print(denormalize(theta_snapshots[-1], hypothesis_index, roi_min, roi_max, psf_sigma, szx, szy))
 
@@ -1450,7 +1450,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
         try:
             _, log_det_fisher_mat = np.linalg.slogdet(fisher_mat)
         except np.linalg.LinAlgError as e:
-            print(f"Error occurred during the calculation of log determinant of the Fisher Information Matrix: {e}")
+            print(f"Error occurred during the calculation of log determinant of the Fisher Information Matrix: {e}, filename: {filename}")
             log_det_fisher_mat = np.nan
 
         prev_xi_assigned = False
