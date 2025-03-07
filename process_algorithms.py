@@ -352,6 +352,7 @@ def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy,
         if hypothesis_index == 0: # The hypothesis and model assumes background only
             modelhk_at_xxyy = theta
             if modelhk_at_xxyy <= 0:
+                print("- Warning: The calculated model contains negative value. This may cause issues.")
                 modelhk_at_xxyy = min_model_xy
             integrated_psf_x = integrated_psf_y = np.nan
 
@@ -376,7 +377,7 @@ def calculate_modelxy_ipsfx_ipsfy(theta, xx, yy, hypothesis_index, min_model_xy,
                 integrated_psf_y[particle_index, :] = integrate_gauss_1d(yy, theta[particle_index][2], psf_sigma)
 
                 # update the particles contributions to the modelhk_at_xxyy value
-                modelhk_at_xxyy += theta[particle_index][0] * (np.outer(integrated_psf_y[particle_index],
+                modelhk_at_xxyy += np.abs(theta[particle_index][0]) * (np.outer(integrated_psf_y[particle_index],
                                                                     integrated_psf_x[particle_index]) )
                 
                 # If the model intensity is negative, set it to the minimum model intensity to ensure physicality
@@ -465,11 +466,7 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
 
         # We need to calculate the derivatives of the modified negative log-likelihood function with respect to the normalized parameters 
         # - These derivative will be the derivatives with respect to unnormalized parameters times the "normalization factor"
-        if not ABS_INTENSITY_FLAG:
-            ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
-        else:
-            ddt_nll[0][0] = np.sum(one_minus_image_over_model * np.sign(theta[0][0])) * roi_max
-
+        ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
 
         for p_idx in range(1, hypothesis_index + 1):
             if not ABS_INTENSITY_FLAG:
@@ -1269,9 +1266,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
 
             # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
             try:
-                # opt = 'abs'
-                minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha),
-                                method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+                minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha), method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             except Exception as e:
                 print(f"Error occurred during optimization: {e}, filename: {filename}")
                 # print("Here is the last (denorm) theta snapshot:")
@@ -1715,8 +1710,7 @@ def generalized_maximum_likelihood_rule_on_rgb(roi_image, psf_sigma, last_h_inde
 
             # Now, let's update the parameters using scipy.optimize.minimize
             try:
-                minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_theta, args=(hypothesis_index, roi_image, roi_min_rgb, roi_max_rgb, min_model_xy, psf_sigma, szx, szy),
-                                method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+                minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_theta, args=(hypothesis_index, roi_image, roi_min_rgb, roi_max_rgb, min_model_xy, psf_sigma, szx, szy), method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
             except Exception as e:
                 print(f"Error occurred during optimization: {e}")
                 # print("Here is the last (denorm) theta snapshot:")
