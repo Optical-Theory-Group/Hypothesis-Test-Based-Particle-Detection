@@ -333,6 +333,7 @@ def update_progress(progress, status='', barlength=10):
     clear_line = '\r' + ' ' * erase_length + '\r'
     sys.stdout.write(clear_line + text)
     sys.stdout.flush()
+    pass
 
 def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_image, use_exit_condi=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False):
     '''Analyzes all the images in the dataset folder.
@@ -478,15 +479,21 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
 
                     # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                     sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
-                    if actual_num_particles < 0:
-                        statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
+                    if estimated_num_particles == -1:
+                        if actual_num_particles < 0:
+                            statusmsg = f'\"{input_basename}\" Error in the analysis. Estimated count will be logged as "-1" (true count unknown)'
+                        else:
+                            statusmsg = f'\"{input_basename}\" Error in the analysis. Estimated count will be logged as "-1" (true count: {actual_num_particles})'
                     else:
-                        statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
+                        if actual_num_particles < 0:
+                            statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
+                        else:
+                            statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
-                except concurrent.futures.timeouterror:
-                    # print(f"\ntask exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. file: {future_filename} ")
-                    statusmsg = f'task cancelled due to timeout (file: {future_filename}).'
-                except exception as e:
+                # except concurrent.futures.timeouterror:
+                #     # print(f"\ntask exceeded the maximum allowed time of {timeout_per_image} seconds and was cancelled. file: {future_filename} ")
+                #     statusmsg = f'task cancelled due to timeout (file: {future_filename}).'
+                except Exception as e:
                     # print(f"\nerror in cfresult.result(): {e} file: {future_filename}\n")
                     statusmsg = f'error: {e} (file: {future_filename})'
 
@@ -506,6 +513,8 @@ def analyze_whole_folder(image_folder_namebase, code_version_date, timeout_per_i
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files):
             # Analyze the image
             # if os.path.basename(filename).startswith('count1') and filename.split('count1-index')[1].split('.')[0] in [str(n) for n in range(1001, 1050)]: # For a test on 11/19/2024 - Neil. To be deleted/removed defintely after 11/21/2024.
+            # if 'count3-index755' not in filename and 'count3-index398' not in filename and 'count3-index999' not in filename: # For a test on 3/7/2025. - Neil
+            #     continue
             try:
                 analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condi=use_exit_condi)
 
@@ -671,11 +680,55 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
                 tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': []}
 
         for tile_dict in tile_dicts_array.flatten():
+
+            print(f"Processing tile {tilename} in image {image_filename}", end='\r')
+
             # Call generalized_maximum_likelihood_rule for each tile
             est_num_particle_tile, fit_results, test_metrics = generalized_maximum_likelihood_rule(tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_xi_graph=display_xi_graph, use_exit_condi=True, filename=image_filename)
 
-            # Use the estimated number of particles to see the fit under the corresponding hypothesis
-            chosen_fit = fit_results[est_num_particle_tile]
+            # Set the tile file name for the current tile
+            tilename = f"tile_x{tile_dict['x_low_end']}-{min(tile_dict['x_low_end'] + tile_width, img_width)}_y{tile_dict['y_low_end']}-{min(tile_dict['y_low_end'] + tile_width, img_height)}"
+
+            # Extract xi, lli, and penalty from test_metrics
+            xi = test_metrics['xi']
+            xi_aic = test_metrics['xi_aic']
+            xi_bic = test_metrics['xi_bic']
+
+            lli = test_metrics['lli']
+
+            penalty = test_metrics['penalty']
+            penalty_aic = test_metrics['penalty_aic']
+            penalty_bic = test_metrics['penalty_bic']
+
+            fisher_info = test_metrics['fisher_info']
+            fit_parameters = [result['theta'] for result in fit_results]
+                
+            # Create a list of tuples containing hypothesis_index, xi, lli, and penalty for this tile
+            file_tile_h_info = [f"{image_filename} {tilename} (h{h_index})" for h_index in range(len(xi))]
+            true_counts = [actual_num_particles for _ in range(len(xi))]
+            h_numbers = [h_index for h_index in range(len(xi))]
+            selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
+                
+            # Extract the determined particle intensities (to see the particle intensity distribution)
+            determined_particle_intensities = []
+            if estimated_num_particles > 0:
+                for i in range(1, estimated_num_particles + 1):
+                    determined_particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
+            determined_particle_intensities
+                    
+            # Combine variables into list named file_tile_metric_data
+            file_tile_metric_data = list(zip(file_tile_h_info, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
+                    
+            image_filename_base = os.path.basename(image_filename).split('.')[0]
+            tile_analysis_log_filename = f"{analyses_folder}/image_log/{image_filename_base}_{tilename}_analysis_log.csv"
+                    
+            # Write the data to the tile analysis log (CSV) file
+            os.makedirs(os.path.dirname(tile_analysis_log_filename), exist_ok=True)
+            with open(tile_analysis_log_filename, 'w', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow(['image_filename (h number)', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
+                writer.writerows(file_tile_metric_data)
+                pass
 
             # Extract the particle locations from the chosen fit and store them in the tile_dict
             particle_locations = []
@@ -684,42 +737,6 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
                 particle_locations.append(loc)
             tile_dict['particle_locations'] = particle_locations
 
-            # Set the log file name for the current tile
-            tilename = f"tile_x{tile_dict['x_low_end']}-{min(tile_dict['x_low_end'] + tile_width, img_width)}_y{tile_dict['y_low_end']}-{min(tile_dict['y_low_end'] + tile_width, img_height)}"
-            print(f"Processing tile {tilename} in image {image_filename}", end='\r')
-
-            image_filename_base = os.path.basename(image_filename).split('.')[0]
-            tile_analysis_log_filename = f"{analyses_folder}/image_log/{image_filename_base}_{tilename}_analysis_log.csv"
-
-            # Extract xi, lli, and penalty from test_metrics and fit_parameters from fit_results for this tile
-            xi = test_metrics['xi']
-            lli = test_metrics['lli']
-            penalty = test_metrics['penalty']
-            fisher_info = test_metrics['fisher_info']
-            fit_parameters = [result['theta'] for result in fit_results]
-
-            # Create a list of tuples containing hypothesis_index, xi, lli, and penalty for this tile
-            file_tile_h_info = [f"{image_filename} {tilename} (h{h_index})" for h_index in range(len(xi))]
-
-            # Extract the determined particle intensities (to see the particle intensity distribution)
-            h_numbers = [h_index for h_index in range(len(xi))]
-            selected_bools = [1 if est_num_particle_tile == h_index else 0 for h_index in range(len(xi))]
-            determined_particle_intensities = []
-            if est_num_particle_tile > 0:
-                for i in range(1, est_num_particle_tile + 1):
-                    determined_particle_intensities.append(fit_parameters[est_num_particle_tile][i][0])
-            determined_particle_intensities
-
-            # Combine variables into list named file_tile_metric_data
-            file_tile_metric_data = list(zip(file_tile_h_info, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters))
-
-            # Write the data to the tile analysis log (CSV) file
-            os.makedirs(os.path.dirname(tile_analysis_log_filename), exist_ok=True)
-            with open(tile_analysis_log_filename, 'w', newline='') as file:
-                writer = csv.writer(file)
-                writer.writerow(['image_filename (h number)', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters'])
-                writer.writerows(file_tile_metric_data)
-                pass
 
         merge_coincident_particles(image, tile_dicts_array, psf_sigma)
 
@@ -892,7 +909,7 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_namebase, c
             normalized_matrix[row] = matrix[row] / row_sums[row] if row_sums[row] != 0 else np.zeros(matrix.shape[1])
 
         # Debugging output to check if normalization is as expected
-        print("Normalized matrix:\n", normalized_matrix)
+        print("Normalized matrix:\n", np.array2string(normalized_matrix, formatter={'float_kind':lambda x: f"{x:.3f}"}))
 
         folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
         ax = axs[0]
@@ -1259,7 +1276,7 @@ def process(config_files_dir, parallel=False):
         # Analyze dataset
         if 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
             # parallel = False # Debug purpose
-            timeout = config.get('ana_timeout_per_image', 600)
+            timeout = config.get('ana_timeout_per_image', 3600) # time out = 1 hour per image
             analyses_folder_path = analyze_whole_folder(image_folder_namebase=config['image_folder_namebase'], 
                                                     code_version_date=config['code_version_date'], 
                                                     use_exit_condi=config['ana_use_premature_hypothesis_choice?'], 
@@ -1358,6 +1375,5 @@ if __name__ == '__main__':
         sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
         # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
         # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-
 
     main()

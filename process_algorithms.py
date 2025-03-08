@@ -1,3 +1,4 @@
+import warnings
 import seaborn as sns
 import random
 import matplotlib.pyplot as plt
@@ -102,6 +103,8 @@ def denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_max, szx, szy, al
         theta[0][0] = structured_norm_theta_gray[0][0] * roi_max
         theta[0][1] = theta[0][2] = np.nan
         for particle_index in range(1, hypothesis_index + 1):
+            if particle_index >= len(structured_norm_theta_gray):
+                raise IndexError(f"Index {particle_index} is out of bounds for axis 0 with size {len(structured_norm_theta_gray)}")
             theta[particle_index][0] = structured_norm_theta_gray[particle_index][0] * alpha
             theta[particle_index][1] = structured_norm_theta_gray[particle_index][1] * szx
             theta[particle_index][2] = structured_norm_theta_gray[particle_index][2] * szy
@@ -122,6 +125,8 @@ def denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_max, szx, szy, al
 
         # Next, denormalize the particle intensity (rgb) and position values and save it to the structured_theta dictionary
         for particle_index in range(1, hypothesis_index + 1):
+            if particle_index * 5 + 3 >= len(norm_flat_trimmed_theta):
+                raise IndexError(f"Index {particle_index * 5 + 3} is out of bounds for axis 0 with size {len(norm_flat_trimmed_theta)}")
             # See this to look at the desired structure of theta: theta['particle'][particle_index]['x']
             # 3, 8, 13... are the indices of the first element of each particle's intensity values
             i_rgb_start_idx = 3 + 5 * (particle_index - 1)
@@ -466,7 +471,11 @@ def jacobian_fn(norm_flat_trimmed_theta, hypothesis_index, roi_image, roi_min, r
 
         # We need to calculate the derivatives of the modified negative log-likelihood function with respect to the normalized parameters 
         # - These derivative will be the derivatives with respect to unnormalized parameters times the "normalization factor"
-        ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
+        if not ABS_INTENSITY_FLAG:
+            ddt_nll[0][0] = np.sum(one_minus_image_over_model) * roi_max # roi_max is the "normalization factor" for the intensity
+        else:
+            ddt_nll[0][0] = np.sum(one_minus_image_over_model * np.sign(theta[0][0])) * roi_max
+
 
         for p_idx in range(1, hypothesis_index + 1):
             if not ABS_INTENSITY_FLAG:
@@ -1242,14 +1251,6 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             # Normazlize the parameters before passing on to neg_loglikelihood_function
             norm_flat_trimmed_theta = normalize(theta, hypothesis_index, roi_max, szx, szy, alpha)
 
-            # Initialize storage for the jacobian and hessian snapshots
-            # jac_snapshots = []
-            gradientnorm_snapshots = []
-            # hess_snapshots = []
-            fn_snapshots = []
-            theta_snapshots = []
-            denormflat_theta_snapshots = []
-
             # Define the callback function as a nested function
             def callback_fn(xk, *args):
                 jac = jacobian_fn(xk, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha)
@@ -1260,17 +1261,113 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                 theta_snapshots.append(xk)
                 denormflat_theta_snapshots.append(denormalize(xk, hypothesis_index, roi_max, szx, szy, alpha).flatten())
 
-            # Now, let's update the parameters using scipy.optimize.minimize
             if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
                 print("norm_flat_trimmed_theta contains NaN or inf values.")
 
-            # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
-            try:
-                minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha), method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
-            except Exception as e:
-                print(f"Error occurred during optimization: {e}, filename: {filename}")
-                # print("Here is the last (denorm) theta snapshot:")
-                # print(denormalize(theta_snapshots[-1], hypothesis_index, roi_min, roi_max, psf_sigma, szx, szy))
+            num_minimize_trials = 100
+            for i in range(num_minimize_trials):
+
+                # Initialize storage for the jacobian and hessian snapshots
+                # jac_snapshots = []
+                gradientnorm_snapshots = []
+                # hess_snapshots = []
+                fn_snapshots = []
+                theta_snapshots = []
+                denormflat_theta_snapshots = []
+
+
+                # Now, let's update the parameters using scipy.optimize.minimize
+                if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
+                    print("norm_flat_trimmed_theta contains NaN or inf values.")
+
+                # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
+                try:
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings('error', category=RuntimeWarning)
+                        minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha), method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+                        break
+                    # print("after adjusting the theta and re-running minimize() error is avoided. The case is now processed without any problem.")
+
+                except RuntimeWarning as e:
+                    print(f"\nRunTimeWarning occurred during optimization: {e}, filename: {filename}, hypothesis_index: {hypothesis_index}. \n-- Adjusting the initial guess and 'trying again.' Trial number: {i+1}/{num_minimize_trials}\n")
+                    # See what theta is
+                    # denorm_theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_max, szx, szy, alpha)
+                    # Adjust the initial guess or options and try again
+                    adjusted_norm_flat_trimmed_theta = np.abs(norm_flat_trimmed_theta) * (1 + 0.05 * (np.random.rand() - 0.5))  
+                    norm_flat_trimmed_theta = adjusted_norm_flat_trimmed_theta
+                    # adjusted_norm_flat_trimmed_theta = norm_flat_trimmed_theta * 0.9  # Example adjustment
+                    # try:
+                    #     minimization_result = minimize( modified_neg_loglikelihood_fn, adjusted_norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha), method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+                    # except Exception as e:
+                    #     print(f"\nAdjustment was made to avoid the error in the minimization, but it still occurred once again: {e}, filename: {filename}, hypothesis_index: {hypothesis_index}")
+                    #     continue
+                except Exception as e:
+                    print(f"Error occurred during optimization: {e}, filename: {filename}\n")
+                    continue
+
+            if i > 0:
+                if i == num_minimize_trials - 1:
+                    print(f"\nRuntimeerror in the minimization could not be avoided (failed) even with perturbing the initial guess and trying again {num_minimize_trials} times. filename: {filename}, hypothesis_index: {hypothesis_index}\n")
+                else:
+                    print(f"\nRuntimeerror in the minimization was avoided (success!) by perturbing the initial guess and trying again. {i} times. filename: {filename}, hypothesis_index: {hypothesis_index}\n")
+
+            
+            
+
+            # # Initialize storage for the jacobian and hessian snapshots
+            # # jac_snapshots = []
+            # gradientnorm_snapshots = []
+            # # hess_snapshots = []
+            # fn_snapshots = []
+            # theta_snapshots = []
+            # denormflat_theta_snapshots = []
+
+            # # Define the callback function as a nested function
+            # def callback_fn(xk, *args):
+            #     jac = jacobian_fn(xk, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha)
+            #     gradientnorm = np.linalg.norm(jac)
+            #     fn = modified_neg_loglikelihood_fn(xk, hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha)
+            #     gradientnorm_snapshots.append(gradientnorm)
+            #     fn_snapshots.append(fn)                
+            #     theta_snapshots.append(xk)
+            #     denormflat_theta_snapshots.append(denormalize(xk, hypothesis_index, roi_max, szx, szy, alpha).flatten())
+
+            # # Now, let's update the parameters using scipy.optimize.minimize
+            # if np.isnan(norm_flat_trimmed_theta).any() or np.isinf(norm_flat_trimmed_theta).any():  # Check if the array contains NaN or inf values
+            #     print("norm_flat_trimmed_theta contains NaN or inf values.")
+
+            # # print(f"Starting parameter vector (denormalized): \n{denormalize(norm_flat_trimmed_theta)}")
+            # try:
+            #     with warnings.catch_warnings():
+            #         warnings.filterwarnings('error', category=RuntimeWarning)
+            #         minimization_result = minimize(modified_neg_loglikelihood_fn, norm_flat_trimmed_theta, args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha), method=method, jac=jacobian_fn, hess=hessian_fn, callback=callback_fn, options={'gtol': 100})
+            # except RuntimeWarning as e:
+            #     print(f"\nRunTimeWarning occurred during optimization: {e}, filename: {filename}, hypothesis_index: {hypothesis_index}")
+            #     # See what theta is
+            #     # denorm_theta = denormalize(norm_flat_trimmed_theta, hypothesis_index, roi_max, szx, szy, alpha)
+            #     # Adjust the initial guess or options and try again
+            #     adjusted_norm_flat_trimmed_theta = np.abs(norm_flat_trimmed_theta) * (1 - np.random.rand() * 0.05)  
+            #     # adjusted_norm_flat_trimmed_theta = norm_flat_trimmed_theta * 0.9  # Example adjustment
+            #     try:
+            #         minimization_result = minimize(
+            #             modified_neg_loglikelihood_fn,
+            #             adjusted_norm_flat_trimmed_theta,
+            #             args=(hypothesis_index, roi_image, roi_min, roi_max, min_model_xy, psf_sigma, szx, szy, alpha),
+            #             method=method,
+            #             jac=jacobian_fn,
+            #             hess=hessian_fn,
+            #             callback=callback_fn,
+            #             options={'gtol': 100}
+            #         )
+            #     except Exception as e:
+            #         print(f"\nAdjustment was made to avoid the error in the minimization, but it still occurred once again: {e}, filename: {filename}, hypothesis_index: {hypothesis_index}")
+            #         continue
+            #     print("after adjusting the theta and re-running minimize() error is avoided. The case is now processed without any problem.")
+            # except Exception as e:
+            #     print(f"Error occurred during optimization: {e}, filename: {filename}")
+            #     continue
+            #     # print("Here is the last (denorm) theta snapshot:")
+            #     # print(denormalize(theta_snapshots[-1], hypothesis_index, roi_min, roi_max, psf_sigma, szx, szy))
 
             # print(f'H{hypothesis_index} converged?: {minimization_result.success}')
             # print(f'Last gradientnorm: {gradientnorm_snapshots[-1]:.0f}')
@@ -1540,7 +1637,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     if qualifying_xi_indices:
         estimated_num_particles = qualifying_xi_indices[np.nanargmax([xi[i] for i in qualifying_xi_indices])]
     else:
-        estimated_num_particles = np.nan
+        estimated_num_particles = -1
     # estimated_num_particles = np.argmax(xi)
     # input("End of a single image test - Press any key to continue...")
     if plt.get_fignums():
