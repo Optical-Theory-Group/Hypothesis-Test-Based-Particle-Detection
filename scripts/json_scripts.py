@@ -3,7 +3,7 @@ import os
 import json
 import random
 
-def update_config_json(directory, change_dict):
+def update_config_json_randomize_seeds(directory, change_dict):
     """ Update all JSON files in the given directory with the new values in change_dict.
     
     Parameters
@@ -38,10 +38,11 @@ def update_config_json(directory, change_dict):
                 print(f"Updated '{k}' in {json_file} from {prev} to {v}")
         
         # set data['sep_random_seed'] to a random integer between 0 and 2**16
-        data['sep_random_seed'] = random.randint(0, 2**16)
 
         # set data['ana_random_seed'] to a random integer between 0 and 2**16
         data['ana_random_seed'] = random.randint(0, 2**16)
+        data['gen_random_seed'] = random.randint(0, 2**16)
+        data['sep_random_seed'] = random.randint(0, 2**16)
 
         # delete all fields and values in data where the key starts with 'gen'.
         # keys_to_delete = [k for k in data.keys() if k.startswith('gen')]
@@ -56,6 +57,8 @@ def update_config_json(directory, change_dict):
 # directory = './example_config_folder'
 # directory = 'psf4_const_peak_height_bg_test'
 directory = './configs_to_run_on_server'
+# directory = './psf_tolerance_test_configs'
+# directory = './configs'
 
 # # New value for "sep_bg_level"
 change_dict = {
@@ -64,10 +67,12 @@ change_dict = {
     'gen_total_image_count': 50000,
     # 'gen_psf_sigma': 4.0,
     # 'ana_predefined_psf_sigma': 4.0,
-    # 'gen_particle_intensity_mean': 80000,
+    # 'gen_particle_intensity_mean': 20000,
 }
+# change_dict = {}
 
-update_config_json(directory, change_dict)
+update_config_json_randomize_seeds(directory, change_dict)
+pass
 
 def add_string_to_all_jsons(directory, addstring):
     """ Add a string to the filename of all JSON files in the given directory.
