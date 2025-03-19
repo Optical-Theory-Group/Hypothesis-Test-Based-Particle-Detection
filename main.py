@@ -594,22 +594,29 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         h_numbers = [h_index for h_index in range(len(xi))] # hypothesis index
         selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))] # 1 if the hypothesis is selected, 0 otherwise
 
+        # Extract the determined particle intensities (to see the particle intensity distribution)
+        particle_intensities = []
+        if estimated_num_particles > 0:
+            for i in range(1, estimated_num_particles + 1):
+                particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
+            
+        # Create a list of tuples containing the results of the individual hypothesis tests
         individual_hypothesis_test_results = list(zip(roi_name_h_index, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters, xi_aic, xi_bic, penalty_aic, penalty_bic))
 
         # Save the results to a CSV file ending with '_analysis_log.csv'
         analysis_log_filename = f"{analyses_folder}/image_log/{roi_name}_analysis_log.csv"
-        os.makedirs(os.path.dirname(image_analysis_log_filename), exist_ok=True)
-        with open(image_analysis_log_filename, 'w', newline='') as file:
+        os.makedirs(os.path.dirname(analysis_log_filename), exist_ok=True)
+        with open(analysis_log_filename, 'w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['roi_name (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic'])
             writer.writerows(individual_hypothesis_test_results)
 
         chosen_fit = fit_parameters[estimated_num_particles]
-        return estiamted_num_particles, chosen_fit
+        return estimated_num_particles, chosen_fit, particle_intensities
 
 
     # Get the size of the image (width and height are both image_side_length)
-    image_side_length = image.shape[0]
+    image_side_length = entire_image.shape[0]
 
     # Check if the image is too big to analyze at once. If it is, use tiling.
     if image_side_length < tiling_width_threshold:
@@ -637,21 +644,21 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         tile_dicts_array = np.zeros((n_y + 1, n_x + 1), dtype=object)
         y_low_end_list = [tile_jump_distance * (n) for n in range(n_y + 1)]
         x_low_end_list = [tile_jump_distance * (n) for n in range(n_x + 1)]
-        img_height, img_width = image.shape
+        img_height, img_width = entire_image.shape
 
         # Populate tile_dict with x_low_end, y_low_end, and image_slice (pixel values) - but the particle locations and intensities are not yet determined
         for y_index, y_low_end in enumerate(y_low_end_list):
             y_high_end = min(y_low_end + tile_image_side_length, img_height)
             for x_index, x_low_end in enumerate(x_low_end_list):
                 x_high_end = min(x_low_end + tile_image_side_length, img_width)
-                tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': [], 'particle_intensities': []}
+                tile_dicts_array[x_index][y_index] = {'x_low_end': x_low_end, 'y_low_end': y_low_end, 'image_slice': entire_image[y_low_end:y_high_end, x_low_end:x_high_end], 'particle_locations': [], 'particle_intensities': []}
 
         for tile_dict in tile_dicts_array.flatten():
             # Set the tile file name for the current tile
             tilename = f"tile_x{tile_dict['x_low_end']}-{min(tile_dict['x_low_end'] + tile_width, img_width)}_y{tile_dict['y_low_end']}-{min(tile_dict['y_low_end'] + tile_width, img_height)}"
             print(f"Processing tile {tilename} in image {image_filename}", end='\r')
             roi_name = f"{image_filename} {tilename})"
-            estimated_num_particles_for_roi, chosen_fit = analyze_region_of_interest(tilng, tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name)
+            estimated_num_particles_for_roi, chosen_fit, _ = analyze_region_of_interest(tilng, tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name)
             particle_locations = []
             for particle_index in range(1, estimated_num_particles_for_roi + 1):
                 loc = chosen_fit[particle_index][1:3]
@@ -659,11 +666,10 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             tile_dict['particle_locations'] = particle_locations
         
         # Combine the results of the tiles
-        resulting_locations, determined_intensities = merge_coincident_particles(image, tile_dicts_array, psf_sigma)
+        resulting_locations, determined_intensities = merge_coincident_particles(entire_image, tile_dicts_array, psf_sigma)
         estimated_num_particles = len(merged_locations)
-
     else:
-        estimated_num_particles, chosen_fit = analyze_region_of_interest(tiling, image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, actual_num_particles, roi_name=image_filename)
+        estimated_num_particles, chosen_fit, determined_intensities = analyze_region_of_interest(tiling, entire_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, actual_num_particles, roi_name=image_filename)
 
     analyze_image_result = {
         'actual_num_particles': actual_num_particles,
@@ -912,7 +918,7 @@ def count_occurence(label_pred_log_file_path):
         print(f"Error in counting occurrences: {e}")
     
 
-def process(config_files_dir, parallel=False):
+def process(config_files_dir, parallel=False, move_finished_config_file=True):
     ''' Process the config files in the config_files_dir directory.
     
     Parameters:
@@ -1091,12 +1097,14 @@ def process(config_files_dir, parallel=False):
                 print('Deleting image data.')
                 print('-------------------------------------')
         
-        # Move the processed config file to the "finished configs" subfolder
-        finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
-        os.makedirs(finished_configs_dir, exist_ok=True)
-        shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
+        if move_finished_config_file:
+            # Move the processed config file to the "finished configs" subfolder
+            finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
+            os.makedirs(finished_configs_dir, exist_ok=True)
+            shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
             
-def main():
+def main(move_finished_config_file=True):
+    
     """ Main function to run the analysis pipeline. """
     
     # Start the batch job timer
@@ -1118,9 +1126,10 @@ def main():
         exit()
     config_files_dir = args.config_file_folder
     
+
     if args.profile is True:
         with Profile() as profile:
-            process(config_files_dir=config_files_dir, parallel=False)
+            process(config_files_dir=config_files_dir, parallel=False, move_finished_config_file=move_finished_config_file)
             (
                 Stats(profile)
                 .strip_dirs()
@@ -1129,7 +1138,7 @@ def main():
             )
             # os.system('snakeviz profile_results.prof &')
     else:
-        process(config_files_dir, parallel=True)
+        process(config_files_dir, parallel=True, move_finished_config_file=move_finished_config_file)
 
     # End the batch job timer
     batchjobendtime = datetime.now()
@@ -1146,6 +1155,6 @@ def main():
 if __name__ == '__main__':
     if 'pydevd' in sys.modules or 'debugpy' in sys.modules:
         # Run the main function without parallel processing ('-p' option value is False)
-        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
-    main()
+        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
+    main(move_finished_config_file=False)
