@@ -1,6 +1,6 @@
 import numpy as np
 # import cv2
-from process_algorithms import integrate_gauss_1d
+from process_algorithms import normal_gaussian_integrated_within_each_pixel
 
 def psfconvolution(peak_info, image_width=512):
     """ Returns the pixel values to be added to the image based on psf convolution.
@@ -15,13 +15,13 @@ def psfconvolution(peak_info, image_width=512):
         numpy.array(dtype=float): image_width x image_width array of the pixel values to be added to the image
     """
 
-    integral_x = integrate_gauss_1d(np.arange(image_width), peak_info['x'], peak_info['psf_sigma'])
-    integral_y = integrate_gauss_1d(np.arange(image_width), peak_info['y'], peak_info['psf_sigma'])
+    psf_factors_for_pixels_in_x = normal_gaussian_integrated_within_each_pixel(np.arange(image_width), peak_info['x'], peak_info['psf_sigma'])
+    psf_factors_for_pixels_in_y = normal_gaussian_integrated_within_each_pixel(np.arange(image_width), peak_info['y'], peak_info['psf_sigma'])
 
     if isinstance(peak_info['prefactor'], (int, float)): # Case grayscale image
-        output = np.outer(integral_y, integral_x) * peak_info['prefactor']
+        output = np.outer(psf_factors_for_pixels_in_y, psf_factors_for_pixels_in_x) * peak_info['prefactor']
     else: # Case RGB image
-        output = np.array([np.outer(integral_y, integral_x) * peak_info['prefactor'][i] for i in range(3)])
+        output = np.array([np.outer(psf_factors_for_pixels_in_y, psf_factors_for_pixels_in_x) * peak_info['prefactor'][i] for i in range(3)])
 
     return output
 
