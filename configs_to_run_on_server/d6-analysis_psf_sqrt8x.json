@@ -4,7 +4,7 @@
     "file_format": "tiff",
     "generate_regular_dataset?": true,
     "gen_random_seed": 54987,
-    "gen_total_image_count": 50,
+    "gen_total_image_count": 50000,
     "gen_minimum_particle_count": 0,
     "gen_maximum_particle_count": 4,
     "gen_psf_sigma": 2.0,
