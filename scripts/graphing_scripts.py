@@ -1,11 +1,4 @@
 import matplotlib as mpl 
-# mpl.rcParams['text.usetex'] = True
-# mpl.rcParams['text.latex.preamble'] = r"""
-# \usepackage{amsmath}    % includes amstext, so \text{…} works
-# \usepackage{amssymb}
-# \usepackage[T1]{fontenc}
-# \usepackage{lmodern}    % optional, nicer typefaces
-# """
 import math
 import re
 from matplotlib.colors import ListedColormap
@@ -243,11 +236,17 @@ def format_xname(filename):
     basename = os.path.basename(filename)
     pattern_part = basename.split("_code_ver")[0]
     chunk = pattern_part.split("-")[-1]
-    if chunk.startswith("1o_"):
-        chunk = f"{chunk.split("_")[0]}_{chunk.split("_")[1]}" 
-        pass
+    if chunk.startswith("analysis") and chunk.endswith("psf4"):
+        if chunk.split("_")[2] == '1o':
+            chunk = chunk.split("_")[2] + '_' + chunk.split("_")[3]
+        else:
+            chunk = chunk.split("_")[2] 
     else:
-        chunk = chunk.split("_")[0]
+        if chunk.startswith("1o_"):
+            chunk = f"{chunk.split("_")[0]}_{chunk.split("_")[1]}" 
+            pass
+        else:
+            chunk = chunk.split("_")[0]
 
     print(filename)
     return parse_xpart(chunk)
@@ -310,8 +309,8 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
     plt.tight_layout()
 
     # Add horizontal dotted lines
-    # add_lines = False
-    add_lines = True
+    add_lines = False
+    # add_lines = True
     if add_lines:
         y_values = [0.4868, 0.4549, 0.3679]
         for y_val, color in zip(y_values, colors[:len(y_values)]):
@@ -322,12 +321,12 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
     # Save the plot as an image file
     save_plot = input("Do you want to save the plot as an image file? (y/n): ").strip().lower()
     if save_plot == 'y':
-        default_filename = f"accuracy_plot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+        default_filename = f"accuracy_plot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg"
         filename = input(f"Enter the filename (default: {default_filename}): ").strip()
         if not filename:
             filename = default_filename
         
-        plt.savefig(filename, dpi=300)
+        plt.savefig(filename, format='svg')
         print(f"Plot saved to {filename}")
 
     # Print all data points in the graph
@@ -595,7 +594,27 @@ def generate_x_sequence(min_val, max_val):
 # Usage & test
 # -----------------------
 
-# x_vals = generate_x_sequence(1/8, 4)  
+# # Folder path containing the CSV files
+# folder_path = './processing/scatterstr_test'
+# folder_path = './processing/background_psf4_peakconst'
+# folder_path = './processing/background_test'
+# folder_path = './processing/psfwidth_test_const_peakval_bg'
+# folder_path = './processing/snr_test'
+folder_path = './processing/d6-tolerance_of_psf-test'
+# folder_path = './processing/zoom_test'
+# folder_path = './processing/psfwidth_test_const_peaksum_bg'
+
+# xlabel = "Background Level (psf4, const peak height)"
+# xlabel = "Background Level"
+# xlabel = "Scatter Strength"
+# xlabel = "Signal-to-Noise Ratio"
+xlabel = "Analysis PSF width / Actual PSF width"
+# xlabel = "Zoom Factor"
+# xlabel = "PSF width (constant: peak value, background)"
+# xlabel = "PSF width (constant: peak sum, background)"
+
+# # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2)# x_vals = generate_x_sequence(1/8, 4)  
+# x_vals = generate_x_sequence(1/32, 8)  
 # print(x_vals)  
 # # Expected: ['1/8x', '1/4x', '1/2x', '1x', '2x', '4x']
 # x_vals = generate_x_sequence(1/np.sqrt(4), np.sqrt(8))  
@@ -606,39 +625,16 @@ def generate_x_sequence(min_val, max_val):
 # # Expected: ['1x', 'sqrt2x', 'sqrt4x', 'sqrt8x']
 # x_vals = generate_x_sequence(1/np.sqrt(8), 1)
 # print(x_vals)
-# # Expected: ['1/sqrt8x', '1/sqrt4x', '1/sqrt2x', '1x']
-
-
-# # Folder path containing the CSV files
-# folder_path = './processing/scatterstr_test'
-folder_path = './processing/background_psf4_peakconst'
-# folder_path = './processing/psfwidth_test_const_peakval_bg'
-# folder_path = './processing/snr_test'
-# folder_path = './processing/zoom_test'
-# folder_path = './processing/psfwidth_test_const_peaksum_bg'
-
-xlabel = "Background Level (psf4, const peak height)"
-# xlabel = "Scatter Strength"
-# xlabel = "Signal-to-Noise Ratio"
-# xlabel = "Zoom Factor"
-# xlabel = "PSF width (constant: peak value, background)"
-# xlabel = "PSF width (constant: peak sum, background)"
-
-# Use LaTeX formatting to set different sizes
-# line1 = "PSF width"
-# line2 = "(constant: peak sum, background level)"
-# line2 = "(constant: peak value, background level)"
-# xlabel = (
-#     r"$\begin{array}{c}"
-#     + r"\text{" + line1 + r"}\\"  # first line (normal size)
-#     + r"\small \text{" + line2 + r"}"          # second line (smaller)
-#     + r"\end{array}$"
-# )
-
-# # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2))
+# Expected: ['1/sqrt8x', '1/sqrt4x', '1/sqrt2x', '1x'])
 # x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
-# x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
-x_vals = generate_x_sequence(1/2, 256)
+# x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(16))
+# x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2))
+# x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(8))
+x_vals = generate_x_sequence(1/np.sqrt(2), np.sqrt(8))
+# x_vals = generate_x_sequence(1/2, 256)
+# x_vals = generate_x_sequence(1/2, 2048)
+# x_vals = generate_x_sequence(1/32, 8)
+# x_vals = generate_x_sequence(1/64, 8)
 
 tags = x_vals
 
@@ -764,15 +760,6 @@ def plot_xi_values(xi_values):
     plt.tight_layout()
     plt.show(block=False)
     pass
-
-
-# xi_values = [-66382.125,
-# -66291.35499,
-# -66204.44662,
-# -66214.60394,
-# -66224.66774,
-# -66232.63556,
-# ]
 
 # plot_xi_values(xi_values)
 

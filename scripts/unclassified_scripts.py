@@ -1,9 +1,11 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from image_generation import psfconvolution
 from process_algorithms import generalized_maximum_likelihood_rule_on_rgb
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import json
 import re
 import pandas as pd
@@ -182,10 +184,10 @@ def process_separation_test_results(directory='', prefix="separation_test_psf0_5
 	current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 	if save_plot == 'y':
 		# Generate a filename with the current date and time
-		filename = f"particle_count_vs_separation(psf)_{current_time}.png"
+		filename = f"particle_count_vs_separation(psf)_{current_time}.svg"
 		
 		# Save the plot
-		plt.savefig(filename)
+		plt.savefig(filename, format='svg')
 		print(f"Plot saved as {filename}")
 	else:
 		print("Plot not saved.")
@@ -471,10 +473,13 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 
 # psfs = np.array(['0_707', '1_000', '1_410', '2_000', '2_830', '4_000', '5_660'])
 # for psf in psfs:
-# 	process_separation_test_results(directory='./processing/d5-separation/', prefix=f"d5_psf{psf}", show_legend=False)
+# 	process_separation_test_results(directory='./processing_sep/', prefix=f"d5_psf{psf}", show_legend=False)
 # 	pass
 
 
+# psfs = np.array(['0_707'])
+# for psf in psfs:
+# 	process_separation_test_results(directory='./processing_sep/', prefix=f"d5_psf{psf}", show_legend=True)
 
 
 # 	# process_separation_test_results(prefix=f"psf{psf}".replace('.', '_'))
@@ -558,6 +563,9 @@ def plot_xi_vs_H():
 	plt.show()
 	pass
 
+plot_xi_vs_H()
+pass
+
 def plot_random():
 	# Adjust y-values to create a concave curve where the gradient is near 0 at x=0 and gradually becomes more negative
 	# Define the range of x-values (Surface Density) from 0 to 1
@@ -590,6 +598,9 @@ def plot_random():
 	plt.tight_layout()
 	plt.show(block=False)
 	pass
+
+plot_random()
+pass
 
 def expand_baseline_config(filepath, outconfig_values_dict):
 	"""

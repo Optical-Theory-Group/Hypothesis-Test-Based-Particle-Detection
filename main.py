@@ -25,6 +25,7 @@ import sys
 from datetime import datetime, timedelta
 from cProfile import Profile
 from pstats import SortKey, Stats
+import tifffile
 
 def generate_test_images(image_folder_basename, maximum_number_of_particles, particle_intensity_mean, particle_intensity_sd=0, total_image_count=1, psf_sigma=1, image_side_length=20, background_level=1, 
                          generation_random_seed=42, config_content=None, minimum_number_of_particles=0, file_extension='tiff'):
@@ -386,6 +387,18 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
     print(f"Number of png files: {len(glob.glob(os.path.join(images_folder, '*.png')))}")
     print(f"Number of tiff files: {len(glob.glob(os.path.join(images_folder, '*.tiff')))}")
 
+    # Check the first image whether it is grayscale or RGB, and print the information to the user.
+    if all_image_files[0].lower().endswith(('.tif', '.tiff')):
+        first_image = tifffile.imread(all_image_files[0])
+    else:
+        first_image = np.array(im.open(all_image_files[0]))
+    if first_image.ndim == 2:  # Grayscale image
+        print(f"== The first image ({all_image_files[0]}) is grayscale, indicating all images in this dataset are grayscale.")
+    elif first_image.ndim == 3 and first_image.shape[2] == 3:  # RGB image
+        print(f"== The first image ({all_image_files[0]}) is rgb, indicating all images in this dataset are rgb.")
+    else:
+        print(f"== The first image ({all_image_files[0]}) has an unexpected format. All images in this dataset might likely be in unexpected format, neither grayscale nor rgb.")
+
     # If there are no images in the folder, raise an error
     if len(all_image_files) == 0:
         raise ValueError("There are no images in this folder.")
@@ -499,6 +512,7 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
 
         # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files):
+            # Read the first image file to determine if it is grayscale or RGB
             # Analyze the image
             try:
                 analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condition=use_exit_condition)
@@ -553,7 +567,18 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         (Currently, the latter is not implemented and the function returns None.)
     """
     # Print the name of the image file
-    entire_image = np.array(im.open(image_filename))
+    if image_filename.lower().endswith(('.tif', '.tiff')):
+        entire_image = tifffile.imread(image_filename).astype(np.float32)
+    else:
+        entire_image = np.array(im.open(image_filename), dtype=np.float32)
+
+    # Check if the image is grayscale or RGB
+    if entire_image.ndim == 2:  # Grayscale image
+        color_mode = 'gray'
+    elif entire_image.ndim == 3 and entire_image.shape[2] == 3:  # RGB image
+        color_mode = 'rgb'
+    else:
+        raise ValueError(f"Unexpected dimension for file: {image_filename}. Expected 2 (grayscale) or 3 (RGB). Instead got {entire_image.ndim} dimensions.")
 
     # Extract the number of particles from image_filename
     basename = os.path.basename(image_filename)
@@ -569,10 +594,10 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
     
     foldername = os.path.basename(os.path.dirname(image_filename))
 
-    def analyze_region_of_interest(tiling, roi_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, actual_count, roi_name=None):
+    def analyze_region_of_interest(tiling, roi_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=None, color_mode=None):
         """ Analyze the region of interest (ROI) of the image. """
         # Call the generalized_maximum_likelihood_rule (GMLR) function to analyze the image
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=roi_image, psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condition=use_exit_condition, roi_name=roi_name) 
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=roi_image, psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condition=use_exit_condition, roi_name=roi_name, color_mode=color_mode) 
 
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
@@ -658,7 +683,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             tilename = f"tile_x{tile_dict['x_low_end']}-{min(tile_dict['x_low_end'] + tile_width, img_width)}_y{tile_dict['y_low_end']}-{min(tile_dict['y_low_end'] + tile_width, img_height)}"
             print(f"Processing tile {tilename} in image {image_filename}", end='\r')
             roi_name = f"{image_filename} {tilename})"
-            estimated_num_particles_for_roi, chosen_fit, _ = analyze_region_of_interest(tilng, tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name)
+            estimated_num_particles_for_roi, chosen_fit, _ = analyze_region_of_interest(tilng, tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name, color_mode=color_mode)
             particle_locations = []
             for particle_index in range(1, estimated_num_particles_for_roi + 1):
                 loc = chosen_fit[particle_index][1:3]
@@ -669,7 +694,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         resulting_locations, determined_intensities = merge_coincident_particles(entire_image, tile_dicts_array, psf_sigma)
         estimated_num_particles = len(merged_locations)
     else:
-        estimated_num_particles, chosen_fit, determined_intensities = analyze_region_of_interest(tiling, entire_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, actual_num_particles, roi_name=image_filename)
+        estimated_num_particles, chosen_fit, determined_intensities = analyze_region_of_interest(tiling, entire_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=image_filename, color_mode=color_mode)
 
     analyze_image_result = {
         'actual_num_particles': actual_num_particles,

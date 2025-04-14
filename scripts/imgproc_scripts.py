@@ -1,12 +1,53 @@
+import tifffile
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from image_generation import psfconvolution 
+from process_algorithms import get_tentative_peaks, normal_gaussian_integrated_within_each_pixel
 from scipy.optimize import minimize
-from process_algorithms import get_tentative_peaks
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
-import os
 import numpy as np
 from PIL import Image
 import math
-import sys
+
+def gaussian_2d(x, y, x0, y0, sigma, amplitude):
+    return amplitude / sigma / np.sqrt(2*np.pi) * np.exp(-((x - x0)**2 + (y - y0)**2) / (2 * sigma**2))
+
+def generate_random_rgb_image_with_peaks(num_peaks=20):
+    width, height = 100, 100  # Set desired size
+    sigma = 2
+    num_peaks=15
+
+    x = np.arange(width)
+    y = np.arange(height)
+    x, y = np.meshgrid(x, y)
+
+    # Initialize empty channels
+    r_channel = np.zeros((height, width))
+    g_channel = np.zeros((height, width))
+    b_channel = np.zeros((height, width))
+
+    for _ in range(num_peaks):
+        x0 = np.random.randint(0, width)
+        y0 = np.random.randint(0, height)
+        r_intensity = np.random.randint(0, 800)
+        g_intensity = np.random.randint(0, 800)
+        b_intensity = np.random.randint(0, 800)
+
+        r_channel += gaussian_2d(x, y, x0, y0, sigma, r_intensity)
+        g_channel += gaussian_2d(x, y, x0, y0, sigma, g_intensity)
+        b_channel += gaussian_2d(x, y, x0, y0, sigma, b_intensity)
+
+    # Stack channels to create an RGB image
+    random_image = np.stack([r_channel, g_channel, b_channel], axis=-1).astype(np.uint8)
+
+    # Save as TIFF
+    image = Image.fromarray(random_image, mode="RGB")
+    image.save("random_rgb_with_peaks.tiff")
+
+# generate_random_rgb_image_with_peaks()
+# pass
 
 def divide_large_tiff(input_file_path, sub_image_size, overlap, save_folder):
     # Ensure the save folder exists
@@ -60,8 +101,6 @@ def divide_large_tiff(input_file_path, sub_image_size, overlap, save_folder):
 
 
 
-# def gaussian_2d(x, y, x0, y0, sigma, amplitude):
-#     return amplitude / sigma / np.sqrt(2*np.pi) * np.exp(-((x - x0)**2 + (y - y0)**2) / (2 * sigma**2))
 
 # def fit_gaussian_2d(image, guess_xy):
 #     x = np.arange(image.shape[1])
@@ -334,5 +373,115 @@ def process_tiff_images(input_directory):
 # Example usage
 input_directory = 'particle_images'
 # input_directory = 'div_images'
-mean_sigma = process_tiff_images(input_directory)
-print(f'Mean sigma value: {mean_sigma}')
+# mean_sigma = process_tiff_images(input_directory)
+# print(f'Mean sigma value: {mean_sigma}')
+
+
+def generate_rgb_image_with_background_and_peaks(output_file="rgb_poisson_255.tiff"):
+    width, height = 100, 100
+    sigma = 2
+
+    np.random.seed(42)
+
+    x = np.arange(width)
+    y = np.arange(height)
+    x, y = np.meshgrid(x, y)
+
+    # Create a non-zero background for each channel
+    r_img = np.full((height, width), 10, dtype=np.float32) 
+    g_img = np.full((height, width), 20, dtype=np.float32) 
+    b_img = np.full((height, width), 30, dtype=np.float32)
+
+    peak_info_p1 = {'x': 22.2, 'y': 25.5, 'psf_sigma': sigma, 'prefactor': np.array([222, 333, 255])*15}
+    image_p1 = psfconvolution(peak_info_p1, image_width=width)
+    r_img += image_p1[0]
+    g_img += image_p1[1]
+    b_img += image_p1[2]
+    
+    peak_info_p2 = {'x': 88.8, 'y': 77.7, 'psf_sigma': sigma, 'prefactor': np.array([345, 234, 432])*15}
+    image_p2 = psfconvolution(peak_info_p2, image_width=width)
+    r_img += image_p2[0]
+    g_img += image_p2[1]
+    b_img += image_p2[2]
+
+    r_img = np.random.poisson(r_img)
+    g_img = np.random.poisson(g_img)
+    b_img = np.random.poisson(b_img)
+    
+    # Stack channels to create an RGB image
+    rgb_image = np.stack([r_img, g_img, b_img], axis=-1)
+    plt.imshow(rgb_image)
+    plt.colorbar()
+    plt.show(block=False)
+    pass
+
+    # # Normalize to fit within the range [0, 255]
+    # rgb_image = np.clip(rgb_image, 0, 255).astype(np.float32)
+
+    # Save the image as a TIFF file
+    tifffile.imwrite(output_file, rgb_image)
+
+    # Normalize the RGB image by dividing by 255
+    normalized_rgb_image = rgb_image / 255.0
+
+    # Save the normalized image as a new TIFF file
+    normalized_output_file = os.path.splitext(output_file)[0] + '_normalized.tiff'
+    tifffile.imwrite(normalized_output_file, normalized_rgb_image.astype(np.float32))
+
+    print(f"Normalized image saved to: {normalized_output_file}")
+    
+    
+
+    # Read the TIFF file using tifffile
+    tiff_image = tifffile.imread(output_file)
+
+    # Check the shape and data type of the image
+    print(f"Image shape: {tiff_image.shape}, dtype: {tiff_image.dtype}")
+
+    # Display the image
+    plt.figure()
+    plt.imshow(tiff_image)
+    plt.colorbar()
+    plt.title("TIFF Image")
+    plt.show()
+    pass
+
+# Example usage
+generate_rgb_image_with_background_and_peaks("rgb_poisson_255.tiff")
+pass
+
+def scale_rgb_tiff(input_file):
+    """
+    Reads an RGB TIFF file, scales each channel by 1000x, and saves the result to a new file.
+    
+    Parameters:
+    -----------
+    input_file : str
+        Relative file path of the input TIFF file.
+    """
+    # Read the TIFF file
+    input_path = os.path.abspath(input_file)
+    output_path = os.path.splitext(input_path)[0] + '_1000x.tiff'
+
+    # Load the image
+    with tifffile.TiffFile(input_path) as tif:
+        image = tif.asarray()
+
+    # Ensure the image is RGB and values are between 0 and 1
+    if image.ndim != 3 or image.shape[2] != 3:
+        raise ValueError("Input TIFF must be an RGB image.")
+    if not (0 <= image.min() <= image.max() <= 1):
+        raise ValueError("RGB values must be between 0 and 1.")
+
+    # Scale each channel by 1000x
+    scaled_image = (image * 1000).astype(np.float32)
+
+    # Save the scaled image to a new TIFF file
+    tifffile.imwrite(output_path, scaled_image)
+
+    print(f"Scaled image saved to: {output_path}")
+
+
+# scale_rgb_tiff('./datasets/rgb/rgb_tiff.tiff')
+
+
