@@ -1379,6 +1379,19 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
             norm_theta = minimization_result.x
             convergence_record.append(convergence)
 
+            # DEBUGGING: 
+            if hypothesis_index == 1:
+                with open('snapshots_hypothesis_1.txt', 'w') as f:
+                    f.write("Snapshots for hypothesis_index == 1\n\n")
+                    for i in range(snapshot_length):
+                        f.write(f"Snapshot {i + 1}:\n")
+                        f.write(f"Theta: {theta_snapshots[i]}\n")
+                        f.write(f"Denormalized Theta: {denormflat_theta_snapshots[i]}\n")
+                        f.write(f"Jacobian: {jac_snapshots[i]}\n")
+                        f.write(f"Hessian: {hess_snapshots[i]}\n")
+                        f.write("\n")
+                pass
+
             # Retrieve the estimated parameters by denormalizing the normalized parameters
             theta = denormalize(norm_theta, hypothesis_index, roi_max, szx, szy, alpha, color_mode=color_mode)
         
