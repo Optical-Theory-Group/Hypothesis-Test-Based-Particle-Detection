@@ -26,3 +26,5 @@ processing/*
 psf4_const_peak_height_bg_test/*
 test_configs/*
 *.tiff
+local_code_backup/*
+psf_tolerance_test_configs/*
