@@ -568,9 +568,11 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
     """
     # Print the name of the image file
     if image_filename.lower().endswith(('.tif', '.tiff')):
-        entire_image = tifffile.imread(image_filename).astype(np.float32)
+        # entire_image = tifffile.imread(image_filename).astype(np.float32)
+        entire_image = tifffile.imread(image_filename)
     else:
-        entire_image = np.array(im.open(image_filename), dtype=np.float32)
+        # entire_image = np.array(im.open(image_filename), dtype=np.float32)
+        entire_image = np.array(im.open(image_filename))
 
     # Check if the image is grayscale or RGB
     if entire_image.ndim == 2:  # Grayscale image

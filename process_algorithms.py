@@ -356,7 +356,7 @@ def modified_neg_loglikelihood_fn(norm_flat_trimmed_theta, hypothesis_index, roi
         modified_neg_loglikelihood = np.sum(roi_model - roi_image * np.log(roi_model))
     else: # Case: rgb image
         # Note: roi_model is a 3D array with shape (3, szy, szx)
-        modified_neg_loglikelihood = np.sum([roi_image[:,:,ch] * np.log(roi_model[ch]) - roi_model[ch] for ch in range(3)]) # sum over the color channels (axis=0)
+        modified_neg_loglikelihood = np.sum([roi_model[ch] - roi_image[:,:,ch] * np.log(roi_model[ch]) for ch in range(3)]) # sum over the color channels (axis=0)
 
     # Add the penalty for out-of-bounds particles
     modified_neg_loglikelihood += out_of_bounds_particle_penalty(theta, szx, szy, color_mode=color_mode) 
@@ -803,7 +803,8 @@ def get_tentative_peaks(image, min_distance=1,color_mode=None): # How does it pe
     if color_mode == 'rgb':
         # To visualize the image before processing, uncomment the following line:
         # plt.imshow(image.astype(np.uint8))
-        grayscale_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) # Not yet tested [TODO]
+        grayscale_image = np.mean(image, axis=2)
+        # grayscale_image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY) # Not yet tested [TODO]
     elif color_mode == 'gray' or color_mode == 'grayscale':
         grayscale_image = image
     else:
@@ -1161,7 +1162,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
     display_xi_graph = True
 
     # Convert the input image to float32. 
-    roi_image = roi_image.astype(np.float32)
+    # roi_image = roi_image.astype(np.float32)
 
     # Set the random seed
     np.random.seed(random_seed)
@@ -1285,7 +1286,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                 theta[0][x_index] = theta[0][y_index] = np.nan
             else: # rgb
                 for ch in range(3):
-                    theta[0][ch] = roi_min[ch] + .07555
+                    theta[0][ch] = roi_min[ch] 
                 theta[0][x_index] = theta[0][y_index] = np.nan
 
             # Set initial guess of all particle intensities as alpha where alpha = (roi_max - roi_min) * 2 * np.pi * psf_sigma**2 is a reasonable initial guess for the intensity of the particle.
@@ -1293,13 +1294,13 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                 theta[1:, 0] = alpha
             else: # rgb
                 for ch in range(3):
-                    theta[1:, ch] = alpha[ch] + 0.0001111
+                    theta[1:, ch] = alpha[ch]
 
             # Initialize particle coordinates according to the tentative peaks found.
             for particle_index in range(1, hypothesis_index + 1):
                 if particle_index <= len(rough_peaks_xy):
-                    theta[particle_index][x_index] = rough_peaks_xy[particle_index-1][0] + .0003333
-                    theta[particle_index][y_index] = rough_peaks_xy[particle_index-1][1] + .0007777
+                    theta[particle_index][x_index] = rough_peaks_xy[particle_index-1][0] 
+                    theta[particle_index][y_index] = rough_peaks_xy[particle_index-1][1] 
                 else:
                     # assign random positions. 
                     theta[particle_index][x_index] = random.random() * (szx - 1)
@@ -1434,7 +1435,7 @@ def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, ra
                 if color_mode == 'gray' or color_mode == 'grayscale':
                     ax_main[0][hypothesis_index].text(theta[particle_index][x_index] + np.random.rand() * 1.5, theta[particle_index][y_index] + (np.random.rand() - 0.5) * 4, f'  {theta[particle_index][0]:.2f}', color=color_code, fontsize=6,)
                 else:
-                    ax_main[0][hypothesis_index].text(theta[particle_index][x_index] + np.random.rand() * 1.5, theta[particle_index][y_index] + (np.random.rand() - 0.5) * 4, f'  {theta[particle_index][0]:.2f}, {theta[particle_index][1]:.2f}, {theta[particle_index][2]:.2f}', color=color_code, fontsize=7,) 
+                    ax_main[0][hypothesis_index].text(theta[particle_index][x_index] + np.random.rand() * 1.5, theta[particle_index][y_index] + (np.random.rand() - 0.5) * 4, f'{theta[particle_index][0]:.2f},\n{theta[particle_index][1]:.2f},\n{theta[particle_index][2]:.2f}', color=color_code, fontsize=7,) 
             if snapshot_length > 0:
                 ax_main[1][hypothesis_index].set_title(f'Gradient norm\nFinal func val: {fn_snapshots[-1]:.04e}', fontsize=8)
                 ax_main[1][hypothesis_index].plot(np.arange(snapshot_length), gradientnorm_snapshots, '-o', color='black', markersize=2, label='Gradient norm')
