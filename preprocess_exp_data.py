@@ -179,7 +179,7 @@ def main():
                     return
                     
             intervaled_tiff_files = all_tiff_files[::interval]
-            print("\nIntervaled TIFF files to be divided into subimages:")
+            print(f"Intervaled (interval: {interval}) TIFF files to be divided into subimages:")
             for i, file in enumerate(intervaled_tiff_files):
                 print(f"{i + 1}. {file}")
         except Exception as e:
@@ -376,8 +376,8 @@ def main():
             input_file_path = os.path.join(input_folder, file)
             n1 = 40 
             n2 = 4
-            # short_name = file[:n1] + '___' + file.split('.tif')[0][-n2:] if len(file) > 50 else file
-            short_name = file.split('.tif')[0]
+            short_name = file[:n1] + '___' + file.split('.tif')[0][-n2:] if len(file) > 50 else file
+            # short_name = file.split('.tif')[0]
             short_names.append(short_name)
             output_dir = os.path.join(input_folder, short_name)
             if not args.terminal:
@@ -422,7 +422,16 @@ def main():
                 print(f">> {i + 1}. {tiff_file}")
             
         # Ask user to select files by numbers
-        selections = input("Enter file numbers (e.g., '1, 4, 6, 11' or '1-5' or '1, 2, 4-7, 9'): ").strip()
+        # Default to the first 10% of files if the user presses Enter
+        default_count = max(1, len(tiff_files) // 10)  # Ensure at least 1 file is selected
+        default_selections = ', '.join(str(i + 1) for i in range(min(default_count, len(tiff_files))))
+        
+        prompt = f"Enter file numbers (e.g., '1, 4, 6, 11' or '1-5' or '1, 2, 4-7, 9') or press Enter for default (first {min(default_count, len(tiff_files))} files): "
+        selections = input(prompt).strip()
+        
+        if not selections:
+            selections = default_selections
+            print(f"Using default selections: {selections}")
         
         # Parse the selections
         selected_indices = []
@@ -541,7 +550,7 @@ def main():
     vmax = max(np.max(image) for image in images)
     
     # Plot original and fitted images side-by-side for the selected images
-    n_plot = 5
+    n_plot = min(5, len(images))  # Ensure at least 5 plots are shown
     for i in range(n_plot):
         plt.subplot(n_plot, 2, 2 * i + 1)
         plt.title(f'Original {i+1}', fontsize=8)
@@ -589,8 +598,8 @@ def main():
 
         for file in os.listdir(input_folder):
             if file.endswith('.tiff'):
-                # short_name = file[:n1] + '___' + file.split('.tif')[0][-n2:] if len(file) > 50 else file
-                short_name = file.split('.tif')[0]
+                short_name = file[:n1] + '___' + file.split('.tif')[0][-n2:] if len(file) > 50 else file
+                # short_name = file.split('.tif')[0]
                 output_dir = os.path.join(input_folder, short_name)
                 if os.path.isdir(output_dir):
                     new_output_dir = os.path.join(datasets_dir, short_name)
@@ -615,7 +624,7 @@ def main():
         if os.path.isdir(folder_path):
             config_data = {
                 "image_folder_namebase": short_name,
-                "code_version_date": "2025-02-12",
+                "code_version_date": "2025-05-02",
                 "file_format": "tiff",
                 "analyze_the_dataset?": True,
                 "ana_random_seed": np.random.randint(0, 10000),

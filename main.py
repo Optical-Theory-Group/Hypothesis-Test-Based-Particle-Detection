@@ -906,8 +906,15 @@ def combine_log_files(analyses_folder, image_folder_basename, code_version_date,
     Returns:
         None
     '''
-    # Create the fitting_results.csv file
-    whole_metrics_log_filename = os.path.join(analyses_folder, f'{image_folder_basename}_code_ver{code_version_date}_metrics_log_per_image_hypothesis.csv')
+    # First ensure the analyses_folder exists
+    os.makedirs(analyses_folder, exist_ok=True)
+
+    # Create the fitting_results.csv file (with a shorter name if necessary)
+    short_basename = image_folder_basename[:20] if len(image_folder_basename) > 20 else image_folder_basename
+    whole_metrics_log_filename = os.path.normpath(os.path.join(
+        analyses_folder, 
+        f'{short_basename}_metrics_log.csv'  # Shortened filename
+    ))
     print(f"Creating log with all metrics: {whole_metrics_log_filename}")
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
 
@@ -1205,7 +1212,7 @@ if __name__ == '__main__':
         # Run the main function with profiling (Useful for debugging)
         # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. When True, it will run on **seriallly (instead of parallel)** to profile the code.
 
-    # Call the main function with the provided arguments in sys.argv
+    # Call the main function
     main()
     # Run as below if you want to run the code without moving the finished config files to the finished_configs folder. Useful for debugging where you want to repeatedly run the same config file.
     # main(move_finished_config_file=False)
