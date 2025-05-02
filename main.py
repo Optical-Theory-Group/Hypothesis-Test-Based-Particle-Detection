@@ -512,6 +512,12 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
 
         # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files):
+
+
+            # Print the filename being analyzed
+            # if filename.lower().endswith("div_02_11.tiff"):
+            #     pass # for Debug
+
             # Read the first image file to determine if it is grayscale or RGB
             # Analyze the image
             try:
@@ -594,7 +600,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
     else:
         actual_num_particles = -1
     
-    foldername = os.path.basename(os.path.dirname(image_filename))
+    # foldername = os.path.basename(os.path.dirname(image_filename))
 
     def analyze_region_of_interest(tiling, roi_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=None, color_mode=None):
         """ Analyze the region of interest (ROI) of the image. """
@@ -665,7 +671,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
             n_x += 1
         while n_y * tile_jump_distance + tile_width < image_side_length:
             n_y += 1
-        print(f"{image_filename} is divided into {(n_x + 1) * (n_y + 1)} tiles.")
+        print(f"{basename} is divided into {(n_x + 1) * (n_y + 1)} tiles.")
 
         # Create a dictionary to store tile information
         tile_dicts_array = np.zeros((n_y + 1, n_x + 1), dtype=object)
@@ -683,9 +689,9 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         for tile_dict in tile_dicts_array.flatten():
             # Set the tile file name for the current tile
             tilename = f"tile_x{tile_dict['x_low_end']}-{min(tile_dict['x_low_end'] + tile_width, img_width)}_y{tile_dict['y_low_end']}-{min(tile_dict['y_low_end'] + tile_width, img_height)}"
-            print(f"Processing tile {tilename} in image {image_filename}", end='\r')
-            roi_name = f"{image_filename} {tilename})"
-            estimated_num_particles_for_roi, chosen_fit, _ = analyze_region_of_interest(tilng, tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name, color_mode=color_mode)
+            print(f"Processing tile {tilename} in image {basename}", end='\r')
+            roi_name = f"{basename} {tilename})"
+            estimated_num_particles_for_roi, chosen_fit, _ = analyze_region_of_interest(tiling, tile_dict['image_slice'], psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=basename, color_mode=color_mode)
             particle_locations = []
             for particle_index in range(1, estimated_num_particles_for_roi + 1):
                 loc = chosen_fit[particle_index][1:3]
@@ -694,9 +700,9 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         
         # Combine the results of the tiles
         resulting_locations, determined_intensities = merge_coincident_particles(entire_image, tile_dicts_array, psf_sigma)
-        estimated_num_particles = len(merged_locations)
+        estimated_num_particles = len(resulting_locations)
     else:
-        estimated_num_particles, chosen_fit, determined_intensities = analyze_region_of_interest(tiling, entire_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=image_filename, color_mode=color_mode)
+        estimated_num_particles, chosen_fit, determined_intensities = analyze_region_of_interest(tiling, entire_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=basename, color_mode=color_mode)
 
     analyze_image_result = {
         'actual_num_particles': actual_num_particles,
@@ -756,11 +762,21 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_basename, c
     if df.empty or len(df) == 1:
         print("The CSV file is empty or only contains headers. No data to process.")
         return
+        
     # Check if the CSV file contains the columns 'Actual Particle Count' and 'Estimated Particle Count'
     if 'Actual Particle Count' not in df.columns and 'Actual Particle Number' not in df.columns:
         print("The column name 'Actual Particle Count' or 'Actual Particle Number' is not found in the CSV file.")
         return
     
+    # Check if any of the actual counts are -1 (unknown)
+    # If there are unknown counts, skip generating the confusion matrix
+    if (df['Actual Particle Count'] == -1).any():
+        print("Some images have unknown actual particle counts (-1). Skipping confusion matrix generation.")
+        return
+        
+    actual = df['Actual Particle Count']
+    estimated = df['Estimated Particle Count']
+
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
     
@@ -1175,13 +1191,21 @@ def main(move_finished_config_file=True):
     # Calculate the time taken for the batch job
     time_taken = batchjobendtime - batchjobstarttime
     # Print the time taken for the batch job in seconds
-    print(f'\nBatch job completed in {time_taken.total_seconds():.2f} seconds')
+    print(f'Batch job completed in {time_taken.total_seconds():.2f} seconds')
 
 
 # Run the main function if the script is executed from the command line
 if __name__ == '__main__':
+
     if 'pydevd' in sys.modules or 'debugpy' in sys.modules:
+
         # Run the main function without parallel processing ('-p' option value is False)
-        # sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-        sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. Default is False, and it will run on multiple processes.
-    main(move_finished_config_file=False)
+        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+
+        # Run the main function with profiling (Useful for debugging)
+        # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. When True, it will run on **seriallly (instead of parallel)** to profile the code.
+
+    # Call the main function with the provided arguments in sys.argv
+    main()
+    # Run as below if you want to run the code without moving the finished config files to the finished_configs folder. Useful for debugging where you want to repeatedly run the same config file.
+    # main(move_finished_config_file=False)

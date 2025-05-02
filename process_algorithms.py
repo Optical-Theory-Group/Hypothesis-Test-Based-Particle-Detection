@@ -978,7 +978,7 @@ def merge_coincident_particles(entire_image, tile_dicts, psf, display_merged_loc
 
     # Initialize the resulting locations and intensities.
     resulting_locations = []
-    result_intensities = []
+    resulting_intensities = []
     
     for tile_dict in tile_dicts.flatten():
         for loc in tile_dict['particle_locations']:
@@ -1158,11 +1158,9 @@ def calculate_fisher_information_matrix_vectorized(norm_flat_trimmed_theta, szy,
 def generalized_maximum_likelihood_rule(roi_image, psf_sigma, last_h_index=5, random_seed=0, display_fit_results=False, display_xi_graph=False, use_exit_condition=False, roi_name=None, color_mode=None):
 
     # Temporarily set the display_fit_results to True for debugging purposes.
-    display_fit_results = True
-    display_xi_graph = True
 
     # Convert the input image to float32. 
-    # roi_image = roi_image.astype(np.float32)
+    roi_image = roi_image.astype(np.float32)
 
     # Set the random seed
     np.random.seed(random_seed)
