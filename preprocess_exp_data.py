@@ -69,7 +69,7 @@ def rough_count_particles(tiff_path):
 # rough_count = rough_count_particles(tiff_path)
 
 
-def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_callback=None, crop_root_img_fraction=1):
+def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_callback=None, crop_root_img_fraction=0.7):
     os.makedirs(output_dir, exist_ok=True)
     with Image.open(input_file_path) as img:
         if img.mode == 'RGB':
