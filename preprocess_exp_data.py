@@ -1,7 +1,8 @@
 import os
 import shutil
-import tkinter as tk
-from tkinter import filedialog, simpledialog, messagebox, ttk
+import sys
+# import tkinter as tk
+# from tkinter import filedialog, simpledialog, messagebox, ttk
 from PIL import Image
 import numpy as np
 from math import ceil
@@ -13,6 +14,7 @@ import json
 import cv2
 from scipy import ndimage
 from skimage import filters, morphology
+from datetime import datetime, timedelta
 
 def rough_count_particles(tiff_path):
     # Step 1: Open and convert to grayscale (average channels)
@@ -34,6 +36,14 @@ def rough_count_particles(tiff_path):
         grayscale_norm = grayscale / 255.0
     else:
         raise ValueError("Unsupported image bit depth. Only 8-bit and 16-bit images are supported.")
+
+    # crop to middle 50% of the image to avoid dark corners associated with Gaussian beam profile
+    height, width = img.shape[:2]
+    crop_height = height // 2
+    crop_width = width // 2
+    start_y = (height - crop_height) // 2
+    start_x = (width - crop_width) // 2
+    img = img[start_y:start_y + crop_height, start_x:start_x + crop_width]
 
     # Step 3: Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(grayscale_norm, (5, 5), 0)
@@ -59,13 +69,29 @@ def rough_count_particles(tiff_path):
 # rough_count = rough_count_particles(tiff_path)
 
 
-def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_callback=None):
+def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_callback=None, crop_root_img_fraction=1):
     os.makedirs(output_dir, exist_ok=True)
     with Image.open(input_file_path) as img:
         if img.mode == 'RGB':
             img = img.convert('L')
         img_array = np.array(img)
     img_height, img_width = img_array.shape
+
+    # crop down to central image region according to the crop_root_img_fraction to avoid dark corners associated with Gaussian beam profile
+    if crop_root_img_fraction > 1 or crop_root_img_fraction < 0:
+        print("Warning: Invalid crop fraction value. Using default of 0.7.")
+        crop_root_img_fraction = 0.7
+
+    if crop_root_img_fraction < 1:
+        crop_pixel_height = int(img_height * crop_root_img_fraction)
+        crop_pixel_width = int(img_width * crop_root_img_fraction)
+        crop_top_bottom_pixels = (img_height - crop_pixel_height) // 2
+        crop_left_right_pixels = (img_width - crop_pixel_width) // 2
+        
+        img_array = img_array[crop_top_bottom_pixels:crop_top_bottom_pixels + crop_pixel_height,
+                              crop_left_right_pixels:crop_left_right_pixels + crop_pixel_width]
+        img_height, img_width = img_array.shape
+
     num_sub_images_x = ceil((img_width - overlap) / (divide_dim[0] - overlap))
     num_sub_images_y = ceil((img_height - overlap) / (divide_dim[1] - overlap))
     total_sub_images = num_sub_images_x * num_sub_images_y
@@ -133,16 +159,124 @@ def gaussian_2d_wrapper(coordinates, x0, y0, sigma, amplitude, offset):
     y, x = coordinates
     return gaussian_2d(x, y, x0, y0, sigma, amplitude, offset).ravel()
 
+def get_time_differences(filenames):
+    """
+    Calculates the time differences between consecutive files
+    based on HH-MM-SS timestamps in their filenames.
+
+    Args:
+        filenames: array of sorted filenames (strings) that contain timestamps
+
+    Returns:
+        list: A list of timedelta objects representing the time differences
+              between consecutive files, sorted by their timestamps.
+              Returns an empty list if there are fewer than two relevant files.
+    """
+    file_timestamps = []
+
+    # Extract timestamps and associate with full paths
+    for filename in filenames:
+        if len(filename) >= 9 and filename[2] == '-' and filename[5] == '-' and filename[8] == '_':
+            timestamp_str = filename[:8]  # e.g., "HH-MM-SS"
+            try:
+                # Assuming the files are from the same day, or we only care about time of day differences.
+                dt_object = datetime.strptime(timestamp_str, "%H-%M-%S")
+                file_timestamps.append((dt_object, filename)) # Store datetime object and original filename
+            except ValueError:
+                # Handle cases where the format doesn't match despite initial checks
+                print(f"Warning: Could not parse timestamp from filename: {filename}")
+                continue
+        else:
+            print(f"Skipping file (does not match expected format): {filename}")
+
+    if not file_timestamps:
+        print("No files with matching HH-MM-SS_ format found or parsed successfully.")
+        return []
+
+
+    difference_seconds = []
+    # Calculate differences between consecutive files
+    for i in range(1, len(file_timestamps)):
+        current_time = file_timestamps[i][0]
+        previous_time = file_timestamps[i-1][0]
+
+        # Calculate the difference. NB We do not handle cases where the time wraps around midnight.
+        difference = current_time - previous_time
+        
+        # Convert the timedelta object to total seconds
+        difference_seconds.append(difference.total_seconds())           
+
+    return difference_seconds
+
+def find_iqr_threshold(data, k=3):
+    """
+    Calculates the upper bound threshold for outliers using the IQR method.
+
+    The IQR method defines potential outliers as data points that fall
+    outside of the range [Q1 - k*IQR, Q3 + k*IQR]. This function specifically
+    returns the upper bound (Q3 + k*IQR) as the threshold for 'long' intervals.
+
+    Args:
+        data (list or numpy.ndarray): A list or array of numerical data (e.g., time differences).
+        k (float): The multiplier for the IQR. Common values are 1.5 (for mild outliers)
+                   or 3.0 (for extreme outliers). Defaults to 1.5.
+
+    Returns:
+        float: The calculated upper bound threshold. Returns 0 if data is empty or too short.
+    """
+    if not data or len(data) < 2:
+        print("Warning: Data is empty or has too few elements to calculate quartiles. Returning 0.")
+        return 0.0
+
+    # Convert to numpy array for robust percentile calculations
+    data_np = np.array(data)
+
+    # Calculate Q1 (25th and 75th percentile)
+    Q1 = np.percentile(data_np, 25)
+    Q3 = np.percentile(data_np, 75)
+
+    # Calculate the Interquartile Range (IQR)
+    IQR = Q3 - Q1
+
+    # Calculate the upper bound threshold
+    upper_bound_threshold = Q3 + k * IQR
+
+    return upper_bound_threshold
+
+
+def get_intervaled_tiffs_files(all_tiff_files, interval=0):
+    # we use the time stamps in the file name to calculate interval between each image and the select the first image occuring after a large inteveral. 
+    # The large interval is found automatically using an interquartile range method. 
+    # These images should then correspond to images from distinct image runs in different sample regions.
+    
+    if interval == 0:
+        time_diffs = get_time_differences(sorted(all_tiff_files))
+        threshold = find_iqr_threshold(time_diffs)
+        print(f"Threshold image interval is {threshold} seconds.")
+
+        big_interval_inds = np.where(time_diffs >= threshold)[0] + 1
+        img_inds = np.insert(big_interval_inds, 0, 0)
+
+        intervaled_tiff_files = [all_tiff_files[i] for i in img_inds]
+    else:
+        intervaled_tiff_files = all_tiff_files[::interval]
+
+    return intervaled_tiff_files
+
+
 def main():
     parser = argparse.ArgumentParser(description="Divide TIFF images into smaller sub-images and perform Gaussian fitting.")
     parser.add_argument('-t', '--terminal', action='store_true', help="Run the process without UI")
     parser.add_argument('-f', '--folder', type=str, help="Folder containing TIFF images to be divided")
     parser.add_argument('-s', '--size', type=int, help="Size of sub-image (sz x sz)")
     parser.add_argument('-o', '--overlap', type=int, default=0, help="Overlap size in pixels")
-    parser.add_argument('-i', '--interval', type=int, default=1, help="Process every Nth file (e.g., 2 means every 2nd file)")
+    parser.add_argument('-i', '--interval', type=int, default=0, help="Process every Nth file (e.g., 2 means every 2nd file). 0 implies an IQR method timestamps method is used.")
+    parser.add_argument('-c', '--crop', type=int, default=0.7, help="Crop down size of raw image files (e.g., 0.7 means image height and width will be reduced to 0.7 of the original size)")
     parser.add_argument('--save-plots', action='store_true', help="Save plots to file instead of displaying (useful for headless environments)")
     args = parser.parse_args()
 
+    
+  
     if args.terminal:
         if not args.folder:
             print("Error: Folder must be provided.")
@@ -160,15 +294,17 @@ def main():
                 
         # Process file interval setting
         interval = args.interval
-        if interval <= 0:
+        if interval < 0:
             print("Warning: Invalid interval value. Using default of 1 (process all files).")
             interval = 1
+        elif interval == 0:
+            print("Processing files based on timestamp intervals.")
         elif interval > 1:
             print(f"Processing every {interval}th file.")
 
         # List TIFF files in the folder
         try:
-            all_tiff_files = [f for f in os.listdir(input_folder) if f.endswith('.tiff')]
+            all_tiff_files = sorted([f for f in os.listdir(input_folder) if f.endswith('.tiff')])
             if not all_tiff_files:
                 print(f"Warning: No TIFF files found in '{input_folder}'")
                 all_tiff_files = [f for f in os.listdir(input_folder) if f.lower().endswith(('.tiff', '.tif'))]
@@ -177,8 +313,8 @@ def main():
                 else:
                     print(f"No TIFF or TIF files found in the folder. Exiting.")
                     return
-                    
-            intervaled_tiff_files = all_tiff_files[::interval]
+
+            intervaled_tiff_files = get_intervaled_tiffs_files(all_tiff_files, interval)
             print(f"Intervaled (interval: {interval}) TIFF files to be divided into subimages:")
             for i, file in enumerate(intervaled_tiff_files):
                 print(f"{i + 1}. {file}")
@@ -259,8 +395,9 @@ def main():
 
         interval = simpledialog.askinteger("Tiff file skip interval", "Enter the interval for processing TIFF files (e.g., 2 means every 2nd file):", initialvalue=1, minvalue=1)
 
-        all_tiff_files = [f for f in os.listdir(input_folder) if f.endswith('.tiff')]
-        intervaled_tiff_files = all_tiff_files[::interval]
+        all_tiff_files = sorted([f for f in os.listdir(input_folder) if f.endswith('.tiff')])
+
+        intervaled_tiff_files = get_intervaled_tiffs_files(all_tiff_files) 
 
         files_list = "\n".join(intervaled_tiff_files)
 
@@ -366,6 +503,7 @@ def main():
         print(f"Division into {sz}x{sz} subimages with {overlap} overlap will now begin for intervaled tiff files (unit: pixel).")
         
     # Perform image division
+    crop_img_fraction = args.crop
     try:
         if not intervaled_tiff_files:
             raise FileNotFoundError("No TIFF files found in the selected folder.")
@@ -383,7 +521,7 @@ def main():
             if not args.terminal:
                 current_file_label.config(text=f"Dividing file: {file}")
                 root.update_idletasks()
-            divide_images(input_file_path, output_dir, (sz, sz), overlap, update_progress)
+            divide_images(input_file_path, output_dir, (sz, sz), overlap, update_progress, crop_img_fraction)
             print(f"Processed {file}")
     except FileNotFoundError as e:
         if not args.terminal:
@@ -403,7 +541,9 @@ def main():
     if args.terminal:
         print("Please choose a folder from the following list to use for determining PSF width:")
         for i, short_name in enumerate(short_names):
-            print(f">> {i + 1}. {short_name}")
+            output_dir = os.path.join(input_folder, short_name)
+            num_files = len(os.listdir(output_dir))
+            print(f">> {i + 1}. {short_name} ({num_files} files)")
         folder_choice = int(input("Enter the number of the folder you want to use: ")) - 1
         selected_folder = os.path.join(input_folder, short_names[folder_choice])
         
@@ -619,6 +759,7 @@ def main():
     # Create config JSON files for each dataset
     config_dir = './configs'
     os.makedirs(config_dir, exist_ok=True)
+    skipall_edits = False
     for short_name in short_names:
         folder_path = os.path.join(datasets_dir, short_name)
         if os.path.isdir(folder_path):
@@ -635,10 +776,10 @@ def main():
             }
 
             # Allow terminal users to edit config before saving
-            if args.terminal:
+            if args.terminal and not skipall_edits:
                 print("\n==== Configuration for", short_name, "====")
                 print(json.dumps(config_data, indent=4))
-                edit_config = input("\nEdit this configuration before saving? (y/n): ").strip().lower()
+                edit_config = input("\nEdit this configuration before saving? Yes (y), No (n) or No for all remaining (na): ").strip().lower()
                 if edit_config == 'y':
                     print("\nYou can edit the following parameters:")
                     for i, (key, value) in enumerate(config_data.items(), 1):
@@ -677,6 +818,8 @@ def main():
                     
                     print("\nFinal configuration:")
                     print(json.dumps(config_data, indent=4))
+                elif edit_config == 'na':
+                    skipall_edits = True
             
             config_path = os.path.join(config_dir, f'{short_name}.json')
             with open(config_path, 'w') as config_file:
@@ -718,4 +861,11 @@ def main():
     print("All done.")
 
 if __name__ == "__main__":
+    # if 'pydevd' in sys.modules or 'debugpy' in sys.modules:
+    # #     # Run the main function without parallel processing ('-p' option value is False)
+    #     sys.argv = ["preprocess_exp_data.py", "--folder", "./datasets/coreshell_np_data/130125_Au_nanoshell_Ag/130125_covidvirus_ctrl", "--terminal", "--size", "50", "--interval", "0", "--save-plot"] 
+    #     # ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+
+  # args = 
+
     main()
