@@ -731,7 +731,7 @@ def generate_intensity_histogram(label_pred_log_file_path, image_folder_basename
     _, ax = plt.subplots()
     ax.hist(all_intensities, bins=20)
     ax.set_xlabel('Particle Intensity')
-    ax.set_ylabel('Frequency')
+    ax.set_ylabel('Occurences')
     ax.set_title('Intensity Histogram')
     if display:
         plt.show(block=False)
@@ -952,10 +952,10 @@ def count_occurence(label_pred_log_file_path):
         # Count occurrences of each estimated count
         count_series = df['Estimated Particle Count'].value_counts().sort_index()
         
-        # Convert to DataFrame with columns 'Estimated Count' and 'Frequency'
+        # Convert to DataFrame with columns 'Estimated Count' and 'Occurrence'
         count_df = pd.DataFrame({
             'Estimated Count': count_series.index,
-            'Frequency': count_series.values
+            'Occurrence': count_series.values
         })
         
         # Save to CSV
