@@ -272,6 +272,7 @@ def main():
     parser.add_argument('-o', '--overlap', type=int, default=0, help="Overlap size in pixels")
     parser.add_argument('-i', '--interval', type=int, default=0, help="Process every Nth file (e.g., 2 means every 2nd file). 0 implies an IQR method timestamps method is used.")
     parser.add_argument('-c', '--crop', type=int, default=0.7, help="Crop down size of raw image files (e.g., 0.7 means image height and width will be reduced to 0.7 of the original size)")
+    parser.add_argument('-m', '--maxhindex', type=int, help="Set maximum hypothesis index in config file (ana_maximum_hypothesis_index). Default is 5")
     parser.add_argument('--save-plots', action='store_true', help="Save plots to file instead of displaying (useful for headless environments)")
     args = parser.parse_args()
 
@@ -771,7 +772,7 @@ def main():
                 "ana_random_seed": np.random.randint(0, 10000),
                 "ana_predefined_psf_sigma": round(mean_sigma, 3),
                 "ana_use_premature_hypothesis_choice?": False,
-                "ana_maximum_hypothesis_index": 5,
+                "ana_maximum_hypothesis_index": args.maxhindex if args.maxhindex is not None else 5,
                 "ana_delete_the_dataset_after_analysis?": False
             }
 
