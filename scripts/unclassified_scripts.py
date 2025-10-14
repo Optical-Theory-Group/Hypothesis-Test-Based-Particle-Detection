@@ -1,8 +1,10 @@
+import matplotlib as mpl 
+mpl.rcParams['svg.fonttype'] = 'none'
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from image_generation import psfconvolution
-from process_algorithms import generalized_maximum_likelihood_rule_on_rgb
+# from process_algorithms import generalized_maximum_likelihood_rule_on_rgb
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,6 +14,7 @@ import pandas as pd
 from collections import defaultdict
 import datetime
 import csv
+# import matplotlib as mpl
 
 pd.options.display.float_format = '{:.4f}'.format
 
@@ -85,27 +88,40 @@ def correct_json_files(directory):
 						json.dump(data, file, indent=4)
 	print("Corrections completed.")
 
-def process_separation_test_results(directory='', prefix="separation_test_psf0_5", show_legend=False):
+def process_separation_test_results(directory='', prefix="separation_test_psf0_5", show_legend=False, plot_legend_separately=False):
 	""" Extracts the count of each estimated particle count as a function of separation from the log files in the given directory.
 		Generates a CSV file containing the extracted data and plots the results.
-	
+
 		Args:
 			prefix (str): The prefix of the folder name to search for in the directory.
 
 		Returns:
 			tuple: A tuple containing the probability of overlap per particle, probability of overlap per area, and surface densities.
 	"""
-	# directory = os.path.join('./analyses/', dir)
-	# Dictionary to store the count of each estimated particle count vs. separation
+	mpl.rcParams['svg.fonttype'] = 'none'  # Ensure SVG text is not converted to paths
+
+	if plot_legend_separately:
+		fig_legend = plt.figure(figsize=(2, 2))
+		handles, labels = [], []
+		for estimation in range(6):
+			handle, = plt.plot([], [], marker='o', color=sns.color_palette("turbo", 6)[estimation], label=f'estimation={estimation}')
+			handles.append(handle)
+			labels.append(f'estimation={estimation}')
+		legend = fig_legend.legend(handles=handles, labels=labels, loc='center left', framealpha=0.8, fontsize='small')
+		plt.axis('off')
+		legend_filename = input("Enter filename to save legend (e.g. legend.svg): ").strip()
+		if legend_filename:
+			fig_legend.savefig(legend_filename, format='svg', bbox_inches='tight')
+			print(f"Legend saved as {legend_filename}")
+		plt.close(fig_legend)
+
 	directory = os.path.join(directory)
 	counts = defaultdict(lambda: defaultdict(int))
 	pattern = re.compile(r'_sep(\d+(\_\d+)?)')
 
-	# Iterate through each folder in the directory that starts with the given prefix
 	for foldername in os.listdir(directory):
 		if foldername.startswith(prefix):
-			# Extract the separation value from the folder name
-			match = pattern.search(foldername)			    
+			match = pattern.search(foldername)
 			separation = match.group(1)
 			separation = float(separation.replace('_', '.'))
 			folder_path = os.path.join(directory, foldername)
@@ -127,35 +143,25 @@ def process_separation_test_results(directory='', prefix="separation_test_psf0_5
 
 	for est in range(6):
 		data[f'estimation=={est}'] = [counts[est][sep] if sep in counts[est] else 0 for sep in sep_to_psf_ratios]
-	
+
 	df = pd.DataFrame(data)
 	df.to_csv(f'{prefix}_particle_count_vs_separation.csv', index=False)
 	print(df)
 
 	total_counts = {sep: sum(counts[est][sep] for est in range(6)) for sep in sep_to_psf_ratios}
-	# Set Seaborn style
 
 	sns.set_theme(style="whitegrid")
-	palette = sns.color_palette("turbo", 6)  # Using 'viridis' colormap with 6 distinct colors
+	palette = sns.color_palette("turbo", 6)
 
 	percentage_data = {'separation': sep_to_psf_ratios}
 	for est in range(6):
 		percentage_data[f'estimation=={est}'] = [counts[est][sep] / total_counts[sep] * 100 if sep in counts[est] else 0 for sep in sep_to_psf_ratios]
 
-	# percentage_df = pd.DataFrame(percentage_data)
-
-	# # percentage_df.to_csv(f'{prefix}_particle_count_percentage_vs_separation.csv', index=False)
-	# print(percentage_df)
-
 	psf_float = float(prefix.split("psf")[-1].replace('_', '.'))
 
-	# Plotting the count of each estimated particle count as a function of separation
-
-	# _, axs = plt.subplots(2, 1, figsize=(12, 7))
-	# sep_to_psf_ratios = np.array(sorted({f"{float(sep):.1f}" for est_dict in counts.values() for sep in est_dict.keys()}))
 	_, axs = plt.subplots(figsize=(7, 3))
 	for estimation in range(6):
-		plt.plot(sep_to_psf_ratios, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o', 
+		plt.plot(sep_to_psf_ratios, data[f'estimation=={estimation}'], label=f'estimation={estimation}', marker='o',
 				 color=palette[estimation], alpha=0.7, linewidth=2, markersize=9)
 
 	plt.xlabel('Separation to PSF width ratio', fontsize=14)
@@ -163,41 +169,33 @@ def process_separation_test_results(directory='', prefix="separation_test_psf0_5
 	plt.ylabel('Count', fontsize=14)
 	plt.yticks(fontsize=12)
 	if show_legend:
-		plt.legend(loc='center left', framealpha = 0.8, fontsize='small')
+		plt.legend(loc='center left', framealpha=0.8, fontsize='small')
 	plt.tight_layout()
-	# plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
 	plt.grid(True, linestyle='--', alpha=0.3)
-	
-	# Make the bounding box darker
+
 	ax = plt.gca()
 	for spine in ax.spines.values():
 		spine.set_edgecolor('dimgray')
 		spine.set_linewidth(1)
-	
+
 	plt.show(block=False)
 	pass
 
-
-	# Prompt the user whether to save the plot or not
 	save_plot = input("Do you want to save this plot? (y/n): ").strip().lower()
 
 	current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 	if save_plot == 'y':
-		# Generate a filename with the current date and time
-		filename = f"particle_count_vs_separation(psf)_{current_time}.svg"
-		
-		# Save the plot
+		filename = f"{prefix}_particle_count_vs_separation_(per psf)_{current_time}.svg"
+		mpl.rcParams['svg.fonttype'] = 'none'  # Ensure SVG text is not converted to paths
 		plt.savefig(filename, format='svg')
 		print(f"Plot saved as {filename}")
 	else:
 		print("Plot not saved.")
 
-	# Save the data points of the final plot to a CSV file
-	# Ask the user whether to save the data points to a CSV file
 	save_csv = input("Do you want to save the data points to a CSV file? (y/n): ").strip().lower()
 
 	if save_csv == 'y':
-		filename = f"particle_count_vs_separation(psf)_data_{current_time}.csv"
+		filename = f"{prefix}_particle_count_vs_separation_(per psf)_data_{current_time}.csv"
 		with open(filename, 'w') as file:
 			file.write("Estimation,Separation,Count\n")
 			for estimation in range(6):
@@ -207,67 +205,14 @@ def process_separation_test_results(directory='', prefix="separation_test_psf0_5
 	else:
 		print("Data points not saved.")
 
-
-
-# 	_, axs = plt.subplots(figsize=(6, 2))
-# 	# plt.sca(axs[1]) # sca: set current axis
-# 	for estimation in range(6):
-# 		plt.plot(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}'], label=f'estimation={estimation}', color=palette[estimation])
-# 	plt.xlabel('Separation (px)', fontsize=14)
-# 	plt.xlim([-.5, 21.5])
-# 	plt.xticks(fontsize=10)
-# 	plt.ylabel('Count', fontsize=14)
-# 	# plt.title(f'PSF {prefix.split("psf")[-1]} Particle Count vs Separation', fontsize=16)
-# 	if show_legend:
-# 		plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=12)
-# 	plt.grid(True)
-# 	plt.tight_layout()
-# 	plt.subplots_adjust(right=0.85)  # Adjust the right boundary of the plot to make space for the legend
-# 	# plt.show(block=False)
-#  #
-#  # # Prompt the user whether to save the plot or not
-# 	save_plot = input("Do you want to save this plot? (y/n): ").strip().lower()
-
-# 	current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-# 	if save_plot == 'y':
-# 		# Generate a filename with the current date and time
-# 		filename = f"particle_count_vs_separation(px)_{current_time}.png"
-		
-# 		# Save the plot
-# 		plt.savefig(filename)
-# 		print(f"Plot saved as {filename}")
-# 	else:
-# 		print("Plot not saved.")
-
-# 	# Save the data points of the final plot to a CSV file
-# 	filename = f"particle_count_vs_separation_data(px)_{current_time}.csv"
-# 	with open(filename, 'w') as file:
-# 		file.write("Estimation,Separation,Count\n")
-# 		for estimation in range(6):
-# 			for sep, count in zip(sep_to_psf_ratios * psf_float, data[f'estimation=={estimation}']):
-# 				file.write(f"{estimation},{sep},{count}\n")
-# 	print(f"Data points saved as {filename}")
-
-	pass
-	plt.close('all')
-	return 0
-
-	# surface_densities = np.array([0, 0.001, 0.01, 0.1, 1, 10])
 	radiuses = sep_to_psf_ratios * psf_float
 	pdf_w = np.zeros(len(radiuses))
 	cdf_w = np.zeros(len(radiuses))
-	
-	# expected_num_of_unresolvably_overlapping_particles = np.zeros(len(radiuses))
 
-	# Calculate the radius interval available
 	dr = (radiuses[1] - radiuses[0]) * psf_float
 
-	# for j, surf_den in enumerate(surface_densities):
 	for i, radius in enumerate(radiuses):
-		# Calculate the probability density function 
 		pdf_w[i] = percentage_data['estimation==1'][i] / 100 * 2 * np.pi * radius
-
-		# Calculate the cumulative density function
 		if i == 0:
 			cdf_w[i] = pdf_w[i] * dr
 		else:
@@ -282,38 +227,11 @@ def process_separation_test_results(directory='', prefix="separation_test_psf0_5
 	plt.legend(fontsize=12)
 	plt.grid(True)
 	plt.tight_layout()
-	# plt.show(block=False)
-	plt.savefig(f'psf{prefix.split("psf")[-1]}_expected_num_of_unresolvably_overlapping_particles per surface_density.png')
+	mpl.rcParams['svg.fonttype'] = 'none'  # Ensure SVG text is not converted to paths
+	plt.savefig(f'psf{prefix.split("psf")[-1]}_expected_num_of_unresolvably_overlapping_particles per surface_density.svg')
 	pass
 
-
-	# # for surf_den in enumerate(surface_densities):
-
-	# # 	prev_r = 0
-		
-	# # 	for i, r_over_psf in enumerate(sep_to_psf_ratios):
-	# # 		r = r_over_psf * psf_float
-	# # 		dr = r - prev_r
-	# # 		lam = surf_den * np.pi * r**2
-	# # 		p_est_1_per_particle[j] += percentage_data['estimation==1'][i] / 100 * 2 * np.pi * lam * r * np.exp(-lam*np.pi*r**2) * dr
-	# # 		prev_r = r
-	
-	# # plt.close('all')
-	# # plt.figure(figsize=(8, 4))
-	# # plt.plot(surface_densities, p_est_1_per_particle, label='p_est_1_per_particle', color='blue')
-	# # plt.xlabel('Surface Density (num of particle/pixel)', fontsize=14)
-	# # plt.ylabel('p_est_1_per_particle', fontsize=14)
-	# # plt.ylim(0, 1.0)
-	# # plt.title(f'PSF{prefix.split("psf")[-1]} Probability of overlap (unresolvable particles) per particle vs Surface Density', fontsize=16)
-	# # plt.legend(fontsize=12)
-	# # plt.grid(True)
-	# # plt.tight_layout()
-	# # # plt.show(block=False)
-	# # plt.savefig(f'psf{prefix.split("psf")[-1]}_p_est_1_per_particle(surface_density).png')
-
-	# # p_est_1_per_area = p_est_1_per_particle * surface_densities
-
-	# # return cdf_w, p_est_1_per_area, surface_densities
+	plt.close('all')
 	return cdf_w, radiuses, data[f'estimation==1']
 
 def plot_prob_of_estimating_two_as_one():
@@ -472,8 +390,9 @@ def create_config_files_for_separation_tests(ref_json_path='', dest_folder_path=
 
 
 # psfs = np.array(['0_707', '1_000', '1_410', '2_000', '2_830', '4_000', '5_660'])
-# for psf in psfs:
-# 	process_separation_test_results(directory='./processing_sep/', prefix=f"d5_psf{psf}", show_legend=False)
+psfs = np.array(['1_000', '1_410', '2_000', '2_830', '4_000', '5_660'])
+for psf in psfs:
+	process_separation_test_results(directory='./processing_sep/', prefix=f"d5_psf{psf}", show_legend=False, plot_legend_separately=True)
 # 	pass
 
 
