@@ -224,7 +224,8 @@ def find_iqr_threshold(data, k=3):
     Returns:
         float: The calculated upper bound threshold. Returns 0 if data is empty or too short.
     """
-    if not data or len(data) < 2:
+    # Guard for empty/short data; handle numpy arrays explicitly
+    if data is None or len(data) < 2:
         print("Warning: Data is empty or has too few elements to calculate quartiles. Returning 0.")
         return 0.0
 
@@ -248,18 +249,46 @@ def get_intervaled_tiffs_files(all_tiff_files, interval=0):
     # we use the time stamps in the file name to calculate interval between each image and the select the first image occuring after a large inteveral. 
     # The large interval is found automatically using an interquartile range method. 
     # These images should then correspond to images from distinct image runs in different sample regions.
-    
+    # (enhanced: now robust to 0 or 1 file and filenames without timestamps.)
+
+    # Normalize inputs
+    if not all_tiff_files:
+        return []
+
+    if len(all_tiff_files) == 1:
+        # With a single file, just return it regardless of interval strategy
+        return [all_tiff_files[0]]
+
     if interval == 0:
-        time_diffs = get_time_differences(sorted(all_tiff_files))
-        threshold = find_iqr_threshold(time_diffs)
+        # Timestamp-based selection
+        sorted_files = sorted(all_tiff_files)
+        # If too few files, skip IQR/timestamp logic and use all files
+        MIN_FILES_FOR_IQR = 10
+        if len(sorted_files) < MIN_FILES_FOR_IQR:
+            print(f"Few files detected ({len(sorted_files)} < {MIN_FILES_FOR_IQR}). Skipping timestamp/IQR and using all files.")
+            return sorted_files
+        time_diffs = get_time_differences(sorted_files)
+
+        # If we couldn't compute diffs (e.g., no/invalid timestamps), fall back to first file only
+        if not time_diffs:
+            return [sorted_files[0]]
+
+        # Ensure numpy array for safe elementwise comparison
+        time_diffs_np = np.array(time_diffs, dtype=float)
+        threshold = find_iqr_threshold(time_diffs_np)
         print(f"Threshold image interval is {threshold} seconds.")
 
-        big_interval_inds = np.where(time_diffs >= threshold)[0] + 1
+        big_interval_inds = np.where(time_diffs_np >= threshold)[0] + 1  # this index corresponds to the next image after a big gap
         img_inds = np.insert(big_interval_inds, 0, 0)
 
-        intervaled_tiff_files = [all_tiff_files[i] for i in img_inds]
+        # Guard against any out-of-bounds or duplicates just in case
+        img_inds = np.clip(img_inds, 0, len(sorted_files) - 1)
+        img_inds = np.unique(img_inds)
+
+        intervaled_tiff_files = [sorted_files[i] for i in img_inds]
     else:
-        intervaled_tiff_files = all_tiff_files[::interval]
+        # Simple interval-based downsampling; always includes the first file
+        intervaled_tiff_files = all_tiff_files[::max(1, int(interval))]
 
     return intervaled_tiff_files
 
@@ -515,8 +544,9 @@ def main():
             input_file_path = os.path.join(input_folder, file)
             n1 = 40 
             n2 = 4
-            short_name = file[:n1] + '___' + file.split('.tif')[0][-n2:] if len(file) > 50 else file
-            # short_name = file.split('.tif')[0]
+            # Always use the basename without extension for folder names to avoid clashing with the source TIFF file
+            base_name, _ = os.path.splitext(file)
+            short_name = base_name[:n1] + '___' + base_name[-n2:] if len(base_name) > 50 else base_name
             short_names.append(short_name)
             output_dir = os.path.join(input_folder, short_name)
             if not args.terminal:
@@ -739,8 +769,9 @@ def main():
 
         for file in os.listdir(input_folder):
             if file.endswith('.tiff'):
-                short_name = file[:n1] + '___' + file.split('.tif')[0][-n2:] if len(file) > 50 else file
-                # short_name = file.split('.tif')[0]
+                # Mirror the short_name logic used during division to locate the output folders
+                base_name, _ = os.path.splitext(file)
+                short_name = base_name[:n1] + '___' + base_name[-n2:] if len(base_name) > 50 else base_name
                 output_dir = os.path.join(input_folder, short_name)
                 if os.path.isdir(output_dir):
                     new_output_dir = os.path.join(datasets_dir, short_name)
