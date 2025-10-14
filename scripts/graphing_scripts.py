@@ -1,4 +1,5 @@
 import matplotlib as mpl 
+mpl.rcParams['svg.fonttype'] = 'none'
 import math
 import re
 from matplotlib.colors import ListedColormap
@@ -326,7 +327,7 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
         if not filename:
             filename = default_filename
         
-        plt.savefig(filename, format='svg')
+        plt.savefig(filename, format='svg', )
         print(f"Plot saved to {filename}")
 
     # Print all data points in the graph
@@ -351,6 +352,69 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
                 for x_val, accuracy in zip(x_vals, [accuracy for _, accuracy in accuracies]):
                     f.write(f"{lam},{x_val},{accuracy}\n")
         print(f"Data points saved to {filename}")
+
+
+def save_legend_only(all_accuracies, filename=None):
+    """
+    Create and save just the legend from plot_all_accuracies as an SVG file.
+    
+    Parameters:
+    all_accuracies (dict): Dictionary of accuracies data (same as plot_all_accuracies)
+    filename (str): Optional filename for the saved SVG. If None, user will be prompted.
+    """
+    # Create a figure with transparent background
+    fig = plt.figure(figsize=(4, 2))
+    fig.patch.set_facecolor('none')  # Transparent background
+    
+    # Professional color palette (same as plot_all_accuracies)
+    colors = ['#2E86C1', '#E74C3C', '#27AE60', '#8E44AD', '#F39C12', '#16A085']
+    color_idx = 0
+    
+    # Create dummy plots just to generate legend entries
+    for lam, accuracies in all_accuracies.items():
+        if lam == 'avg':
+            color = 'black'
+            label = 'simple avg of accuracies from each count'
+            alpha = 1.0
+        else:
+            color = colors[color_idx % len(colors)]
+            color_idx += 1
+            label = f'assuming avg count per area={lam}'
+            alpha = 0.7
+        
+        # Create a dummy line just for the legend
+        plt.plot([], [], label=label, marker='o', 
+                color=color, alpha=alpha, linewidth=2, markersize=8)
+    
+    # Create the legend
+    plt.show(block=False)
+    legend = plt.legend(fontsize='x-small', framealpha=0.8, loc='center')
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_edgecolor('black')
+    legend.get_frame().set_linewidth(0.5)
+    
+    # Hide the axes
+    # plt.gca().set_visible(False)
+    
+    # Remove all whitespace around the legend
+    plt.tight_layout()
+    
+    # Get the legend's bounding box
+    bbox = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
+    
+    # Prompt for filename if not provided
+    if filename is None:
+        default_filename = f"legend_only_{datetime.now().strftime('%Y%m%d_%H%M%S')}.svg"
+        filename = input(f"Enter the filename for legend (default: {default_filename}): ").strip()
+        if not filename:
+            filename = default_filename
+    
+    # Save just the legend area
+    plt.savefig(filename, format='svg', bbox_inches=bbox, 
+                facecolor='none', edgecolor='none', pad_inches=0.1, )
+    print(f"Legend saved to {filename}")
+    
+    plt.close(fig)  # Close the figure to free memory
 
 
 def plot_rmses(all_rmses, x_vals, xlabel):
@@ -600,18 +664,18 @@ def generate_x_sequence(min_val, max_val):
 # folder_path = './processing/background_test'
 # folder_path = './processing/psfwidth_test_const_peakval_bg'
 # folder_path = './processing/snr_test'
-folder_path = './processing/d6-tolerance_of_psf-test'
+# folder_path = './processing/d6-tolerance_of_psf-test'
 # folder_path = './processing/zoom_test'
-# folder_path = './processing/psfwidth_test_const_peaksum_bg'
+folder_path = './processing/psfwidth_test_const_peaksum_bg'
 
 # xlabel = "Background Level (psf4, const peak height)"
 # xlabel = "Background Level"
 # xlabel = "Scatter Strength"
 # xlabel = "Signal-to-Noise Ratio"
-xlabel = "Analysis PSF width / Actual PSF width"
+# xlabel = "Analysis PSF width / True PSF width"
 # xlabel = "Zoom Factor"
 # xlabel = "PSF width (constant: peak value, background)"
-# xlabel = "PSF width (constant: peak sum, background)"
+xlabel = "PSF width (constant: peak sum, background)"
 
 # # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2)# x_vals = generate_x_sequence(1/8, 4)  
 # x_vals = generate_x_sequence(1/32, 8)  
@@ -626,11 +690,11 @@ xlabel = "Analysis PSF width / Actual PSF width"
 # x_vals = generate_x_sequence(1/np.sqrt(8), 1)
 # print(x_vals)
 # Expected: ['1/sqrt8x', '1/sqrt4x', '1/sqrt2x', '1x'])
-# x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
+x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
 # x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(16))
 # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2))
 # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(8))
-x_vals = generate_x_sequence(1/np.sqrt(2), np.sqrt(8))
+# x_vals = generate_x_sequence(1/np.sqrt(2), np.sqrt(8))
 # x_vals = generate_x_sequence(1/2, 256)
 # x_vals = generate_x_sequence(1/2, 2048)
 # x_vals = generate_x_sequence(1/32, 8)
@@ -648,6 +712,12 @@ all_accuracies = {}
 for lam, weighted_accuracy in zip(lams, weighted_accuracies):
     all_accuracies[lam] = weighted_accuracy
 plot_all_accuracies(all_accuracies, x_vals, xlabel=xlabel, show_legend=False, legend_loc='lower right') 
+
+# Optionally save just the legend as SVG
+save_legend_svg = input("Do you want to save just the legend as an SVG file? (y/n): ").strip().lower()
+if save_legend_svg == 'y':
+    save_legend_only(all_accuracies)
+
 # # x_vals = generate_x_sequence(1/8, 8)  # Generates: ['1/8x', '1/4x', '1/sqrt(8)x', '1/2x', '1/sqrt(2)x', '1x', 'sqrt(2)x', '2x', 'sqrt(8)x', '4x', '8x']
 pass
 
