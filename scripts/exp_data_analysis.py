@@ -1,145 +1,3 @@
-# import os
-# import pandas as pd
-# import numpy as np
-# import matplotlib.pyplot as plt
-# from collections import defaultdict
-
-# def plot_occurrence_count_analysis(folder_paths):
-#     """
-#     Analyzes occurrence count CSV files across multiple folders and plots mean ± SD for each.
-    
-#     Parameters:
-#         folder_paths (list): List of folder paths to analyze
-    
-#     Returns:
-#         dict: Dictionary containing processed data for each folder
-#     """
-#     # colors = plt.cm.tab10(np.linspace(0, 1, len(folder_paths)))  # Generate distinct colors
-#     # colors = plt.cm.Blues(np.linspace(0.3, 1, len(folder_paths)))
-#     colors = plt.cm.rainbow(np.linspace(0, 1, len(folder_paths)))
-#     # colors = plt.cm.plasma(np.linspace(0, 0.7, len(folder_paths)))
-
-#     results = {}
-    
-#     plt.figure(figsize=(7, 4))
-    
-#     for i, folder_path in enumerate(folder_paths):
-#         # Dictionary to store data from all subfolders for this folder
-#         p_occurrence_data = defaultdict(list)
-#         subfolders_processed = 0
-        
-#         print(f"\nProcessing folder: {folder_path}")
-        
-#         # Walk through all subfolders
-#         for root, dirs, files in os.walk(folder_path):
-#             for file in files:
-#                 if file.endswith("occurence_count.csv"):
-#                     file_path = os.path.join(root, file)
-                    
-#                     try:
-#                         # Read the CSV file
-#                         df = pd.read_csv(file_path)
-                        
-#                         # Ensure the required columns exist
-#                         if 'Estimated Count' in df.columns and ('Occurrence' in df.columns or 'Frequency' in df.columns):
-#                             all_occurrences = df['Occurrence'].sum() if 'Occurrence' in df.columns else df['Frequency'].sum()
-#                             max_estimated_count = df['Estimated Count'].max()
-#                             # Store data for each estimated count
-#                             for row_index, row in df.iterrows():
-#                                 estimated_count = int(row['Estimated Count'])
-#                                 occurrence = int(row['Occurrence']) if 'Occurrence' in df.columns else int(row['Frequency'])
-#                                 p_occurrence = occurrence / all_occurrences if all_occurrences > 0 else 0
-#                                 p_occurrence_data[estimated_count].append(p_occurrence)
-
-#                             for missed_count in range(max_estimated_count + 1, 6):
-#                                 p_occurrence_data[missed_count].append(0)
-                            
-#                             subfolders_processed += 1
-#                             print(f"  Processed: {file_path}")
-#                         else:
-#                             print(f"  Warning: Required columns not found in {file_path}")
-                            
-#                     except Exception as e:
-#                         print(f"  Error reading {file_path}: {e}")
-        
-
-#         if subfolders_processed == 0:
-#             print(f"  No valid occurrence_count.csv files found in {folder_path}!")
-#             continue
-        
-#         print(f"  Processed {subfolders_processed} occurrence count files")
-        
-#         total_occurrences_per_est_count = np.array([sum(occurrences) for occurrences in occurrence_data.values()])        
-
-#         estimated_counts = sorted(occurrence_data.keys())
-
-#         for count in estimated_counts:
-#             num = occurrence_data[count]
-            
-#             mean_count = np.mean(num)
-#             std_count = np.std(num, ddof=1) if len(num) > 1 else 0
-
-#             freq = mean_count / total_occurrences_per_est_count[count] if total_occurrences_per_est_count[count] > 0 else 0
-#             std = std_count / total_occurrences_per_est_count[count] if total_occurrences_per_est_count[count] > 0 else 0
-            
-#             mean_counts.append(mean_count)
-#             std_counts.append(std_count)
-
-#             freq_means.append(freq)
-#             freq_stds.append(std)        
-
-#         # Store results for this folder
-#         folder_name = os.path.basename(folder_path.rstrip('/\\'))
-#         results[folder_name] = {
-#             'estimated_counts': estimated_counts,
-#             'means': mean_counts,
-#             'stds': std_counts,
-#             'freq_means': freq_means,
-#             'freq_stds': freq_stds,
-#             'subfolders_processed': subfolders_processed
-#         }
-        
-#         # Plot mean with error bars (SD) for this folder
-#         plt.errorbar(estimated_counts, freq_means, yerr=freq_stds,
-#                 marker='o', capsize=5, capthick=2, linewidth=2, markersize=8,
-#                 color=colors[i], label=folder_name, alpha=0.5)
-        
-#         print(f"  Plotted data for {folder_name}")
-    
-#     # Configure the plot
-#     plt.xlabel('Estimated Count', fontsize=12)
-#     plt.ylabel('Frequency', fontsize=12)
-#     plt.grid(True, alpha=0.3)
-    
-#     # Set x-axis to show integer ticks
-#     all_counts = set()
-#     for result in results.values():
-#         all_counts.update(result['estimated_counts'])
-#     plt.xticks(sorted(all_counts))
-    
-#     # Add legend outside the plot area
-#     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    
-#     # Adjust y-axis limits
-#     all_max_values = []
-#     for result in results.values():
-#         # if result['means'] and result['stds']:
-#         if result['freq_means'] and result['freq_stds']:
-#             max_val = max([m + s for m, s in zip(result['freq_means'], result['freq_stds'])])
-#             all_max_values.append(max_val)
-    
-#     if all_max_values:
-#         y_max = max(all_max_values)
-#         plt.ylim(0, y_max * 1.1)
-    
-#     plt.tight_layout()
-#     plt.show()
-#     pass
-    
-#     return results
-
-
-
 import shutil
 import re
 import os
@@ -148,8 +6,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import defaultdict
 from scipy import stats
+import matplotlib as mpl 
+mpl.rcParams['svg.fonttype'] = 'none'
 
-def plot_occurrence_count_analysis_improved(folder_paths):
+def plot_occurrence_count_analysis_improved(folder_paths, plot_poisson_curve=False, separately_plot_legend=False):
     """
     Analyzes occurrence count CSV files using proper statistical methods for proportional data.
     
@@ -162,10 +22,13 @@ def plot_occurrence_count_analysis_improved(folder_paths):
     Returns:
         dict: Dictionary containing processed data for each folder
     """
-    colors = plt.cm.rainbow(np.linspace(0, 1, len(folder_paths)))
+    if len(folder_paths) == 1:
+        colors = np.array([[0, 0, 0, 1]])
+    else:
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(folder_paths)))
     results = {}
     
-    plt.figure(figsize=(10, 6))
+    plt.figure(figsize=(5, 5))
     
     for i, folder_path in enumerate(folder_paths):
         # Store raw data for proper statistical analysis
@@ -263,6 +126,11 @@ def plot_occurrence_count_analysis_improved(folder_paths):
         
         # Store results
         folder_name = os.path.basename(folder_path.rstrip('/\\'))
+        # Compute Poisson mean (mu) from pooled occurrences
+        poisson_mu = 0.0
+        if total_pooled > 0 and len(estimated_counts) > 0:
+            poisson_mu = sum(c * occ for c, occ in zip(estimated_counts, pooled_occurrences)) / total_pooled
+        
         results[folder_name] = {
             'estimated_counts': estimated_counts,
             'pooled_proportions': pooled_proportions,
@@ -271,7 +139,8 @@ def plot_occurrence_count_analysis_improved(folder_paths):
             'individual_means': individual_means,
             'individual_stds': individual_stds,
             'total_samples': total_pooled,
-            'num_csvs': subfolders_processed
+            'num_csvs': subfolders_processed,
+            'poisson_mu': poisson_mu
         }
         
         # Plot pooled proportions with confidence intervals
@@ -280,8 +149,21 @@ def plot_occurrence_count_analysis_improved(folder_paths):
         
         plt.errorbar(estimated_counts, pooled_proportions, 
                     yerr=[yerr_lower, yerr_upper],
-                    marker='o', capsize=5, capthick=2, linewidth=2, markersize=8,
+                    marker='o', capsize=5, capthick=1, linewidth=1, markersize=6,
                     color=colors[i], label=f'{folder_name} (n={total_pooled})', alpha=0.8)
+        
+        # Optionally overlay Poisson PMF with mean equal to pooled mean
+        if plot_poisson_curve and len(estimated_counts) > 0:
+            # Choose a reasonable support to display the PMF
+            if poisson_mu > 0:
+                k_max = max(max(estimated_counts), int(np.ceil(poisson_mu + 4 * np.sqrt(poisson_mu))))
+            else:
+                k_max = max(estimated_counts)
+            x_poisson = np.arange(0, k_max + 1)
+            y_poisson = stats.poisson.pmf(x_poisson, poisson_mu)
+            
+            plt.plot(x_poisson, y_poisson, linestyle='--', linewidth=1, color=colors[i],
+                     alpha=0.7, label=f'{folder_name} Poisson (μ={poisson_mu:.2f})')
         
         print(f"  Plotted pooled data for {folder_name} (total samples: {total_pooled})")
     
@@ -302,15 +184,108 @@ def plot_occurrence_count_analysis_improved(folder_paths):
     for result in results.values():
         y_values.extend(result['pooled_proportions'])
     
-    if max(y_values) / min([y for y in y_values if y > 0]) > 100:
-        # plt.yscale('log')
-        plt.ylabel('Proportion of Total Occurrences (log scale)', fontsize=12, fontweight='bold')
+    # if max(y_values) / min([y for y in y_values if y > 0]) > 100:
+    #     plt.yscale('log')
+    #     plt.ylabel('Proportion of Total Occurrences (log scale)', fontsize=12, fontweight='bold')
     
-    # Add legend
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    # Add legend to main plot
+    leg = plt.legend(loc='upper right', frameon=True, framealpha=0.9)
     plt.tight_layout()
-    plt.show()
+    plt.show(block=False)
     
+    # Optionally create a separate figure that shows the legend only
+    # if separately_plot_legend and leg is not None:
+    #     handles = leg.legendHandles
+    #     labels = [t.get_text() for t in leg.get_texts()]
+    #     fig_leg = plt.figure(figsize=(8, max(1.5, 0.4 * len(labels))))
+    #     fig_leg.legend(handles, labels, loc='center', frameon=False)
+    
+    # plt.show()
+    # Prompt user to save the main plot as SVG
+    try:
+        save_fig = input("Save figure as SVG? [y/N]: ").strip().lower()
+    except Exception:
+        save_fig = 'n'
+    if save_fig in ('y', 'yes'):
+        try:
+            default_svg = "occurrence_analysis.svg"
+            out_path = input(f"Enter SVG output path (default: {default_svg}): ").strip()
+        except Exception:
+            out_path = ""
+        if not out_path:
+            out_path = default_svg
+        # If user gave a directory or no extension, ensure .svg is appended
+        if out_path.endswith(os.sep) or out_path.endswith('/') or out_path.endswith('\\'):
+            out_path = os.path.join(out_path, default_svg)
+        root, ext = os.path.splitext(out_path)
+        if ext == "":
+            out_path = out_path + ".svg"
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        plt.gcf().savefig(out_path, format="svg", bbox_inches="tight")
+        print(f"Saved figure to: {out_path}")
+
+    # # Optionally save separate legend-only figure
+    # try:
+    #     save_leg = input("Save legend-only figure as SVG? [y/N]: ").strip().lower() \
+    #         if separately_plot_legend and 'fig_leg' in locals() else 'n'
+    # except Exception:
+    #     save_leg = 'n'
+    # if save_leg in ('y', 'yes') and 'fig_leg' in locals():
+    #     try:
+    #         default_leg_svg = "occurrence_analysis_legend.svg"
+    #         leg_out = input(f"Enter legend SVG output path (default: {default_leg_svg}): ").strip()
+    #     except Exception:
+    #         leg_out = ""
+    #     if not leg_out:
+    #         leg_out = default_leg_svg
+    #     os.makedirs(os.path.dirname(leg_out) or ".", exist_ok=True)
+    #     fig_leg.savefig(leg_out, format="svg", bbox_inches="tight")
+    #     print(f"Saved legend figure to: {leg_out}")
+
+    # Prompt user to save main-plot data points and error bars (exclude Poisson curve)
+    try:
+        save_resp = input("Save main-plot data points and error bars to CSV? [y/N]: ").strip().lower()
+    except Exception:
+        save_resp = 'n'
+    if save_resp in ('y', 'yes') and len(results) > 0:
+        rows = []
+        for folder_name, data in results.items():
+            for i, count in enumerate(data['estimated_counts']):
+                prop = data['pooled_proportions'][i]
+                ci_l = data['pooled_ci_lower'][i]
+                ci_u = data['pooled_ci_upper'][i]
+                rows.append({
+                    'Folder': folder_name,
+                    'Estimated Count': count,
+                    'Proportion': prop,
+                    'CI Lower': ci_l,
+                    'CI Upper': ci_u,
+                    'Yerr Lower': max(0.0, prop - ci_l),
+                    'Yerr Upper': max(0.0, ci_u - prop),
+                    'Total Samples': data['total_samples'],
+                    'Num CSVs': data['num_csvs']
+                })
+        if rows:
+            df_out = pd.DataFrame(rows).sort_values(['Folder', 'Estimated Count'])
+            try:
+                default_path = "pooled_proportions_main_plot.csv"
+                out_path = input(f"Enter output CSV path (default: {default_path}): ").strip()
+            except Exception:
+                out_path = ""
+            if not out_path:
+                out_path = default_path
+            # Ensure .csv extension
+            root, ext = os.path.splitext(out_path)
+            if ext.lower() != ".csv":
+                out_path = out_path + ".csv"
+            out_dir = os.path.dirname(out_path)
+            if out_dir:
+                os.makedirs(out_dir, exist_ok=True)
+            df_out.to_csv(out_path, index=False)
+            print(f"Saved main-plot data to: {out_path}")
+        else:
+            print("No data to save.")
+
     # Print summary statistics
     print("\n" + "="*60)
     print("SUMMARY STATISTICS")
@@ -319,6 +294,7 @@ def plot_occurrence_count_analysis_improved(folder_paths):
         print(f"\n{folder_name}:")
         print(f"  Total samples: {data['total_samples']:,}")
         print(f"  Number of CSV files: {data['num_csvs']}")
+        print(f"  Poisson mean (mu): {data['poisson_mu']:.6f}")
         print("  Estimated Count -> Pooled Proportion (95% CI):")
         for i, count in enumerate(data['estimated_counts']):
             prop = data['pooled_proportions'][i]
@@ -327,7 +303,6 @@ def plot_occurrence_count_analysis_improved(folder_paths):
             print(f"    {count}: {prop:.6f} ({ci_l:.6f} - {ci_u:.6f})")
     
     return results
-
 
 def plot_occurrence_count_analysis_sd_methods(folder_paths, plot_title="Occurrence Count Analysis: Weighted SD Method"):
     """
@@ -345,7 +320,10 @@ def plot_occurrence_count_analysis_sd_methods(folder_paths, plot_title="Occurren
     Returns:
         dict: Dictionary containing processed data for each fold  expr
     """
-    colors = plt.cm.turbo(np.linspace(0, 1, len(folder_paths)+1))
+    if len(folder_paths) == 1:
+        colors = np.array([[0, 0, 0, 1]])
+    else:
+        colors = plt.cm.turbo(np.linspace(0, 1, len(folder_paths)+1))
     results = {}
     
     plt.figure(figsize=(8, 5))
@@ -590,26 +568,27 @@ def compare_methods_visualization(folder_paths):
     plt.show()
 
 # Example usage:
-folder_paths = [
-    "./liu2024-s50/AuOnly",
-    "./liu2024-s50/AgOnly",
-    # "./liu2024-s50/AuAgCtrl", 
-    "./liu2024-s50/AuAg1pM",
-    "./liu2024-s50/AuAg5pM",
-    "./liu2024-s50/AuAg50pM"
-]
-
-# # Example usage:
 # folder_paths = [
-#     "./liu2024-s100/AuOnly",
-#     "./liu2024-s100/AgOnly",
-#     "./liu2024-s100/AuAgCtrl", 
-#     "./liu2024-s100/AuAg1pM",
-#     "./liu2024-s100/AuAg5pM",
-#     "./liu2024-s100/AuAg50pM"
+    # "./liu2024-s50/AuOnly",
+    # "./liu2024-s50/AgOnly",
+#     # "./liu2024-s50/AuAgCtrl", 
+#     "./liu2024-s50/AuAg1pM",
+#     "./liu2024-s50/AuAg5pM",
+#     "./liu2024-s50/AuAg50pM"
 # ]
 
-# plot_occurrence_count_analysis_improved(folder_paths)
+# # Example usage:
+folder_paths = [
+    "./liu2024-s100/AuOnly",
+    # "./liu2024-s100/AgOnly",
+# #     "./liu2024-s100/AuAgCtrl", 
+# #     "./liu2024-s100/AuAg1pM",
+# #     "./liu2024-s100/AuAg5pM",
+# #     "./liu2024-s100/AuAg50pM"
+]
+
+plot_occurrence_count_analysis_improved(folder_paths, plot_poisson_curve=True, separately_plot_legend=True)
+pass
 # plot_occurrence_count_analysis_sd_methods(folder_paths)
 
 def organize_folders_by_tag(parent_dir):
