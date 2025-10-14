@@ -1008,7 +1008,7 @@ def process(config_files_dir, parallel=False, move_finished_config_file=True):
 
                 required_fields_for_separation_test = ['separation_test_image_generation?', 
                                                        'sep_image_count', 
-                                                       'sep_intensity_prefactor_to_bg', 
+                                                       'sep_intensity_prefactor_to_bg_level', 
                                                        'sep_psf_sigma', 
                                                        'sep_distance_ratio_to_psf_sigma', 
                                                        'sep_img_width', 
