@@ -9,12 +9,12 @@ from scipy import stats
 import matplotlib as mpl 
 mpl.rcParams['svg.fonttype'] = 'none'
 
-def plot_occurrence_count_analysis_improved(folder_paths, plot_poisson_curve=False, separately_plot_legend=False):
+def plot_occurrence_count_analysis_wilson(folder_paths, plot_poisson_curve=False, separately_plot_legend=False):
     """
     Analyzes occurrence count CSV files using proper statistical methods for proportional data.
     
-    Uses pooled proportions instead of averaging individual proportions to properly weight
-    experiments with different sample sizes.
+    Uses pooled proportions with Wilson score intervals instead of averaging individual proportions 
+    to properly weight experiments with different sample sizes.
     
     Parameters:
         folder_paths (list): List of folder paths to analyze
@@ -170,7 +170,7 @@ def plot_occurrence_count_analysis_improved(folder_paths, plot_poisson_curve=Fal
     # Configure the plot
     plt.xlabel('Estimated Count', fontsize=12, fontweight='bold')
     plt.ylabel('Proportion of Total Occurrences', fontsize=12, fontweight='bold')
-    plt.title('Occurrence Count Analysis: Pooled Proportions with 95% CI', fontsize=14, fontweight='bold')
+    plt.title('Occurrence Count Analysis: Pooled Proportions with Wilson 95% CI', fontsize=14, fontweight='bold')
     plt.grid(True, alpha=0.3)
     
     # Set x-axis to show integer ticks
@@ -530,7 +530,7 @@ def compare_methods_visualization(folder_paths):
     """
     Creates a comparison plot showing both pooled and individual averaging methods.
     """
-    results = plot_occurrence_count_analysis_improved(folder_paths)
+    results = plot_occurrence_count_analysis_wilson(folder_paths)
     
     # Create comparison plot
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
@@ -577,18 +577,18 @@ def compare_methods_visualization(folder_paths):
 #     "./liu2024-s50/AuAg50pM"
 # ]
 
-# # Example usage:
-folder_paths = [
-    "./liu2024-s100/AuOnly",
-    # "./liu2024-s100/AgOnly",
-# #     "./liu2024-s100/AuAgCtrl", 
-# #     "./liu2024-s100/AuAg1pM",
-# #     "./liu2024-s100/AuAg5pM",
-# #     "./liu2024-s100/AuAg50pM"
-]
+# # # Example usage:
+# folder_paths = [
+#     "./liu2024-s100/AuOnly",
+#     # "./liu2024-s100/AgOnly",
+# # #     "./liu2024-s100/AuAgCtrl", 
+# # #     "./liu2024-s100/AuAg1pM",
+# # #     "./liu2024-s100/AuAg5pM",
+# # #     "./liu2024-s100/AuAg50pM"
+# ]
 
-plot_occurrence_count_analysis_improved(folder_paths, plot_poisson_curve=True, separately_plot_legend=True)
-pass
+# plot_occurrence_count_analysis_wilson(folder_paths, plot_poisson_curve=True, separately_plot_legend=True)
+# pass
 # plot_occurrence_count_analysis_sd_methods(folder_paths)
 
 def organize_folders_by_tag(parent_dir):
@@ -619,9 +619,16 @@ if __name__ == "__main__":
     # current_folder = r"C:\github_repos\Hypothesis-Test-Based-Particle-Detection\liu_ns_1\171224_ns"
     # organize_folders_by_tag(current_folder)
     folder_paths = [
-        r".\liu_ns_1\171224_ns\ctrl",
-        r".\liu_ns_1\171224_ns\2p5ul",
-        r".\liu_ns_1\171224_ns\5ul",
-        r".\liu_ns_1\171224_ns\10ul",
+    #     r".\liu_ns_1\171224_ns\ctrl",
+    #     r".\liu_ns_1\171224_ns\2p5ul",
+    #     r".\liu_ns_1\171224_ns\5ul",
+    #     r".\liu_ns_1\171224_ns\10ul",
+
+        r".\liu2024Dec-s50\ctrl-AuNs1p2pM-AuAgNp6pM",
+        # r".\liu2024Dec-s50\ctrl-AuNs0p6pM-AuAgNp3pM",
+        # r".\liu2024Dec-s50\ctrl-AuNs0p3pM-AuAgNp1p5pM",
+        r".\liu2024Dec-s50\covid10pM-AuNs1p2pM-AuAgNp6pM",
+        # r".\liu2024Dec-s50\covid10pM-AuNs0p6pM-AuAgNp3pM",
+        # r".\liu2024Dec-s50\covid10pM-AuNs0p3pM-AuAgNp1p5pM",
     ]
-    plot_occurrence_count_analysis_sd_methods(folder_paths, plot_title="171224 nanoshell exp")
+    plot_occurrence_count_analysis_sd_methods(folder_paths, plot_title="2024 Dec exp (omitted one outlier from covid10pM)")
