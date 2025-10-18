@@ -107,7 +107,19 @@ def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_c
             sub_image_filename = f'div_{i:02}_{j:02}.tiff'
             sub_image_path = os.path.join(output_dir, sub_image_filename)
             sub_image_pil = Image.fromarray(sub_image)
-            sub_image_pil.save(sub_image_path)
+            
+            # Try to save with full filename, fall back to shortened path if filename too long
+            try:
+                sub_image_pil.save(sub_image_path)
+            except OSError as e:
+                # If filename is too long, try a shortened output directory name
+                if "too long" in str(e).lower() or "filename" in str(e).lower():
+                    # This shouldn't happen with div_XX_XX.tiff filenames, but handle it anyway
+                    print(f"Warning: Filename too long when saving {sub_image_filename}. This may indicate a path issue.")
+                    raise
+                else:
+                    raise
+            
             processed_sub_images += 1
             if progress_callback:
                 progress_callback(processed_sub_images, total_sub_images)
@@ -542,13 +554,27 @@ def main():
         
         for file in intervaled_tiff_files:
             input_file_path = os.path.join(input_folder, file)
-            n1 = 40 
-            n2 = 4
             # Always use the basename without extension for folder names to avoid clashing with the source TIFF file
             base_name, _ = os.path.splitext(file)
-            short_name = base_name[:n1] + '___' + base_name[-n2:] if len(base_name) > 50 else base_name
-            short_names.append(short_name)
-            output_dir = os.path.join(input_folder, short_name)
+            output_dir = os.path.join(input_folder, base_name)
+            
+            # Try to create output directory with full base_name
+            try:
+                os.makedirs(output_dir, exist_ok=True)
+                folder_name = base_name
+            except OSError as e:
+                # If filename is too long or other OS error, use shortened name
+                if "too long" in str(e).lower() or "filename" in str(e).lower():
+                    n1 = 40 
+                    n2 = 4
+                    folder_name = base_name[:n1] + '___' + base_name[-n2:]
+                    output_dir = os.path.join(input_folder, folder_name)
+                    os.makedirs(output_dir, exist_ok=True)
+                    print(f"Warning: Filename too long. Using shortened name: {folder_name}")
+                else:
+                    raise
+            
+            short_names.append(folder_name)
             if not args.terminal:
                 current_file_label.config(text=f"Dividing file: {file}")
                 root.update_idletasks()
@@ -769,12 +795,22 @@ def main():
 
         for file in os.listdir(input_folder):
             if file.endswith('.tiff'):
-                # Mirror the short_name logic used during division to locate the output folders
+                # Mirror the logic used during division to locate the output folders
                 base_name, _ = os.path.splitext(file)
-                short_name = base_name[:n1] + '___' + base_name[-n2:] if len(base_name) > 50 else base_name
-                output_dir = os.path.join(input_folder, short_name)
+                
+                # First, try to find folder with full base_name
+                output_dir = os.path.join(input_folder, base_name)
+                folder_name = base_name
+                
+                # If full name doesn't exist, try shortened name
+                if not os.path.isdir(output_dir):
+                    n1 = 40 
+                    n2 = 4
+                    folder_name = base_name[:n1] + '___' + base_name[-n2:]
+                    output_dir = os.path.join(input_folder, folder_name)
+                
                 if os.path.isdir(output_dir):
-                    new_output_dir = os.path.join(datasets_dir, short_name)
+                    new_output_dir = os.path.join(datasets_dir, folder_name)
                     if os.path.exists(new_output_dir):
                         shutil.rmtree(new_output_dir)
                     try:
