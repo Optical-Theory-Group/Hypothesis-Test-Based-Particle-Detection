@@ -414,17 +414,40 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
     print('- These files will have "Actual Particle Count" nor "true count" written in the log files.')
 
     # Create a folder to store the analysis outputs
-    analyses_folder = os.path.join('./analyses', image_folder_basename + '_code_ver' + code_version_date)
+    # Use shortened name if the full path would be too long
+    full_folder_name = image_folder_basename + '_code_ver' + code_version_date
+    
+    # Check if the path would be too long and shorten preemptively
+    max_safe_length = 60  # Conservative limit to ensure file operations work
+    if len(full_folder_name) > max_safe_length:
+        # Use shortened name - drop code_ver and keep more of original name
+        short_folder_name = image_folder_basename[:max_safe_length]
+        print(f"Warning: Folder name too long. Using shortened name: {short_folder_name}")
+    else:
+        short_folder_name = full_folder_name
+    
+    analyses_folder = os.path.join('./analyses', short_folder_name)
     os.makedirs(analyses_folder, exist_ok=True)
 
     # Save the content of the config file
     if config_content is not None:
-        config_file_save_path = os.path.join(analyses_folder, f'{image_folder_basename}_code_ver{code_version_date}_config_used.json')
-        with open(config_file_save_path, 'w') as f:
-            json.dump(json.loads(config_content), f, indent=4)
+        config_file_save_path = os.path.join(analyses_folder, f'{short_folder_name}_config_used.json')
+        try:
+            with open(config_file_save_path, 'w') as f:
+                json.dump(json.loads(config_content), f, indent=4)
+        except OSError as e:
+            if "too long" in str(e).lower() or "filename" in str(e).lower():
+                # Further shorten the config filename
+                short_config_name = f'{short_folder_name[:30]}_config.json'
+                config_file_save_path = os.path.join(analyses_folder, short_config_name)
+                with open(config_file_save_path, 'w') as f:
+                    json.dump(json.loads(config_content), f, indent=4)
+                print(f"Warning: Config filename too long. Using: {short_config_name}")
+            else:
+                raise
 
     # Prepare the label (=actual count) prediction (=estimated count) log file
-    label_prediction_log_file_path = os.path.join(analyses_folder, f'{image_folder_basename}_code_ver{code_version_date}_label_prediction_log.csv')
+    label_prediction_log_file_path = os.path.join(analyses_folder, f'{short_folder_name}_label_prediction_log.csv')
 
     # Create the "analyses" folder if it doesn't exist
     os.makedirs('./analyses', exist_ok=True)
@@ -551,7 +574,7 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
             progress += 1
             print() # Print a newline after the progress bar
             
-    return analyses_folder  # Return the path of the folder containing the analyses outputs
+    return analyses_folder, short_folder_name  # Return the path of the folder containing the analyses outputs and the shortened folder name
 
 def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_fit_results=False, display_xi_graph=False, use_exit_condition=False, tile_width=40, tile_jump_distance=30, tiling_width_threshold=160):
     """ Analyze an image using the generalized maximum likelihood rule.
@@ -1114,7 +1137,7 @@ def process(config_files_dir, parallel=False, move_finished_config_file=True):
         # Analyze dataset
         if 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
             timeout = config.get('ana_timeout_per_image', 3600) # time out = 1 hour per image
-            analyses_folder_path = analyze_whole_folder(image_folder_basename=config['image_folder_namebase'], 
+            analyses_folder_path, short_folder_name = analyze_whole_folder(image_folder_basename=config['image_folder_namebase'], 
                                                     code_version_date=config['code_version_date'], 
                                                     use_exit_condition=config['ana_use_premature_hypothesis_choice?'], 
                                                     last_h_index=config['ana_maximum_hypothesis_index'], 
@@ -1131,7 +1154,7 @@ def process(config_files_dir, parallel=False, move_finished_config_file=True):
             combine_log_files(analyses_folder_path, image_folder_basename, code_version_date, delete_individual_files=True)
             
             # Generate confusion matrix
-            label_prediction_log_file_path = os.path.join(analyses_folder_path, f'{image_folder_basename}_code_ver{code_version_date}_label_prediction_log.csv')
+            label_prediction_log_file_path = os.path.join(analyses_folder_path, f'{short_folder_name}_label_prediction_log.csv')
             try:
                 generate_confusion_matrix(label_prediction_log_file_path, image_folder_basename, code_version_date, display=False, savefig=True)
             except Exception as e:
