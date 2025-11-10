@@ -1,6 +1,5 @@
 import os
 import shutil
-# import sys
 import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox, ttk
 from PIL import Image
@@ -14,9 +13,57 @@ import json
 import cv2
 from scipy import ndimage
 from skimage import filters, morphology
-from datetime import datetime #, timedelta
+from datetime import datetime
 
-def rough_count_particles(tiff_path):
+
+def rough_count_particles(tiff_path, ch=0.5, cw=0.5, min_component_size=20):
+    """
+    Count rough count of particle-like bright spots in a TIFF image using a simple
+    thresholding and connected-component pipeline.
+    
+    The function performs the following steps:
+    1. Load the TIFF image with Pillow and convert it to a NumPy array.
+    2. If the image has 3 channels (RGB), convert to grayscale via per-pixel channel mean.
+    3. Normalize grayscale intensities to [0, 1] based on 8-bit or 16-bit depth.
+    4. Crop the central 50% region to avoid dark corners from a Gaussian beam profile.
+    5. Denoise with a 5x5 Gaussian blur.
+    6. Compute a global Otsu threshold and binarize.
+    7. Remove small connected components (< 20 pixels) as noise.
+    8. Label remaining connected components and return their count.
+
+    Parameters
+    ----------
+    tiff_path : str | pathlib.Path
+         Path to an 8-bit or 16-bit TIFF image file. RGB (3-channel) or single-channel
+         images are supported.
+    ch : float
+         Fraction of image height to retain in the center crop (default 0.5).
+    cw : float
+         Fraction of image width to retain in the center crop (default 0.5).
+    min_component_size : int
+         Minimum size (in pixels) for connected components to be retained (default 20).
+    Returns
+    -------
+    int
+         The number of connected components (features) remaining after thresholding and
+         size filtering, interpreted as a rough particle count.
+    Raises
+    ------
+    ValueError
+         If the image bit depth is not 8-bit (uint8) or 16-bit (uint16).
+    FileNotFoundError
+         If the provided path does not exist or cannot be opened.
+
+    Notes
+    -----
+    - This is a "rough" heuristic count; it does not perform subpixel localization,
+      deblending of overlapping particles, background modeling, or adaptive thresholding.
+    - For densely packed or low SNR images, more advanced methods (e.g., LoG / DoG peak
+      detection, wavelet filtering, background subtraction, or probabilistic modeling)
+      may yield more accurate counts.
+
+    """
+
     # Step 1: Open and convert to grayscale (average channels)
     with Image.open(tiff_path) as img:
         img = np.array(img)
@@ -38,12 +85,13 @@ def rough_count_particles(tiff_path):
         raise ValueError("Unsupported image bit depth. Only 8-bit and 16-bit images are supported.")
 
     # crop to middle 50% of the image to avoid dark corners associated with Gaussian beam profile
-    height, width = img.shape[:2]
-    crop_height = height // 2
-    crop_width = width // 2
+    height, width = grayscale_norm.shape[:2]
+
+    crop_height = int(height * ch)
+    crop_width = int(width * cw)
     start_y = (height - crop_height) // 2
     start_x = (width - crop_width) // 2
-    img = img[start_y:start_y + crop_height, start_x:start_x + crop_width]
+    grayscale_norm = grayscale_norm[start_y:start_y + crop_height, start_x:start_x + crop_width]
 
     # Step 3: Apply Gaussian blur to reduce noise
     blurred = cv2.GaussianBlur(grayscale_norm, (5, 5), 0)
@@ -53,7 +101,7 @@ def rough_count_particles(tiff_path):
     binary_mask = blurred > thresh_val
 
     # Step 5: Remove small objects (likely noise)
-    cleaned_mask = morphology.remove_small_objects(binary_mask, min_size=20)
+    cleaned_mask = morphology.remove_small_objects(binary_mask, min_size=min_component_size)
 
     # Step 6: Label connected components
     _, num_features = ndimage.label(cleaned_mask)
@@ -61,23 +109,79 @@ def rough_count_particles(tiff_path):
     return num_features
 
 
-# tiff_path = next((file for file in os.listdir('./example_large_tiff') if file.endswith('.tiff')), None)
-# if tiff_path:
-#     tiff_path = os.path.join('./example_large_tiff', tiff_path)
-# else:
-#     raise FileNotFoundError("No TIFF files found in ./example_large_tiff")
-# rough_count = rough_count_particles(tiff_path)
+def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_callback=None,
+                  crop_root_img_fraction=0.7):
+    """
+        Divide a (optionally centrally cropped) input image into overlapping sub-images (tiles)
+        and save each tile as an individual TIFF file.
+        The function:
+          1. Loads the input image (converting RGB to grayscale).
+          2. Optionally crops a centered region to mitigate dark corners (e.g., Gaussian beam profile).
+          3. Computes a tiling grid with specified tile dimensions and pixel overlap.
+          4. Iteratively extracts each tile and saves it to the output directory using a stable naming pattern.
+          5. Optionally reports progress via a callback.
 
+        Parameters
+        ----------
+        input_file_path : str or pathlib.Path
+            Path to the source image file (e.g., TIFF, PNG, JPEG). Must be readable by Pillow.
+        output_dir : str or pathlib.Path
+            Directory where the generated tile images will be written. Created if it does not exist.
+        divide_dim : tuple[int, int]
+            (tile_width, tile_height) in pixels. Defines the size of each sub-image.
+        overlap : int, default=0
+            Number of pixels of overlap between adjacent tiles in both x and y directions.
+            Must be less than the corresponding dimension in divide_dim to avoid infinite loops.
+        progress_callback : callable, optional
+            A function invoked after each tile is saved:
+                progress_callback(processed_count: int, total_count: int)
+            Useful for UI progress bars or logging.
+        crop_root_img_fraction : float, default=0.7
+            Fraction (0 < f <= 1) of the original image's width and height to retain, applied symmetrically
+            about the center. Values outside (0, 1] trigger a warning and fallback to 0.7.
+            Set to 1 to disable cropping.
 
-def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_callback=None, crop_root_img_fraction=0.7):
+        Behavior & Computation
+        ----------------------
+        Cropping:
+            If crop_root_img_fraction < 1, a centered rectangle of size
+            (floor(H * f), floor(W * f)) is extracted before tiling.
+        Tiling Grid:
+            Number of tiles horizontally = ceil((cropped_width  - overlap) / (tile_width  - overlap))
+            Number of tiles vertically   = ceil((cropped_height - overlap) / (tile_height - overlap))
+            Each tile's top-left corner advances by (tile_dim - overlap).
+        File Naming:
+            Tiles saved as: div_{row_index:02}_{col_index:02}.tiff
+            Example: div_00_03.tiff for row 0, column 3.
+        Grayscale Conversion:
+            If the source image is RGB, it is converted to single-channel 'L' mode before processing.
+
+        Returns
+        -------
+        None
+            Writes tile images to disk; optionally emits progress via callback.
+
+        Notes
+        -----
+        - Large overlap relative to tile size reduces stride and increases tile count.
+        - Ensure (tile_width - overlap) > 0 and (tile_height - overlap) > 0.
+        - For very large images / small strides, consider memory and filesystem limits.
+        - Converting to grayscale may not be desirable if color information is needed; adapt as necessary.
+
+    """
+
+    # Make output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
+
+    # Load image and convert to grayscale if needed
     with Image.open(input_file_path) as img:
         if img.mode == 'RGB':
             img = img.convert('L')
         img_array = np.array(img)
     img_height, img_width = img_array.shape
 
-    # crop down to central image region according to the crop_root_img_fraction to avoid dark corners associated with Gaussian beam profile
+    # crop down to central image region according to the crop_root_img_fraction to avoid dark corners associated
+    # with Gaussian beam profile
     if crop_root_img_fraction > 1 or crop_root_img_fraction < 0:
         print("Warning: Invalid crop fraction value. Using default of 0.7.")
         crop_root_img_fraction = 0.7
@@ -87,27 +191,55 @@ def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_c
         crop_pixel_width = int(img_width * crop_root_img_fraction)
         crop_top_bottom_pixels = (img_height - crop_pixel_height) // 2
         crop_left_right_pixels = (img_width - crop_pixel_width) // 2
-        
+
         img_array = img_array[crop_top_bottom_pixels:crop_top_bottom_pixels + crop_pixel_height,
                               crop_left_right_pixels:crop_left_right_pixels + crop_pixel_width]
         img_height, img_width = img_array.shape
 
+    # Save (optionally) cropped grayscale image
+    if crop_root_img_fraction < 1:
+        try:
+            original_dir = os.path.dirname(input_file_path)
+            cropped_dir = os.path.join(original_dir, 'cropped')
+            os.makedirs(cropped_dir, exist_ok=True)
+            base_name = os.path.splitext(os.path.basename(input_file_path))[0]
+            cropped_path = os.path.join(cropped_dir, f"{base_name}_cropped.tiff")
+
+            # Ensure grayscale (uint8/uint16 acceptable)
+            if img_array.ndim == 3:
+                img_array_to_save = np.mean(img_array, axis=2).astype(img_array.dtype)
+            else:
+                img_array_to_save = img_array
+            Image.fromarray(img_array_to_save).save(cropped_path)
+        except Exception as e:
+            print(f"Warning: Failed to save cropped image ({e})")
+
+    # Calculate number of sub-images in each dimension
     num_sub_images_x = ceil((img_width - overlap) / (divide_dim[0] - overlap))
     num_sub_images_y = ceil((img_height - overlap) / (divide_dim[1] - overlap))
     total_sub_images = num_sub_images_x * num_sub_images_y
     processed_sub_images = 0
 
+    # Iterate and save sub-images
     for i in range(num_sub_images_y):
         for j in range(num_sub_images_x):
+            # Calculate the coordinates of the sub-image
             start_x = j * (divide_dim[0] - overlap)
             start_y = i * (divide_dim[1] - overlap)
             end_x = start_x + divide_dim[0]
             end_y = start_y + divide_dim[1]
             sub_image = img_array[start_y:end_y, start_x:end_x]
+
+            # Check if the extracted sub-image matches the specified dimensions
+            if sub_image.shape[0] != divide_dim[1] or sub_image.shape[1] != divide_dim[0]:
+                # Skip this sub-image if it's not the correct size (edge case)
+                continue
+
+            # Generate filename and extract the sub-image
             sub_image_filename = f'div_{i:02}_{j:02}.tiff'
             sub_image_path = os.path.join(output_dir, sub_image_filename)
             sub_image_pil = Image.fromarray(sub_image)
-            
+
             # Try to save with full filename, fall back to shortened path if filename too long
             try:
                 sub_image_pil.save(sub_image_path)
@@ -115,62 +247,131 @@ def divide_images(input_file_path, output_dir, divide_dim, overlap=0, progress_c
                 # If filename is too long, try a shortened output directory name
                 if "too long" in str(e).lower() or "filename" in str(e).lower():
                     # This shouldn't happen with div_XX_XX.tiff filenames, but handle it anyway
-                    print(f"Warning: Filename too long when saving {sub_image_filename}. This may indicate a path issue.")
+                    print(f"Warning: Filename too long when saving {sub_image_filename}. \
+                          This may indicate a path issue.")
                     raise
                 else:
                     raise
-            
+
+            # Update progress
             processed_sub_images += 1
             if progress_callback:
                 progress_callback(processed_sub_images, total_sub_images)
 
+
 def gaussian_2d(x, y, x0, y0, sigma, amplitude, offset):
-    return offset + amplitude * np.exp(
-        -(((x - x0) ** 2) / (2 * sigma ** 2) + ((y - y0) ** 2) / (2 * sigma ** 2))
-    )
+    """
+    2D Gaussian function.
+
+    Parameters
+    ----------
+        x, y: Coordinates where the Gaussian is evaluated.
+        x0, y0: Center of the Gaussian.
+        sigma: Standard deviation (width) of the Gaussian.
+        amplitude: Peak amplitude of the Gaussian.
+        offset: Baseline offset.
+
+    Returns:
+        float: The value of the 2D Gaussian function at the given coordinates.
+
+    """
+    return offset + amplitude * np.exp(-(((x - x0) ** 2) / (2 * sigma ** 2) + ((y - y0) ** 2) / (2 * sigma ** 2)))
+
 
 def fit_gaussian_2d(image):
+    """
+    Fits a symmetric 2D Gaussian model to a single-channel image patch representing a particle.
+
+    The function:
+    1. Builds meshgrid coordinates for the image.
+    2. Applies a Gaussian low-pass filter (sigma=3) to suppress high-frequency noise.
+    3. Locates the peak in the filtered image to seed the optimizer.
+    4. Performs heuristic signal/contrast checks to skip low-quality or empty patches.
+    5. Uses scipy.optimize.curve_fit to fit a 2D Gaussian wrapper:
+        G(x, y) = A * exp(-((x - x0)^2 + (y - y0)^2)/(2*sigma^2)) + offset.
+    6. Validates fitted parameters (positive amplitude, reasonable sigma).
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        2D array (H x W) containing intensity values of the candidate particle region.
+        Must be non-empty; assumed to be pre-cropped around a potential particle.
+
+    Returns
+    -------
+    numpy.ndarray or None
+        On success: array-like of length 5 -> (x0, y0, sigma, amplitude, offset)
+            x0, y0 : float
+                Subpixel coordinates of the Gaussian center in (x, y) order.
+            sigma : float
+                Shared (isotropic) standard deviation of the Gaussian.
+            amplitude : float
+                Peak height above the offset (not necessarily max(image)).
+            offset : float
+                Background intensity level.
+        None if:
+            - Contrast heuristics fail (no clear particle-like signal).
+            - Optimization fails or yields non-physical parameters (sigma <= 0, sigma > 100, amplitude <= 0).
+
+    Notes
+    -----
+    - Filtering improves robustness of the initial peak localization.
+    - The contrast checks use both dynamic range and deviation from mean to reject flat regions.
+    - The maxfev parameter (1000) guards against premature termination in tougher fits.
+    - Assumes an isotropic Gaussian; anisotropy would require extending the model.
+
+    """
+    # Create meshgrid coordinates
     y, x = np.mgrid[0:image.shape[0], 0:image.shape[1]]
-    
+
     # Apply a low-pass filter to the image
     filtered_image = gaussian_filter(image, sigma=3)
-    
+
     # Find the coordinates of the maximum value in the filtered image
     y0, x0 = np.unravel_index(np.argmax(filtered_image), filtered_image.shape)
-    
+
     # Check if there's a meaningful signal in the image
     signal_max = np.max(filtered_image)
     signal_min = np.min(filtered_image)
     signal_mean = np.mean(filtered_image)
     signal_std = np.std(filtered_image)
-    
+
     # Skip images with insufficient contrast (no clear particle)
     if signal_max - signal_min < 3 * signal_std or (signal_max - signal_mean) < 2 * signal_std:
         return None
-    
+
     # Initial guess based on the filtered image
     initial_guess = (x0, y0, 1, np.max(image), np.min(image))
-    
+
     try:
-        params, _ = curve_fit(gaussian_2d_wrapper, 
-                            (y.ravel(), x.ravel()), 
-                            image.ravel(), 
-                            p0=initial_guess,
-                            maxfev=1000)  # Increase max function evaluations
-        
+        params, _ = curve_fit(gaussian_2d_wrapper,
+                              (y.ravel(), x.ravel()),
+                              image.ravel(),
+                              p0=initial_guess,
+                              maxfev=1000)  # Increase max function evaluations
+
         # Validate results (ensure sigma is positive and reasonable)
         if params[2] <= 0 or params[2] > 100 or params[3] <= 0:
             return None
-            
+
         return params
     except (RuntimeError, ValueError):
         # Catch fitting failures
         return None
 
+
 def gaussian_2d_wrapper(coordinates, x0, y0, sigma, amplitude, offset):
+    """
+    Wrapper for the 2D Gaussian function to work with curve_fit.
+    """
+
     y, x = coordinates
     return gaussian_2d(x, y, x0, y0, sigma, amplitude, offset).ravel()
 
+
+###################################################################################
+# ###### Some utility functions for timestamp-based file interval selection #######
+###################################################################################
 def get_time_differences(filenames):
     """
     Calculates the time differences between consecutive files
@@ -178,6 +379,8 @@ def get_time_differences(filenames):
 
     Args:
         filenames: array of sorted filenames (strings) that contain timestamps
+        Filename format assumed to be "HH-MM-SS_..." where HH is hours, MM is minutes, SS is seconds.
+        Files not matching this leading pattern are skipped.
 
     Returns:
         list: A list of timedelta objects representing the time differences
@@ -205,7 +408,6 @@ def get_time_differences(filenames):
         print("No files with matching HH-MM-SS_ format found or parsed successfully.")
         return []
 
-
     difference_seconds = []
     # Calculate differences between consecutive files
     for i in range(1, len(file_timestamps)):
@@ -214,11 +416,12 @@ def get_time_differences(filenames):
 
         # Calculate the difference. NB We do not handle cases where the time wraps around midnight.
         difference = current_time - previous_time
-        
+
         # Convert the timedelta object to total seconds
-        difference_seconds.append(difference.total_seconds())           
+        difference_seconds.append(difference.total_seconds())
 
     return difference_seconds
+
 
 def find_iqr_threshold(data, k=3):
     """
@@ -258,6 +461,50 @@ def find_iqr_threshold(data, k=3):
 
 
 def get_intervaled_tiffs_files(all_tiff_files, interval=0):
+    """
+    Select TIFF files at intervals based on timestamp gaps or fixed interval.
+    This function filters a list of TIFF files to select representative images from
+    distinct acquisition runs or sample regions. It supports two selection modes:
+    automatic (timestamp-based) and manual (fixed interval).
+
+    Parameters
+    ----------
+    all_tiff_files : list of str
+        List of TIFF file paths to process. Can be empty or contain any number of files.
+    interval : int, optional
+        Downsampling of the TIFF files based on their timestamps can be performed. We look for significant
+        time gaps between images to identify distinct image runs. The selection mode is determined by this parameter
+        Selection mode parameter (default=0):
+        - If 0: Use automatic timestamp-based selection with IQR method to detect
+          large time gaps between images, selecting the first image after each gap.
+        - If 1: Process all files (no downsampling).
+        - If > 1: Use simple fixed-interval downsampling, taking every `interval`-th file.
+    Filename format assumed to be "HH-MM-SS_....tiff" where HH is hours, MM is minutes, SS is seconds.
+    Files not matching this leading pattern are skipped.
+
+    Returns
+    -------
+    list of str
+        Filtered list of TIFF file paths according to the selected interval strategy.
+        - Empty list if input is empty
+        - Single file if only one file provided
+        - All files if fewer than 10 files and interval=0
+        - First file only if timestamp extraction fails
+        - Subset of files based on IQR threshold or fixed interval otherwise
+    Notes
+    -----
+    - For automatic mode (interval=0), requires at least 10 files for IQR calculation
+    - Timestamp extraction failures fall back to returning only the first file
+    - Files are sorted before processing in automatic mode
+    - Fixed interval mode always includes the first file
+    - Robust to edge cases: empty input, single file, missing timestamps
+
+    See Also
+    --------
+    get_time_differences : Extract time differences from file timestamps
+    find_iqr_threshold : Calculate IQR-based threshold for gap detection
+
+    """
     # we use the time stamps in the file name to calculate interval between each image and the select the first image occuring after a large inteveral. 
     # The large interval is found automatically using an interquartile range method. 
     # These images should then correspond to images from distinct image runs in different sample regions.
@@ -305,7 +552,43 @@ def get_intervaled_tiffs_files(all_tiff_files, interval=0):
     return intervaled_tiff_files
 
 
+# ############ MAIN LOOP #############
 def main():
+    """
+    Main function to preprocess experimental TIFF images for particle detection analysis.
+
+    This function performs the following steps:
+    1. Parses command-line arguments or displays UI dialogs to collect user input
+    2. Divides large TIFF images into smaller sub-images with optional overlap
+    3. Performs Gaussian fitting on selected sub-images to estimate PSF (Point Spread Function) width
+    4. Calculates mean sigma value from fitted Gaussian parameters
+    5. Moves processed datasets to the './datasets' directory
+    6. Generates configuration JSON files for each dataset with analysis parameters
+
+    Command-line Arguments:
+        -t, --terminal: Run without UI (command-line mode)
+        -f, --folder: Path to folder containing TIFF images
+        -s, --size: Size of square sub-images (sz x sz pixels)
+        -o, --overlap: Overlap size in pixels (default: 0)
+        -i, --interval: Process every Nth file; 0 uses IQR-based timestamp method (default: 0)
+        -c, --crop: Crop fraction for raw images (default: 0.7)
+        -m, --maxhindex: Maximum hypothesis index for analysis (default: 5)
+        --save-plots: Save plots to file instead of displaying (for headless environments)
+
+    Workflow:
+        - In terminal mode: Validates folder path, lists TIFF files, and prompts for parameters
+        - In UI mode: Opens dialogs for folder selection and parameter input
+        - Automatically estimates optimal sub-image size based on particle density if requested
+        - Divides images with progress tracking
+        - Performs Gaussian fitting on user-selected sub-images containing particles
+        - Filters outlier sigma values based on histogram mode (0.25*mode to 2*mode range)
+        - Generates plots showing original vs fitted images and sigma histogram
+        - Creates JSON config files with analysis parameters for each dataset
+
+    Returns:
+        None
+    """
+    # Parse command-line arguments    
     parser = argparse.ArgumentParser(description="Divide TIFF images into smaller sub-images and perform Gaussian fitting.")
     parser.add_argument('-t', '--terminal', action='store_true', help="Run the process without UI")
     parser.add_argument('-f', '--folder', type=str, help="Folder containing TIFF images to be divided")
@@ -317,8 +600,7 @@ def main():
     parser.add_argument('--save-plots', action='store_true', help="Save plots to file instead of displaying (useful for headless environments)")
     args = parser.parse_args()
 
-    
-  
+    #  Terminal mode
     if args.terminal:
         if not args.folder:
             print("Error: Folder must be provided.")
@@ -333,7 +615,7 @@ def main():
             if not os.path.isdir(input_folder):
                 print(f"Error: Folder '{input_folder}' does not exist or is not accessible.")
                 return
-                
+
         # Process file interval setting
         interval = args.interval
         if interval < 0:
@@ -344,8 +626,12 @@ def main():
         elif interval > 1:
             print(f"Processing every {interval}th file.")
 
+        # Crop fraction for terminal mode (0..1, where 1 means no cropping)
+        crop_img_fraction = args.crop
+
         # List TIFF files in the folder
         try:
+            # Get all TIFF files in the folder
             all_tiff_files = sorted([f for f in os.listdir(input_folder) if f.endswith('.tiff')])
             if not all_tiff_files:
                 print(f"Warning: No TIFF files found in '{input_folder}'")
@@ -364,7 +650,7 @@ def main():
             print(f"Error accessing folder or listing files: {e}")
             return
 
-        if not args.size: 
+        if not args.size:
             print("Sub-image size not provided.")
 
             # Ask user if they want to automatically calculate sub-image size
@@ -383,12 +669,15 @@ def main():
                 choice = int(input("\nSelect a file number to estimate sub-image size: ")) - 1
                 if 0 <= choice < len(intervaled_tiff_files):
                     chosen_tiff_path = os.path.join(input_folder, intervaled_tiff_files[choice])
-                    particle_count = rough_count_particles(chosen_tiff_path)
+                    # Use user-specified crop fraction for both dimensions
+                    particle_count = rough_count_particles(chosen_tiff_path, ch=crop_img_fraction, cw=crop_img_fraction)
                     # Suggest a size that would result in average of 1 particles per sub-image (P(n=5) ~ 0.003 in this case thus testing up to n=4 covers 99.7% of the cases)
                     with Image.open(chosen_tiff_path) as img:
                         width, height = img.size
-                    total_area = width * height
-                    area_per_particle = total_area / particle_count
+
+                    # Account for cropping done by rough_count_particles using crop_img_fraction (square central crop)
+                    cropped_area = (width * crop_img_fraction) * (height * crop_img_fraction)
+                    area_per_particle = cropped_area / particle_count
                     sz = int(np.sqrt(area_per_particle * 1))
                     print(f"\n(Rougly) estimated {particle_count} particles in the entire image.")
                     print(f"Suggested sub-image: {sz}x{sz} pixels")
@@ -410,37 +699,60 @@ def main():
         else:
             sz = args.size
 
-
         if not args.overlap:
             print("Overlap size not provided. Setting to default (0 pixels).")
             overlap = 0
 
+    # UI mode
     else:
         root = tk.Tk()
         root.withdraw()
-        messagebox.showinfo("Image Division UI", "Welcome to Image Division UI.\n======================\nTo in terminal instead, use the --terminal flag with the -f (folder, required) argument (-s (size), -o (overlap), and -i (interval) are optional).")
+        messagebox.showinfo("Image Division UI", "Welcome to Image Division UI.\n======================\nTo use terminal instead, use the --terminal flag with the -f (folder, required) argument (-s (size), -o (overlap), and -i (interval) are optional).")
+
         input_folder = filedialog.askdirectory(title="==== Select Folder Containing all TIFF images to be divided ====")
         if not input_folder:
             messagebox.showerror("Error", "No folder selected. Exiting.")
             return
+
         while not any(file.endswith('.tiff') for file in os.listdir(input_folder)):
             messagebox.showerror("Error", "No TIFF files found in the selected folder.")
             input_folder = filedialog.askdirectory(title="==== Select Folder Containing all TIFF images to be divided ====")
+
         if not input_folder:
             print("No folder selected. Exiting.")
             return
+
         while not os.path.exists(input_folder):
             retry = messagebox.askretrycancel("Error", "Selected folder does not exist.")
             if not retry:
                 print("No valid folder selected. Exiting.")
                 return
 
-        interval = simpledialog.askinteger("Tiff file skip interval", "Enter the interval for processing TIFF files (e.g., 2 means every 2nd file):", initialvalue=1, minvalue=1)
+        # Ask user for crop fraction (0..1)
+        crop_img_fraction = simpledialog.askfloat(
+            "Crop fraction",
+            "Enter crop fraction for the root images (0 to 1).\n1 disables cropping; default is 0.7",
+            initialvalue=0.7,
+            minvalue=0.0,
+            maxvalue=1.0,
+        )
+        if crop_img_fraction is None:
+            messagebox.showerror("Error", "No crop fraction provided. Exiting.")
+            return
 
+        # Get file interval setting and file list
+        interval = simpledialog.askinteger("Tiff file skip interval",
+                                               """
+Enter the interval for processing TIFF files (e.g., 2 means every 2nd file):
+
+If 0: Use automatic timestamp-based selection with IQR method to detect
+large time gaps between images, selecting the first image after each gap.
+- If 1: Process all files (no downsampling).
+- If > 1: Use simple fixed-interval downsampling, taking every `interval`-th file.
+""",
+                                               initialvalue=1, minvalue=0)
         all_tiff_files = sorted([f for f in os.listdir(input_folder) if f.endswith('.tiff')])
-
-        intervaled_tiff_files = get_intervaled_tiffs_files(all_tiff_files) 
-
+        intervaled_tiff_files = get_intervaled_tiffs_files(all_tiff_files, interval)
         files_list = "\n".join(intervaled_tiff_files)
 
         # Ask user if they want to automatically calculate sub-image size
@@ -461,24 +773,27 @@ def main():
             def on_double_click(event):
                 selected_file[0] = listbox.get(listbox.curselection())
                 dialog.destroy()
-            
+
             listbox.bind('<Double-Button-1>', on_double_click)
-            
+
             selected_file = [None]
+
             def on_select():
                 selected_file[0] = listbox.get(listbox.curselection())
                 dialog.destroy()
-            
+
             tk.Button(dialog, text="Select", command=on_select).pack(pady=5)
             dialog.wait_window()
-            
+
             if selected_file[0]:
                 tiff_path = os.path.join(input_folder, selected_file[0])
-                particle_count = rough_count_particles(tiff_path)
+                # Use user-selected crop fraction for both dimensions (square central crop)
+                particle_count = rough_count_particles(tiff_path, ch=crop_img_fraction, cw=crop_img_fraction)
                 with Image.open(tiff_path) as img:
                     width, height = img.size
-                total_area = width * height
-                area_per_particle = total_area / particle_count
+                # Account for cropping done by rough_count_particles using crop_img_fraction (square central crop)
+                cropped_area = (width * crop_img_fraction) * (height * crop_img_fraction)
+                area_per_particle = cropped_area / particle_count
                 sz = int(np.sqrt(area_per_particle * 1))
                 if sz < 20:
                     clip_yesno = messagebox.askyesno("Warning", f"Suggested {sz} pixels is below reasonable range (20-200). Set it to 20?")
@@ -504,9 +819,8 @@ def main():
         if not sz:
             print("Invalid size. Exiting.")
             return
-        
 
-
+    ###################################################################################
     if not args.terminal:
         root = tk.Tk()
         root.title("Processing Images")
@@ -517,6 +831,7 @@ def main():
         current_file_label = tk.Label(root, text="")
         current_file_label.pack()
 
+    # Function to update progress bar or terminal output
     def update_progress(processed, total):
         if not args.terminal:
             progress["value"] = (processed / total) * 100
@@ -543,21 +858,21 @@ def main():
     else:
         overlap = args.overlap
         print(f"Division into {sz}x{sz} subimages with {overlap} overlap will now begin for intervaled tiff files (unit: pixel).")
-        
-    # Perform image division
-    crop_img_fraction = args.crop
+
+    # Perform image division (use crop_img_fraction from terminal or UI selection)
     try:
         if not intervaled_tiff_files:
             raise FileNotFoundError("No TIFF files found in the selected folder.")
-        
+
         print(f"Processing {len(intervaled_tiff_files)} of {len(all_tiff_files)} TIFF files (interval={interval}).")
-        
+
         for file in intervaled_tiff_files:
             input_file_path = os.path.join(input_folder, file)
+
             # Always use the basename without extension for folder names to avoid clashing with the source TIFF file
             base_name, _ = os.path.splitext(file)
             output_dir = os.path.join(input_folder, base_name)
-            
+
             # Try to create output directory with full base_name
             try:
                 os.makedirs(output_dir, exist_ok=True)
@@ -565,7 +880,7 @@ def main():
             except OSError as e:
                 # If filename is too long or other OS error, use shortened name
                 if "too long" in str(e).lower() or "filename" in str(e).lower():
-                    n1 = 40 
+                    n1 = 40
                     n2 = 4
                     folder_name = base_name[:n1] + '___' + base_name[-n2:]
                     output_dir = os.path.join(input_folder, folder_name)
@@ -573,7 +888,7 @@ def main():
                     print(f"Warning: Filename too long. Using shortened name: {folder_name}")
                 else:
                     raise
-            
+
             short_names.append(folder_name)
             if not args.terminal:
                 current_file_label.config(text=f"Dividing file: {file}")
@@ -603,11 +918,11 @@ def main():
             print(f">> {i + 1}. {short_name} ({num_files} files)")
         folder_choice = int(input("Enter the number of the folder you want to use: ")) - 1
         selected_folder = os.path.join(input_folder, short_names[folder_choice])
-        
+
         selected_files = []
         print(f"Please choose at least 3 TIFF files from the folder {selected_folder} that clearly have particles in them:")
         tiff_files = [f for f in os.listdir(selected_folder) if f.endswith('.tiff')]
-        
+
         # Display files with numbers (show only the first 20 if there are many)
         max_display = 20
         if len(tiff_files) > max_display:
@@ -617,19 +932,19 @@ def main():
         else:
             for i, tiff_file in enumerate(tiff_files):
                 print(f">> {i + 1}. {tiff_file}")
-            
+
         # Ask user to select files by numbers
         # Default to the first 10% of files if the user presses Enter
         default_count = max(1, len(tiff_files) // 10)  # Ensure at least 1 file is selected
         default_selections = ', '.join(str(i + 1) for i in range(min(default_count, len(tiff_files))))
-        
+
         prompt = f"Enter file numbers (e.g., '1, 4, 6, 11' or '1-5' or '1, 2, 4-7, 9') or press Enter for default (first {min(default_count, len(tiff_files))} files): "
         selections = input(prompt).strip()
-        
+
         if not selections:
             selections = default_selections
             print(f"Using default selections: {selections}")
-        
+
         # Parse the selections
         selected_indices = []
         for part in selections.split(','):
@@ -644,7 +959,7 @@ def main():
                     selected_indices.append(int(part))
                 except ValueError:
                     print(f"Warning: Ignoring invalid input '{part}'")
-                
+
         # Convert to 0-based indices and get file paths
         selected_files = []
         for idx in selected_indices:
@@ -652,7 +967,7 @@ def main():
                 selected_files.append(os.path.join(selected_folder, tiff_files[idx - 1]))
             else:
                 print(f"Warning: Ignoring out-of-range index {idx}")
-            
+
         if len(selected_files) < 3:
             print("Error: Please select at least 3 images.")
             return
@@ -684,12 +999,12 @@ def main():
     for file in selected_files:
         image = np.array(Image.open(file))
         params = fit_gaussian_2d(image)
-        
+
         if params is None:
             print(f"Skipping {os.path.basename(file)} - no clear particle detected")
             skipped_files.append(os.path.basename(file))
             continue
-            
+
         sigma_values.append(params[2])
         fitted_image = gaussian_2d(*np.meshgrid(np.arange(image.shape[1]), np.arange(image.shape[0])), *params).reshape(image.shape)
         images.append(image)
@@ -700,27 +1015,27 @@ def main():
     hist, bin_edges = np.histogram(sigma_values, bins=20)
     max_freq = np.max(hist)
     mode_bin_indices = np.where(hist == max_freq)[0]
-    
+
     # Only proceed with mode filtering if there's a single clear mode
     if len(mode_bin_indices) == 1:
         mode = (bin_edges[mode_bin_indices[0]] + bin_edges[mode_bin_indices[0] + 1]) / 2
-        
+
         # Create a filter mask for values within 0.25*mode to 2*mode
         filter_mask = [(0.25 * mode <= s <= 2 * mode) for s in sigma_values]
-        
+
         # Apply filter to all three arrays simultaneously to keep them in sync
         filtered_sigma_values = [s for i, s in enumerate(sigma_values) if filter_mask[i]]
         filtered_images = [img for i, img in enumerate(images) if filter_mask[i]]
         filtered_fitted_images = [img for i, img in enumerate(fitted_images) if filter_mask[i]]
-        
+
         # Count how many were filtered out
         filtered_out_count = len(sigma_values) - len(filtered_sigma_values)
-        
+
         # Replace the original arrays with the filtered versions
         sigma_values = filtered_sigma_values
         images = filtered_images
         fitted_images = filtered_fitted_images
-        
+
         print(f"\nMode sigma: {mode:.2f}")
         print(f"Filtered {filtered_out_count} outlier values")
     else:
@@ -741,11 +1056,11 @@ def main():
 
     # Plot the original and fitted images side-by-side for the selected images
     plt.figure(figsize=(5, 9))
-    
+
     # Determine the common color range for the original and fitted images
     vmin = min(np.min(image) for image in images)
     vmax = max(np.max(image) for image in images)
-    
+
     # Plot original and fitted images side-by-side for the selected images
     n_plot = min(5, len(images))  # Ensure at least 5 plots are shown
     for i in range(n_plot):
@@ -761,13 +1076,13 @@ def main():
         plt.colorbar().ax.tick_params(labelsize=6)
         plt.xticks(fontsize=6)
         plt.yticks(fontsize=6)
-    
+
     # Save or show the fitting plots
     if args.terminal and args.save_plots:
         fits_plot_path = os.path.join(input_folder, "gaussian_fits.png")
         plt.savefig(fits_plot_path)
         print(f"Gaussian fits plot saved to {fits_plot_path}")
-    
+
     # Plot histogram of sigma values
     plt.figure(figsize=(4,3))
     plt.hist(sigma_values, bins=20, edgecolor='black')
@@ -778,7 +1093,7 @@ def main():
     plt.ylabel('Frequency', fontsize=8)
     plt.xticks(fontsize=6)
     plt.yticks(fontsize=6)
-    
+
     # Save or show the histogram plot
     if args.terminal and args.save_plots:
         hist_plot_path = os.path.join(input_folder, "sigma_histogram.png")
@@ -797,18 +1112,18 @@ def main():
             if file.endswith('.tiff'):
                 # Mirror the logic used during division to locate the output folders
                 base_name, _ = os.path.splitext(file)
-                
+
                 # First, try to find folder with full base_name
                 output_dir = os.path.join(input_folder, base_name)
                 folder_name = base_name
-                
+
                 # If full name doesn't exist, try shortened name
                 if not os.path.isdir(output_dir):
-                    n1 = 40 
+                    n1 = 40
                     n2 = 4
                     folder_name = base_name[:n1] + '___' + base_name[-n2:]
                     output_dir = os.path.join(input_folder, folder_name)
-                
+
                 if os.path.isdir(output_dir):
                     new_output_dir = os.path.join(datasets_dir, folder_name)
                     if os.path.exists(new_output_dir):
@@ -852,7 +1167,7 @@ def main():
                     print("\nYou can edit the following parameters:")
                     for i, (key, value) in enumerate(config_data.items(), 1):
                         print(f"{i}. {key}: {value}")
-                    
+
                     while True:
                         param_num = input("\nEnter parameter number to edit (or 'done' to finish): ")
                         if param_num.lower() == 'done':
@@ -863,7 +1178,7 @@ def main():
                                 key = list(config_data.keys())[param_num - 1]
                                 current_value = config_data[key]
                                 print(f"Current value of '{key}': {current_value}")
-                                
+
                                 # Handle different types of values
                                 if isinstance(current_value, bool):
                                     new_value = input(f"Enter new value (true/false): ").strip().lower()
@@ -877,22 +1192,22 @@ def main():
                                 else:
                                     new_value = input(f"Enter new value (string): ").strip()
                                     config_data[key] = new_value
-                                
+
                                 print(f"Updated '{key}' to: {config_data[key]}")
                             else:
                                 print("Invalid parameter number!")
                         except ValueError:
                             print("Please enter a valid number or 'done'")
-                    
+
                     print("\nFinal configuration:")
                     print(json.dumps(config_data, indent=4))
                 elif edit_config == 'na':
                     skipall_edits = True
-            
+
             config_path = os.path.join(config_dir, f'{short_name}.json')
             with open(config_path, 'w') as config_file:
                 json.dump(config_data, config_file, indent=4)
-            
+
             if args.terminal:
                 print(f"\nConfig file saved to: {os.path.abspath(config_path)}")
                 print("=" * 50)
@@ -933,7 +1248,4 @@ if __name__ == "__main__":
     # #     # Run the main function without parallel processing ('-p' option value is False)
     #     sys.argv = ["preprocess_exp_data.py", "--folder", "./datasets/coreshell_np_data/130125_Au_nanoshell_Ag/130125_covidvirus_ctrl", "--terminal", "--size", "50", "--interval", "0", "--save-plot"] 
     #     # ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
-
-  # args = 
-
     main()
