@@ -249,7 +249,6 @@ def format_xname(filename):
         else:
             chunk = chunk.split("_")[0]
 
-    print(filename)
     return parse_xpart(chunk)
 
 
@@ -333,8 +332,24 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
     # Print all data points in the graph
     for lam, accuracies in all_accuracies.items():
         print(f"Lambda: {lam}")
-        for x_val, accuracy in zip(x_vals, [accuracy for _, accuracy in accuracies]):
-            print(f"{x_val}: {accuracy}")
+        accuracy_dict = {}
+        for filename, accuracy in accuracies:
+            basename = os.path.basename(filename)
+            pattern_part = os.path.basename(filename).split('_code_ver')[0]
+            if pattern_part.endswith('baseline'):
+                xname = '1x'
+            else:
+                xname = format_xname(pattern_part)
+            accuracy_dict[xname] = accuracy
+        
+        # Use the same x_vals processing as the plot
+        x_vals_processed = ['2x' if x == 'sqrt4x' else '2sqrt2x' if x == 'sqrt8x' else x for x in x_vals]
+        x_vals_processed = ['1/2x' if x == '1/sqrt4x' else '1/2sqrt2x' if x == '1/sqrt8x' else x for x in x_vals_processed]
+        x_vals_processed = ['1/4x' if x == '1/sqrt16x' else '4x' if x == 'sqrt16x' else x for x in x_vals_processed]
+        
+        for x_val in x_vals_processed:
+            if x_val in accuracy_dict:
+                print(f"{x_val}: {accuracy_dict[x_val]}")
 
     # Ask in terminal to save the data points as a CSV file
     save_csv = input("Do you want to save the data points as a CSV file? (y/n): ").strip().lower()
@@ -349,8 +364,24 @@ def plot_all_accuracies(all_accuracies, x_vals, xlabel, show_legend=False, legen
         with open(filename, 'w') as f:
             f.write("Lambda,X Value,Accuracy\n")
             for lam, accuracies in all_accuracies.items():
-                for x_val, accuracy in zip(x_vals, [accuracy for _, accuracy in accuracies]):
-                    f.write(f"{lam},{x_val},{accuracy}\n")
+                accuracy_dict = {}
+                for filename_acc, accuracy in accuracies:
+                    basename = os.path.basename(filename_acc)
+                    pattern_part = basename.split('_code_ver')[0]
+                    if pattern_part.endswith('baseline'):
+                        xname = '1x'
+                    else:
+                        xname = format_xname(pattern_part)
+                    accuracy_dict[xname] = accuracy
+                
+                # Use the same x_vals processing as the plot and printing
+                x_vals_processed = ['2x' if x == 'sqrt4x' else '2sqrt2x' if x == 'sqrt8x' else x for x in x_vals]
+                x_vals_processed = ['1/2x' if x == '1/sqrt4x' else '1/2sqrt2x' if x == '1/sqrt8x' else x for x in x_vals_processed]
+                x_vals_processed = ['1/4x' if x == '1/sqrt16x' else '4x' if x == 'sqrt16x' else x for x in x_vals_processed]
+                
+                for x_val in x_vals_processed:
+                    if x_val in accuracy_dict:
+                        f.write(f"{lam},{x_val},{accuracy_dict[x_val]}\n")
         print(f"Data points saved to {filename}")
 
 
@@ -660,22 +691,24 @@ def generate_x_sequence(min_val, max_val):
 
 # # Folder path containing the CSV files
 # folder_path = './processing/scatterstr_test'
+folder_path = './processing/scatter'
 # folder_path = './processing/background_psf4_peakconst'
 # folder_path = './processing/background_test'
+# folder_path = './processing/background'
 # folder_path = './processing/psfwidth_test_const_peakval_bg'
 # folder_path = './processing/snr_test'
 # folder_path = './processing/d6-tolerance_of_psf-test'
 # folder_path = './processing/zoom_test'
-folder_path = './processing/psfwidth_test_const_peaksum_bg'
+# folder_path = './processing/psfwidth_test_const_peaksum_bg'
 
 # xlabel = "Background Level (psf4, const peak height)"
 # xlabel = "Background Level"
-# xlabel = "Scatter Strength"
+xlabel = "Scatter Strength"
 # xlabel = "Signal-to-Noise Ratio"
 # xlabel = "Analysis PSF width / True PSF width"
 # xlabel = "Zoom Factor"
 # xlabel = "PSF width (constant: peak value, background)"
-xlabel = "PSF width (constant: peak sum, background)"
+# xlabel = "PSF width (constant: peak sum, background)"
 
 # # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2)# x_vals = generate_x_sequence(1/8, 4)  
 # x_vals = generate_x_sequence(1/32, 8)  
@@ -690,7 +723,7 @@ xlabel = "PSF width (constant: peak sum, background)"
 # x_vals = generate_x_sequence(1/np.sqrt(8), 1)
 # print(x_vals)
 # Expected: ['1/sqrt8x', '1/sqrt4x', '1/sqrt2x', '1x'])
-x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
+# x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
 # x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(16))
 # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(2))
 # x_vals = generate_x_sequence(1/np.sqrt(16), np.sqrt(8))
@@ -698,7 +731,7 @@ x_vals = generate_x_sequence(1/np.sqrt(8), np.sqrt(8))
 # x_vals = generate_x_sequence(1/2, 256)
 # x_vals = generate_x_sequence(1/2, 2048)
 # x_vals = generate_x_sequence(1/32, 8)
-# x_vals = generate_x_sequence(1/64, 8)
+x_vals = generate_x_sequence(1/64, 8)
 
 tags = x_vals
 
