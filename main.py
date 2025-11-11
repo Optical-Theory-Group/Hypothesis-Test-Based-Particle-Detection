@@ -1,11 +1,8 @@
 from process_algorithms import generalized_maximum_likelihood_rule
 from process_algorithms import merge_coincident_particles
-from image_generation import psfconvolution
-from tqdm import tqdm
+from image_generation import generate_test_images, generate_separation_test_images
 from collections import OrderedDict
-import imageio
 import ast
-import matplotlib
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 import pprint
 import json
@@ -27,258 +24,13 @@ from cProfile import Profile
 from pstats import SortKey, Stats
 import tifffile
 
-def generate_test_images(image_folder_basename, maximum_number_of_particles, particle_intensity_mean, particle_intensity_sd=0, total_image_count=1, psf_sigma=1, image_side_length=20, background_level=1, 
-                         generation_random_seed=42, config_content=None, minimum_number_of_particles=0, file_extension='tiff'):
-    """ Generate test images (16-bit) with random number of particles between minimum_number_of_particles and maximum_number_of_particles.
-    
-    Parameters:
-        image_folder_basename (str): The basename of the folder to store the images.
-        maximum_number_of_particles (int): The maximum number of particles to be generated in the image.
-        particle_intensity_mean (int or float): The mean intensity of the particles.
-        particle_intensity_sd (int or float): The standard deviation of the particle intensity. Default is 0.
-        total_image_count (int): The total number of images to be generated.
-        psf_sigma (float): The sigma (width) of the point spread function in pixels.
-        image_side_length (int): The side length of the image in pixels. This will be both the width and height of the image.
-        background_level (int): The background intensity of the image.
-        generation_random_seed (int): The random seed for this function.
-        config_content (str): The content of the config file. Expected to be a string. Default is None.
-        minimum_number_of_particles (int): The minimum number of particles in the image. Default is 0.
-        file_extension (str): The format of the image file. Default is 'tiff'.
-        
-    Returns:
-        str: The path of the folder containing the generated images
-    """
 
-    # Load the config file 
-    if config_content:
-        config = json.loads(config_content)
-        if 'file_format' in config:
-            file_extension = config['file_format']
-
-    # Check if the format is either 'tiff' or 'png'
-    if file_extension not in ['tiff', 'png']:
-        raise ValueError("File format must be either 'tiff' or 'png'.")
-
-    # Set the random seed
-    np.random.seed(generation_random_seed)
-
-    # Take the total images count to be generated and calculate the number of images to be generated for each particle count (particle_count=0, 1, 2, 3, ..., maximum_number_of_particles)
-    number_of_types = maximum_number_of_particles - minimum_number_of_particles + 1
-    number_of_images_per_type = int(np.ceil(total_image_count / number_of_types))
-    
-    # Print the number of images to be generated and folder to store the images. 
-    print(f'Generating images containing the following number of particles: {minimum_number_of_particles} - {maximum_number_of_particles}. It will produce {number_of_images_per_type} images per each case.')
-    number_of_total_images = number_of_images_per_type * number_of_types
-    print(f'Total {number_of_total_images} images will be generated.')
-    
-    # Address the potential issue of the total number of images being slightly more than the total number of images requested to make the same number of image per for each particle count.
-    user_input_total_image_count = total_image_count
-    if number_of_total_images > user_input_total_image_count:
-        print('-- This may be slightly more than the total number of images requested to make the same number of image per for each particle count.')
-
-    # Create the folder to store the images
-    image_folder_path = os.path.join("datasets", f"{image_folder_basename}") 
-    os.makedirs(image_folder_path, exist_ok=True)
-    print(f'Image save destination: ./datasets/{image_folder_basename}')
-
-    # Use the function input parameters - particle_intensity_mean, particle_intensity_sd, and background_level - to determine the color mode of the image (gray or rgb)
-    # Determine the color mode of the image (gray or rgb)
-    if isinstance(particle_intensity_mean, (int, float)) and isinstance(particle_intensity_sd, (int, float)) and isinstance(background_level, (int, float)): # Case : gray scale
-        color_mode = 'gray' # gray scale
-    elif len(particle_intensity_mean) == len(particle_intensity_sd) == len(background_level) == 3: # Case : rgb
-        color_mode = 'rgb'  # Red, Green, Blue
-    else:
-        raise ValueError("The color mode of the image is not recognized. Please check the following variables: particle_intensity_mean, particle_intensity_sd, and background_level.")
-
-    # Print the color mode of the image
-    with tqdm(total=number_of_total_images, desc="Generating Images", unit="image") as pbar:
-        for number_of_particles_in_the_image in range(minimum_number_of_particles, maximum_number_of_particles+1):
-            for image_index in range(number_of_images_per_type):
-                # Initialize the image with the flat background intensity (no noise yet)
-                if color_mode == 'gray':
-                    image = np.ones((image_side_length, image_side_length), dtype=np.float32) * background_level
-                else:   
-                    image = [np.ones((image_side_length, image_side_length), dtype=np.float32) * background_level[i] for i in range(3)]
-
-                for _ in range(number_of_particles_in_the_image):
-
-                    # Randomly draw the position of the particle, avoiding the edges of the image
-                    x = np.random.rand() * (image_side_length - psf_sigma * 4) + psf_sigma * 2 - 0.5
-                    y = np.random.rand() * (image_side_length - psf_sigma * 4) + psf_sigma * 2 - 0.5
-
-                    # Randomly draw the relative intensity of the particle
-                    if color_mode == 'gray':
-                        particle_intensity = np.random.normal(particle_intensity_mean, particle_intensity_sd)
-                        if particle_intensity < 0:
-                            raise ValueError("Randomly drawn particle intensity is less than 0, which is not allowed.")
-
-                        # Create peak info dictionary containing the x, y positions of the particle, the intensity of the particle, and the sigma (width) of the point spread function
-                        peak_info = {'x': x, 'y': y, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
-
-                    else: # Case : rgb
-                        particle_intensities = np.array([np.random.normal(particle_intensity_mean, particle_intensity_sd) for i in range(3)])
-                        if np.any(particle_intensities < 0):
-                            raise ValueError("Randomly drawn particle intensity (at least one of r, g, or b) is less than 0, which is not allowed.")
-
-                        # Create peak info dictionary
-                        peak_info = {'x': x, 'y': y, 'prefactor': particle_intensities, 'psf_sigma': psf_sigma}
-
-                    # Add the point spread function of the particle to the image
-                    image += psfconvolution(peak_info, image_side_length)
-
-                # Add Poisson noise
-                image = np.random.poisson(image) # Notice the the image type if float. 
-                img_filename = f"count{number_of_particles_in_the_image}-index{image_index}.{file_extension}"
-                if file_extension == 'png' and np.any(image > 65535):
-                    print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Since png can store max 16-bits, such values will be clipped. This mimics saturation in the camera.")
-                    image = np.clip(image, 0, 65535)
-
-                # Adjust the shape of the image to match that of png or tiff
-                if image.ndim == 3 and image.shape[0] == 3: # This is when the image is in C x H x W format
-                    image = np.transpose(image, (1, 2, 0)) # Change the shape to H x W x C format
-
-                # Save the image
-                img_filepath = os.path.join(image_folder_path, img_filename)
-                if file_extension == 'png':
-                    imageio.imwrite(img_filepath, image.astype(np.uint16))
-                elif file_extension == 'tiff':
-                    imageio.imwrite(img_filepath, image.astype(np.float32))
-
-                # Update the progress bar
-                pbar.update(1)
-
-    # Save the content of the config file as "config_used.json"
-    if config_content is not None:
-        config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
-        with open(config_file_save_path, 'w') as f:
-            json.dump(json.loads(config_content), f, indent=4)
-
-    # Return the path of the folder containing the images
-    return image_folder_path
-
-def generate_separation_test_images(image_folder_basename='separation_test', sep_distance_ratio_to_psf_sigma=3, total_image_count=20, amp_to_background_level=5, psf_sigma=1, 
-                                    image_side_length=20, background_level=500, generation_random_seed=42, config_content=None, file_extension='tiff'):
-    """ Generate test images (16-bit) with two particles separated by a distance of sep_distance_ratio_to_psf_sigma times the psf_sigma.
-        *** RGB images are not supported in this function.
-    
-    Parameters:
-        image_folder_basename (str): The name of the folder to store the images.
-        sep_distance_ratio_to_psf_sigma (int or float): The ratio of the separation distance to the psf sigma.
-        total_image_count (int): The total number of images to be generated.
-        amp_to_background_level (int or float): The amplitude of the particles relative to the background.
-        psf_sigma (float): The sigma (width) of the point spread function.
-        image_side_length (int): The size of the image. Both width and height are the same.
-        background_level (int): The background intensity of the image.
-        generation_random_seed (int): The random seed for generating the images.
-        config_content (str): The content of the config file.
-        file_extension (str): The format of the image file. Default is 'tiff'.
-        
-    Returns:
-        str: The path of the folder containing the images
-    """                            
-    # Load the config file
-    if config_content:
-        config = json.loads(config_content)
-        if 'file_format' in config:
-            file_extension = config['file_format']
-
-    # Check if the format is either 'tiff' or 'png'
-    if file_extension not in ['tiff', 'png']:
-        raise ValueError("Format must be either 'tiff' or 'png'.")
-
-    # Calculate the separation distance in pixels
-    separation_distance = sep_distance_ratio_to_psf_sigma * psf_sigma
-
-    # Check if the separation distance is greater than the size of the image
-    if separation_distance >= image_side_length - 4 * psf_sigma - 2: # 4 * psf_sigma accounts for the required separation of the two particles from the edge of the image and 2 accounts for the maximum random shift of center_x and center_y.
-        raise ValueError(f"Separation {separation_distance} must be less than image_side_length - 4 * psf_sigma - 2 to be generally detectable.")
-
-    # Set random seed
-    np.random.seed(generation_random_seed)
-
-    # Create the folder to store the images. 
-    image_folder_path = f"./datasets/{image_folder_basename}"
-    os.makedirs(image_folder_path, exist_ok=True)
-    
-    # Set strings containing the psf and separation distance for file naming, replacing '.' with '_' to avoid confusing '.' as file extension separator.
-    psf_str = f"{psf_sigma:.1f}".replace('.', '_')
-    sep_str = f"{sep_distance_ratio_to_psf_sigma:.1f}".replace('.', '_')
-
-    # Print the number of images to be generated and the folder to store the images.
-    print(f'Generating {total_image_count} images with psf {psf_sigma} and separation {sep_str} times the psf in folder {image_folder_path}.')
-
-    # Generate images
-    with tqdm(total=total_image_count, desc="Generating Images", unit="image") as progress_bar:
-        for image_index in range(total_image_count):
-
-            # Print the image index every 20 images
-            if image_index % 20 == 0:
-                print(f"Generating image index {image_index}", end='\r')
-
-            # Initialize the image with the background intensity
-            image = np.ones((image_side_length, image_side_length), dtype=float) * background_level
-
-            # Calculate the particle intensity
-            particle_intensity = amp_to_background_level * background_level
-            angle = np.random.uniform(0, 2*np.pi)
-
-            # Set the middle position between particle 1 & 2 - Give random offset (-.5, .5) pixels in both x and y to randomize the center position relative to the pixel grid.
-            center_x = image_side_length / 2 + np.random.uniform(-.5, .5)
-            center_y = image_side_length / 2 + np.random.uniform(-.5, .5)
-
-            # Set the x, y positions of particle 1
-            x1 = center_x + separation_distance / 2 * np.cos(angle)
-            y1 = center_y + separation_distance / 2 * np.sin(angle)
-
-            # Check if the particle is out of bounds
-            if (x1 <= -.5 + 2 * psf_sigma or x1 >= image_side_length - .5 - 2 * psf_sigma): 
-                raise ValueError(f"Particle 1 is out of bounds: x1={x1}, y1={y1}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
-
-            # Add the point spread function of particle 1 to the image
-            peak_info = {'x': x1, 'y': y1, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
-            image += psfconvolution(peak_info, image_side_length)
-
-            # Set the x, y positions of particle 2
-            x2 = center_x - separation_distance / 2 * np.cos(angle)
-            y2 = center_y - separation_distance / 2 * np.sin(angle)
-
-            # Check if the particle is out of bounds
-            if (y1 <= -.5 + 2 * psf_sigma or y1 >= image_side_length - .5 - 2 * psf_sigma):
-                raise ValueError(f"Particle 2 is out of bounds: x2={x2}, y2={y2}. The code logic does not allow this to happen. Check the code inside generate_separation_test_images().")
-            
-            # Add the point spread function of particle 2 to the image
-            peak_info = {'x': x2, 'y': y2, 'prefactor': particle_intensity, 'psf_sigma': psf_sigma}
-            image += psfconvolution(peak_info, image_side_length)
-
-            # Add Poisson noise to the whole image
-            image = np.random.poisson(image) # This is the end of image processing.
-                
-            if np.any(image) > 65535:
-                print(f"Warning: The pixel value(s) of {img_filename} exceeds 65535. Such values will be clipped. This mimics saturation in the camera.")
-                image = np.clip(image, 0, 65535)
-            
-            # Save the image
-            img_filename = f"count2_psf{psf_str}_sep{sep_str}_index{image_index}.{file_extension}"
-            img_filepath = os.path.join(image_folder_path, img_filename)
-            imageio.imwrite(img_filepath, image.astype(np.uint16))
-
-            # Update the progress bar
-            progress_bar.update(1)
-
-    # Print the completion of image generation
-    print(f"Image generation completed (total: {total_image_count}). Images saved to {image_folder_path}.")
-
-    # Save the content of the config file
-    if config_content is not None:
-        config_file_save_path = os.path.join(image_folder_path, 'config_used.json')
-        with open(config_file_save_path, 'w') as f:
-            json.dump(json.loads(config_content), f, indent=4)
-
-    return image_folder_path
-
-
+#######################################################################
+# ########### Define some utility functions ###########################
+#######################################################################
 def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=''):
-    """ Calls updated_progress() to print updated progress bar and returns the updated progress count.
+    """
+    Calls update_progress() to print updated progress bar and returns the updated progress count.
 
     Parameters:
         progresscount (int): Current counter recording progress.
@@ -287,25 +39,26 @@ def report_progress(progresscount, totalrealisations, starttime=None, statusmsg=
     Return:
         progresscount (int): Input value incremented by 1.
     """
-    # update progress trackers 
+    # update progress trackers
     progresscount += 1
-    runtime = datetime.now() - starttime  
+    runtime = datetime.now() - starttime
     runtime -= timedelta(microseconds=runtime.microseconds)
     remaintime = (runtime / progresscount) * (totalrealisations - progresscount)
     remaintime = remaintime - timedelta(microseconds=remaintime.microseconds)
 
     # Store the progress message
-    strmsg = '{}/{}' \
-            ' in : {} (Remaining: {}). {}'.format(progresscount, totalrealisations,
-                                                    runtime, remaintime, statusmsg)
+    strmsg = '{}/{} in : {} (Remaining: {}). {}'.format(progresscount, totalrealisations,
+                                                        runtime, remaintime, statusmsg)
 
     # Call the update_progress function
     update_progress(progresscount / totalrealisations, strmsg)
 
     return progresscount
 
+
 def update_progress(progress, status='', barlength=10):
-    """ Prints a progress bar to console
+    """
+    Prints a progress bar to console
 
     Parameters:
         progress (float): Variable ranging from 0 to 1 indicating fractional progress.
@@ -315,29 +68,51 @@ def update_progress(progress, status='', barlength=10):
     Return:
         None
     """
+    # Ensure progress is a float
     if isinstance(progress, int):
         progress = float(progress)
+
+    # Check that progress is a float
     if not isinstance(progress, float):
         progress = 0
         status = 'error: progress var must be float\r\n'
+
+    # Clamp progress between 0 and 1
     if progress < 0:
         progress = 0
         status = 'Halt...\r\n'
     if progress >= 1:
         progress = 1
         status += ' \nReached 100 percent.\r\n'
+
+    # Build the progress bar string
     block = int(round(barlength * progress))
     text = '\rPercent: [{0}] {1:.2f}% {2}'.format('#' * block + '-' * (barlength - block), progress * 100, status)
     try:
         _, erase_length = os.get_terminal_size(0)  # get the width of the terminal to know how many characters to erase
     except OSError:
-        erase_length = len(text) + 10 # If the terminal size cannot be obtained, use the length of the text as the erase length
+        erase_length = len(text) + 10  # If the terminal size cannot be obtained, use the length of the text as the erase length
     clear_line = '\r' + ' ' * erase_length + '\r'
     sys.stdout.write(clear_line + text)
     sys.stdout.flush()
 
-def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_image, use_exit_condition=False, last_h_index=7, psf_sigma=1.39, analysis_rand_seed=0, config_content=None, parallel=False, display_xi_graph=False):
-    '''Analyzes all the images in the dataset folder.
+
+#######################################################################
+# ########### Define some (batch) processing functions ####################
+#######################################################################
+def analyze_whole_folder(image_folder_basename,
+                         code_version_date,
+                         timeout_per_image,
+                         use_exit_condition=False,
+                         last_h_index=7,
+                         psf_sigma=1.39,
+                         analysis_rand_seed=0,
+                         config_content=None,
+                         parallel=False,
+                         display_xi_graph=False
+                         ):
+    """
+    Analyzes all the images in the dataset folder.
 
     Parameters:
         image_folder_basename (str): The name of the folder containing the images.
@@ -353,8 +128,7 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
 
     Returns:
         analyses_folder (str): The path of the folder containing the analyses outputs.
-    '''
-
+    """
     # Set random seed
     np.random.seed(analysis_rand_seed)
 
@@ -365,7 +139,8 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
     # Print the folder being analyzed
     print(f"Looking into the folder {images_folder} to perform analysis")
 
-    # If the folder does not exist, print a message and find another folder that starts with image_folder_basename
+    # If the folder does not exist, print a message and find another folder that starts with 
+    # image_folder_basename
     if not os.path.exists(images_folder):
         print(f"Folder {images_folder} does not exist.")
         base_dir = './datasets'
@@ -376,7 +151,8 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
             print(f"Found folders starting with '{image_folder_basename}': {alternative_folders}")
             images_folder = os.path.join(base_dir, alternative_folders[0])
 
-            # Print a message to inform the user that the program is working with an alternative folder, close to the user input 
+            # Print a message to inform the user that the program is working with an alternative folder,
+            # close to the user input
             print(f"Note: The program is working with {images_folder} which is close to the user input {original_images_folder}. **")
         else:
             raise ValueError(f"No folder starting with '{image_folder_basename}' found in '{base_dir}'.")
@@ -416,7 +192,7 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
     # Create a folder to store the analysis outputs
     # Use shortened name if the full path would be too long
     full_folder_name = image_folder_basename + '_code_ver' + code_version_date
-    
+
     # Check if the path would be too long and shorten preemptively
     max_safe_length = 60  # Conservative limit to ensure file operations work
     if len(full_folder_name) > max_safe_length:
@@ -425,7 +201,7 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
         print(f"Warning: Folder name too long. Using shortened name: {short_folder_name}")
     else:
         short_folder_name = full_folder_name
-    
+
     analyses_folder = os.path.join('./analyses', short_folder_name)
     os.makedirs(analyses_folder, exist_ok=True)
 
@@ -477,8 +253,10 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
         # Analyze the images in parallel using ProcessPoolExecutor
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
-            futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, use_exit_condition=use_exit_condition )
-                        for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files)]
+            futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index,
+                                       analysis_rand_seed_per_image, analyses_folder,
+                                       use_exit_condition=use_exit_condition)
+                       for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files)]
             print(f"Number of futures submitted: {len(futures)}")
 
             # Initialize the progress counter
@@ -502,11 +280,13 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
                     determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                     # Write the results to the label_prediction log file
-                    with open(label_prediction_log_file_path, 'a', newline='') as f:    
+                    with open(label_prediction_log_file_path, 'a', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                        writer.writerow([input_image_file, actual_num_particles,
+                                         estimated_num_particles, determined_particle_intensities])
 
-                    # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
+                    # Set status message on whether the analysis overestimated, underestimated,
+                    # or correctly estimated the number of particles
                     sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
                     if estimated_num_particles == -1:
                         if actual_num_particles < 0:
@@ -527,24 +307,18 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
                 # Increment the progress counter
                 progress += 1
 
-    else: # If the analysis is to be done sequentially
+    else:  # If the analysis is to be done sequentially
         print("Analyzing images in serial...")
-
         # Initialize the progress counter
         progress = 0
 
         # Iterate over the images
         for analysis_rand_seed_per_image, filename in zip(image_rand_seeds, all_image_files):
-
-
-            # Print the filename being analyzed
-            # if filename.lower().endswith("div_02_11.tiff"):
-            #     pass # for Debug
-
-            # Read the first image file to determine if it is grayscale or RGB
-            # Analyze the image
             try:
-                analysis_result = analyze_image(filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_xi_graph=display_xi_graph, use_exit_condition=use_exit_condition)
+                analysis_result = analyze_image(filename, psf_sigma, last_h_index,
+                                                analysis_rand_seed_per_image, analyses_folder,
+                                                display_xi_graph=display_xi_graph,
+                                                use_exit_condition=use_exit_condition)
 
                 # Extract the results from the analysis result
                 actual_num_particles = analysis_result['actual_num_particles']
@@ -554,15 +328,16 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
                 determined_particle_intensities = analysis_result['determined_particle_intensities']
 
                 # Write the results to the label_prediction log file
-                with open(label_prediction_log_file_path, 'a', newline='') as f: 
+                with open(label_prediction_log_file_path, 'a', newline='') as f:
                     writer = csv.writer(f)
-                    writer.writerow([input_image_file, actual_num_particles, estimated_num_particles, determined_particle_intensities])
+                    writer.writerow([input_image_file, actual_num_particles,
+                                     estimated_num_particles, determined_particle_intensities])
 
                 # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
                 if actual_num_particles < 0: 
                     statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
                 else:   
-                    sign = '+' if estimated_num_particles - actual_num_particles >= 0 else '' # negative sign will automatically be added if the difference is negative
+                    sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''  # negative sign will automatically be added if the difference is negative
                     statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
 
             except Exception as e:
@@ -570,15 +345,28 @@ def analyze_whole_folder(image_folder_basename, code_version_date, timeout_per_i
 
             total_count = len(all_image_files)
             report_progress(progress, total_count, starttime, statusmsg)
+            
             # Increment the progress counter
             progress += 1
-            print() # Print a newline after the progress bar
-            
+            print()  # Print a newline after the progress bar
+
     return analyses_folder, short_folder_name  # Return the path of the folder containing the analyses outputs and the shortened folder name
 
-def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_per_image, analyses_folder, display_fit_results=False, display_xi_graph=False, use_exit_condition=False, tile_width=40, tile_jump_distance=30, tiling_width_threshold=160):
+
+def analyze_image(image_filename,
+                  psf_sigma,
+                  last_h_index,
+                  analysis_rand_seed_per_image,
+                  analyses_folder,
+                  display_fit_results=False,
+                  display_xi_graph=False,
+                  use_exit_condition=False,
+                  tile_width=40,
+                  tile_jump_distance=30,
+                  tiling_width_threshold=160
+                  ):
     """ Analyze an image using the generalized maximum likelihood rule.
-    
+
     Parameters:
         image_filename (str): The name of the image file.
         psf_sigma (float): The sigma of the point spread function.
@@ -588,11 +376,14 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         display_fit_results (bool): Whether to display the fit results. Default is False.
         display_xi_graph (bool): Whether to display the xi graph. Default is False.
         use_exit_condition (bool): Whether to use the exit condition. Default is False.
-        tile_width (int): The width of the tile. Default is 40. Tiling only occurs if the image is larger than the tile size.
-        tile_jump_distance (int): Default is 30. This is the distance between adjacent tiles in pixels. It is less than the tile width to ensure overlap between adjacent tiles.
-        
+        tile_width (int): The width of the tile. Default is 40. Tiling only occurs if the image is
+                          larger than the tile size.
+        tile_jump_distance (int): Default is 30. This is the distance between adjacent tiles in pixels. 
+                          It is less than the tile width to ensure overlap between adjacent tiles.
+
     Returns:
-        image_analysis_results (dict) or tile_combined_results (dict): The results of the image analysis or, if the image is too big to analyze at once, the combined results of the tiles. 
+        image_analysis_results (dict) or tile_combined_results (dict): The results of the image analysis
+                    or, if the image is too big to analyze at once, the combined results of the tiles.
         (Currently, the latter is not implemented and the function returns None.)
     """
     # Print the name of the image file
@@ -622,7 +413,7 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         actual_num_particles = int(basename.split('-')[0].split('count')[1].split('_')[0])
     else:
         actual_num_particles = -1
-    
+
     # foldername = os.path.basename(os.path.dirname(image_filename))
 
     def analyze_region_of_interest(tiling, roi_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=None, color_mode=None):
@@ -733,11 +524,252 @@ def analyze_image(image_filename, psf_sigma, last_h_index, analysis_rand_seed_pe
         'image_filename': image_filename,
         'determined_particle_intensities': determined_intensities,
         }
-    
+
     return analyze_image_result
 
 
-def generate_intensity_histogram(label_pred_log_file_path, image_folder_basename, code_version_date='', display=False, savefig=True):
+def process(config_files_dir,
+            parallel=False,
+            move_finished_config_file=True):
+    ''' Process the config files in the config_files_dir directory.
+
+    Parameters:
+        config_files_dir (str): The path of the directory containing the config files.
+        parallel (bool): Whether to run the processing in parallel. Default is False.
+
+    Returns:
+        analyses_folder (str): The path of the folder containing the analyses outputs.
+    '''
+    # Load the config files
+    try:
+        config_files = os.listdir(config_files_dir)
+    except (FileNotFoundError, PermissionError) as e:
+        print(f"Error accessing directory {config_files_dir}: {e}")
+        return None
+
+    # Filter out non-JSON files
+    config_files = [file for file in config_files if file.endswith('.json')]
+
+    # Print the config files
+    print(f"Config files loaded (total of {len(config_files)}):")
+    for config_file in config_files:
+        print("> " + config_file)
+
+    # Process the config files
+    for i, config_file in enumerate(config_files):
+        print(f"Processing {config_file} ({i+1}/{len(config_files)})")
+        try:
+            with open(os.path.join(config_files_dir, config_file), 'r') as f:
+                config = json.load(f, object_pairs_hook=OrderedDict)
+
+                # Pretty print the config file
+                pprint.pprint(config)
+
+                # Set the required fields for each type of processing
+                required_fields_common = ['image_folder_namebase',
+                                          'code_version_date'
+                                          ]
+
+                required_fields_for_separation_test = ['separation_test_image_generation?',
+                                                       'sep_image_count',
+                                                       'sep_intensity_prefactor_to_bg_level',
+                                                       'sep_psf_sigma',
+                                                       'sep_distance_ratio_to_psf_sigma',
+                                                       'sep_img_width',
+                                                       'sep_bg_level',
+                                                       'sep_random_seed'
+                                                       ]
+
+                required_fields_for_generation = ['generate_regular_dataset?',
+                                                  'gen_random_seed',
+                                                  'gen_total_image_count',
+                                                  'gen_psf_sigma',
+                                                  'gen_img_width',
+                                                  'gen_minimum_particle_count',
+                                                  'gen_maximum_particle_count',
+                                                  'gen_bg_level',
+                                                  'gen_particle_intensity_mean',
+                                                  'gen_particle_intensity_sd'
+                                                  ]
+
+                required_fields_for_analysis = ['analyze_the_dataset?',
+                                                'ana_random_seed',
+                                                'ana_predefined_psf_sigma',
+                                                'ana_use_premature_hypothesis_choice?',
+                                                'ana_maximum_hypothesis_index'
+                                                ]
+
+                # Check if the required_fields_common are strings
+                for field in required_fields_common:
+                    if field in config and not isinstance(config[field], str):
+                        # The config file cannot be used to run the code. Print an error message and exit
+                        print(f"Error: '{field}' should be a string.")
+                        exit()
+                    else:
+                        # Replace '.' with '_' in the field value to avoid issues with file paths
+                        if '.' in config[field]:
+                            before_change = config[field]
+                            config[field] = config[field].replace('.', '_')
+                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
+
+                # Check if all fields ending with '?' are boolean
+                for field in config:
+                    if field.endswith('?') and not isinstance(config[field], bool):
+                        # The config file cannot be used to run the code. Print an error message and exit
+                        print(f"Error: '{field}' should be a boolean.")
+                        exit()
+
+                # Assign the required fields based on the type of processing
+                required_fields = required_fields_common
+
+                if 'separation_test_image_generation?' in config and config['separation_test_image_generation?']:
+                    required_fields += required_fields_for_separation_test
+                elif 'generate_regular_dataset?' in config and config['generate_regular_dataset?']:
+                    required_fields += required_fields_for_generation
+                elif 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
+                    required_fields += required_fields_for_analysis
+
+                # Check if all required fields are present in the config file
+                for field in required_fields:
+                    if field not in config:
+                        # If config['separation_test_image_generation?'] is True, then all fields starting with 'sep' are required.
+                        if config['separation_test_image_generation?'] and field.startswith('sep'):
+                            print(f"Error: '{field}' should be set for separation test image generation.")
+                            exit()
+                        # If config['generate_regular_dataset?'] is True, then all fields starting with 'gen' are required.
+                        if config['generate_regular_dataset?'] and field.startswith('gen'):
+                            print(f"Error: '{field}' should be set for image generation.")
+                            exit()
+                        # If config['analyze_the_dataset?'] is True, then all fields starting with 'analysis' are required.
+                        if config['analyze_the_dataset?'] and field.startswith('ana'):
+                            print(f"Error: '{field}' should be set for image analysis.")
+                            exit()
+
+        # If the config file is not found or invalid, print an error message and continue to the next config file
+        except (FileNotFoundError, json.JSONDecodeError):
+            print(f"Error: {config_file} file not found or invalid. Skipping to the next config file.")
+            continue
+
+        # Generate separation test images
+        if 'separation_test_image_generation?' in config and config['separation_test_image_generation?']:
+            generate_separation_test_images(image_folder_basename=config['image_folder_namebase'],
+                                            sep_distance_ratio_to_psf_sigma=config['sep_distance_ratio_to_psf_sigma'],
+                                            total_image_count=config['sep_image_count'],
+                                            amp_to_background_level=config['sep_intensity_prefactor_to_bg_level'],
+                                            psf_sigma=config['sep_psf_sigma'],
+                                            image_side_length=config['sep_img_width'],
+                                            background_level=config['sep_bg_level'],
+                                            generation_random_seed=config['sep_random_seed'],
+                                            config_content=json.dumps(config)
+                                            )
+
+        # Generate regular dataset
+        elif 'generate_regular_dataset?' in config and config['generate_regular_dataset?']:
+            generate_test_images(image_folder_basename=config['image_folder_namebase'],
+                                 total_image_count=config['gen_total_image_count'],
+                                 minimum_number_of_particles=config['gen_minimum_particle_count'],
+                                 maximum_number_of_particles=config['gen_maximum_particle_count'],
+                                 particle_intensity_mean=config['gen_particle_intensity_mean'],
+                                 particle_intensity_sd=config['gen_particle_intensity_sd'],
+                                 psf_sigma=config['gen_psf_sigma'], image_side_length=config['gen_img_width'],
+                                 background_level=config['gen_bg_level'],
+                                 generation_random_seed=config['gen_random_seed'],
+                                 config_content=json.dumps(config)
+                                 )
+
+        # Analyze dataset
+        if 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
+            timeout = config.get('ana_timeout_per_image', 3600)  # time out = 1 hour per image
+            analyses_folder_path, short_folder_name = analyze_whole_folder(
+                image_folder_basename=config['image_folder_namebase'],
+                code_version_date=config['code_version_date'],
+                use_exit_condition=config['ana_use_premature_hypothesis_choice?'],
+                last_h_index=config['ana_maximum_hypothesis_index'],
+                analysis_rand_seed=config['ana_random_seed'],
+                psf_sigma=config['ana_predefined_psf_sigma'],
+                config_content=json.dumps(config),
+                parallel=parallel,
+                timeout_per_image=timeout
+                )
+            
+            # Get the dataset name and code version date
+            image_folder_basename = config['image_folder_namebase']
+            code_version_date = config['code_version_date']
+
+            # Combine analysis log files into one.
+            combine_log_files(analyses_folder_path,
+                              image_folder_basename,
+                              code_version_date,
+                              delete_individual_files=True
+                              )
+
+            # Generate confusion matrix
+            label_prediction_log_file_path = os.path.join(analyses_folder_path, 
+                                                          f'{short_folder_name}_label_prediction_log.csv')
+            try:
+                generate_confusion_matrix(label_prediction_log_file_path,
+                                          image_folder_basename,
+                                          code_version_date,
+                                          display=False,
+                                          savefig=True
+                                          )
+            except Exception as e:
+                print(f"Error generating confusion matrix: {e}")
+
+            # Count occurence
+            count_occurence(label_prediction_log_file_path)
+
+            # Delete the dataset after analysis
+            if config['ana_delete_the_dataset_after_analysis?']:
+                dir_path = os.path.join("datasets", f"{config['image_folder_namebase']}")
+                shutil.rmtree(dir_path)
+                print('Deleting image data.')
+                print('-------------------------------------')
+
+        if move_finished_config_file:
+            # Move the processed config file to the "finished configs" subfolder
+            finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
+            os.makedirs(finished_configs_dir, exist_ok=True)
+            shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
+
+
+#######################################################################
+# ########### Define some analysis functions ##########################
+#######################################################################
+def generate_intensity_histogram(label_pred_log_file_path,
+                                 image_folder_basename,
+                                 code_version_date='',
+                                 display=False,
+                                 savefig=True
+                                 ):
+    """
+    Generate and optionally display/save a histogram of particle intensities from detection results.
+    This function reads particle intensity data from a CSV file containing detection results,
+    processes the intensity values, and creates a histogram visualization.
+    Args:
+        label_pred_log_file_path (str): Path to the CSV file containing particle detection results.
+            The CSV must contain a column named "Determined Particle Intensities" with intensity
+            values stored as string representations of lists.
+        image_folder_basename (str): Base name of the image folder, used for naming the output
+            histogram file.
+        code_version_date (str, optional): Version date string to include in the output filename.
+            Defaults to empty string.
+        display (bool, optional): If True, displays the histogram plot in a window.
+            Defaults to False.
+        savefig (bool, optional): If True, saves the histogram as a PNG file in the same directory
+            as the input CSV file. Defaults to True.
+    Returns:
+        None
+
+    Notes:
+        - The intensity values in the CSV are expected to be stored as string representations
+            of Python lists and are parsed using ast.literal_eval().
+        - When savefig=True, the output file is saved with the naming pattern:
+            '{image_folder_basename}_code_ver{code_version_date}_particle_intensities_hist.png'
+        - The histogram uses 20 bins by default.
+        - The saved figure has a resolution of 300 DPI.
+    """
+    
     # Read the CSV file
     df = pd.read_csv(label_pred_log_file_path)
     try:
@@ -765,16 +797,21 @@ def generate_intensity_histogram(label_pred_log_file_path, image_folder_basename
         plt.savefig(png_file_path, dpi=300)
 
 
-def generate_confusion_matrix(label_pred_log_file_path, image_folder_basename, code_version_date, display=False, savefig=True):
+def generate_confusion_matrix(label_pred_log_file_path,
+                              image_folder_basename,
+                              code_version_date,
+                              display=False,
+                              savefig=True
+                              ):
     """ Generate the confusion matrix and calculate the metrics.
-    
+
     Parameters:
         label_pred_log_file_path (str): The path of the label prediction log file.
         image_folder_basename (str): The name of the folder containing the images.
         code_version_date (str): The version of the code.
         display (bool): Whether to display the confusion matrix. Default is False.
         savefig (bool): Whether to save the confusion matrix as a PNG file. Default is True.
-        
+
     Returns:
         None
     """
@@ -785,24 +822,24 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_basename, c
     if df.empty or len(df) == 1:
         print("The CSV file is empty or only contains headers. No data to process.")
         return
-        
+
     # Check if the CSV file contains the columns 'Actual Particle Count' and 'Estimated Particle Count'
     if 'Actual Particle Count' not in df.columns and 'Actual Particle Number' not in df.columns:
         print("The column name 'Actual Particle Count' or 'Actual Particle Number' is not found in the CSV file.")
         return
-    
+
     # Check if any of the actual counts are -1 (unknown)
     # If there are unknown counts, skip generating the confusion matrix
     if (df['Actual Particle Count'] == -1).any():
         print("Some images have unknown actual particle counts (-1). Skipping confusion matrix generation.")
         return
-        
+
     actual = df['Actual Particle Count']
     estimated = df['Estimated Particle Count']
 
     # Generate the confusion matrix
     matrix = confusion_matrix(actual, estimated)
-    
+
     # Save the confusion matrix as a CSV file ending with '_confusion_mat.csv'
     matrix_df = pd.DataFrame(matrix)
     csv_file_path = os.path.dirname(label_pred_log_file_path)
@@ -867,7 +904,7 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_basename, c
     # Plot the heatmap of the confusion matrix
     row_sums = matrix.sum(axis=1)
     if display or savefig:
-        _, axs = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={'height_ratios': [4,1]})  # Increase the size of the figure.
+        _, axs = plt.subplots(2, 1, figsize=(8, 6), gridspec_kw={'height_ratios': [4,1]})
 
         # Debugging output
         print("Original matrix:\n", matrix)
@@ -882,23 +919,24 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_basename, c
 
         folder_name = os.path.basename(os.path.dirname(label_pred_log_file_path))
         ax = axs[0]
-        sns.heatmap(normalized_matrix, annot=True, fmt='.4f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)  # Plot the heatmap on the new axes.
+        # Plot the heatmap on the new axes.
+        sns.heatmap(normalized_matrix, annot=True, fmt='.4f', cmap='YlGnBu', ax=ax, vmin=0, vmax=1)
         ax.set_title(f'{folder_name}')
         ax.set_xlabel('Estimated Particle Count')
         ax.set_ylabel('Actual Particle Count')
         ytick_labels = [f"{i} (count: {row_sums[i]})" for i in range(len(row_sums))]
         ax.set_yticklabels(ytick_labels, rotation=0)
-        
+
         # Draw lines between rows
         for i in range(matrix.shape[0]+1):
             ax.axhline(i, color='black', linewidth=1)
-        
+
         # Text messages
-        text_message = f"Accuracy: {accuracy:.3f}\n"+ \
-            f"Overestimation Rate: {overestimation_rate:.3f}\n"+ \
-            f"Underestimation Rate: {underestimation_rate:.3f}\n"+ \
-            f"Miss-by-One Rate: {miss_by_one_rate:.3f}\n"+ \
-            f"Mean Absolute Error: {mae:.3f}\n"+ \
+        text_message = f"Accuracy: {accuracy:.3f}\n" + \
+            f"Overestimation Rate: {overestimation_rate:.3f}\n" + \
+            f"Underestimation Rate: {underestimation_rate:.3f}\n" + \
+            f"Miss-by-One Rate: {miss_by_one_rate:.3f}\n" + \
+            f"Mean Absolute Error: {mae:.3f}\n" + \
             f"Root Mean Squared Error: {rmse:.3f}"
         ax = axs[1]
         ax.axis('off')
@@ -919,13 +957,13 @@ def generate_confusion_matrix(label_pred_log_file_path, image_folder_basename, c
 
 def combine_log_files(analyses_folder, image_folder_basename, code_version_date, delete_individual_files=False):
     ''' Combines the log files in the image_log folder into one file called fitting_results.csv.
-    
+
     Parameters:
         analyses_folder (str): The path of the folder containing the analyses outputs.
         image_folder_basename (str): The name of the folder containing the images.
         code_version_date (str): The version of the code.
         delete_individual_files (bool): Whether to delete the individual log files. Default is False.
-    
+
     Returns:
         None
     '''
@@ -935,9 +973,9 @@ def combine_log_files(analyses_folder, image_folder_basename, code_version_date,
     # Create the fitting_results.csv file (with a shorter name if necessary)
     short_basename = image_folder_basename[:20] if len(image_folder_basename) > 20 else image_folder_basename
     whole_metrics_log_filename = os.path.normpath(os.path.join(
-        analyses_folder, 
+        analyses_folder,
         f'{short_basename}_metrics_log.csv'  # Shortened filename
-    ))
+        ))
     print(f"Creating log with all metrics: {whole_metrics_log_filename}")
     os.makedirs(os.path.dirname(whole_metrics_log_filename), exist_ok=True)
 
@@ -947,7 +985,20 @@ def combine_log_files(analyses_folder, image_folder_basename, code_version_date,
     # Open the fitting_results.csv file in write mode
     with open(whole_metrics_log_filename, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['image_filename (h number)', 'true_count', 'h number', 'selected?', 'xi', 'lli', 'penalty', 'fisher_info', 'fit_parameters', 'xi_aic', 'xi_bic', 'penalty_aic', 'penalty_bic'])
+        writer.writerow(['image_filename (h number)',
+                         'true_count',
+                         'h number',
+                         'selected?',
+                         'xi',
+                         'lli',
+                         'penalty',
+                         'fisher_info',
+                         'fit_parameters',
+                         'xi_aic',
+                         'xi_bic',
+                         'penalty_aic',
+                         'penalty_bic'
+                         ])
 
         # Iterate over the fittings_files
         for log_file in individual_image_log_files:
@@ -966,220 +1017,63 @@ def combine_log_files(analyses_folder, image_folder_basename, code_version_date,
             shutil.rmtree(dir_path)
             print('Deleting individual image log files.')
 
+
 def count_occurence(label_pred_log_file_path):
     """Count occurrences of each estimated particle count and save to CSV."""
     try:
         # Read the CSV file
         df = pd.read_csv(label_pred_log_file_path)
-        
+
         # Count occurrences of each estimated count
         count_series = df['Estimated Particle Count'].value_counts().sort_index()
-        
+
         # Convert to DataFrame with columns 'Estimated Count' and 'Occurrence'
         count_df = pd.DataFrame({
             'Estimated Count': count_series.index,
             'Occurrence': count_series.values
         })
-        
+
         # Save to CSV
         output_path = label_pred_log_file_path.split('label_prediction_log')[0] + 'occurence_count.csv'
         count_df.to_csv(output_path, index=False)
         print(count_df)
         print(f"Occurrence counts saved to: {output_path}")
-        
+
     except Exception as e:
         print(f"Error in counting occurrences: {e}")
-    
 
-def process(config_files_dir, parallel=False, move_finished_config_file=True):
-    ''' Process the config files in the config_files_dir directory.
-    
-    Parameters:
-        config_files_dir (str): The path of the directory containing the config files.
-        parallel (bool): Whether to run the processing in parallel. Default is False.
-        
-    Returns:
-        analyses_folder (str): The path of the folder containing the analyses outputs.
-    '''
-    # Load the config files
-    try:
-        config_files = os.listdir(config_files_dir)
-    except (FileNotFoundError, PermissionError) as e:
-        print(f"Error accessing directory {config_files_dir}: {e}")
-        return None
 
-    # Filter out non-JSON files
-    config_files = [file for file in config_files if file.endswith('.json')]
-    
-    # Print the config files
-    print(f"Config files loaded (total of {len(config_files)}):")
-    for config_file in config_files:
-        print("> " + config_file)
-
-    # Process the config files
-    for i, config_file in enumerate(config_files):
-        print(f"Processing {config_file} ({i+1}/{len(config_files)})")
-        try:
-            with open(os.path.join(config_files_dir, config_file), 'r') as f:
-                config = json.load(f, object_pairs_hook=OrderedDict)
-                
-                # Pretty print the config file
-                pprint.pprint(config)
-
-                # Set the required fields for each type of processing
-                required_fields_common = ['image_folder_namebase', 'code_version_date']
-
-                required_fields_for_separation_test = ['separation_test_image_generation?', 
-                                                       'sep_image_count', 
-                                                       'sep_intensity_prefactor_to_bg_level', 
-                                                       'sep_psf_sigma', 
-                                                       'sep_distance_ratio_to_psf_sigma', 
-                                                       'sep_img_width', 
-                                                       'sep_bg_level', 
-                                                       'sep_random_seed']
-
-                required_fields_for_generation = ['generate_regular_dataset?', 
-                                                  'gen_random_seed', 
-                                                  'gen_total_image_count', 
-                                                  'gen_psf_sigma', 
-                                                  'gen_img_width', 
-                                                  'gen_minimum_particle_count', 
-                                                  'gen_maximum_particle_count', 
-                                                  'gen_bg_level', 
-                                                  'gen_particle_intensity_mean', 
-                                                  'gen_particle_intensity_sd']
-
-                required_fields_for_analysis = ['analyze_the_dataset?', 
-                                                'ana_random_seed', 
-                                                'ana_predefined_psf_sigma', 
-                                                'ana_use_premature_hypothesis_choice?', 
-                                                'ana_maximum_hypothesis_index']
-
-                # Check if the required_fields_common are strings
-                for field in required_fields_common:
-                    if field in config and not isinstance(config[field], str):
-                        # The config file cannot be used to run the code. Print an error message and exit
-                        print(f"Error: '{field}' should be a string.")
-                        exit()
-                    else:
-                        # Replace '.' with '_' in the field value to avoid issues with file paths
-                        if '.' in config[field]:
-                            before_change = config[field]
-                            config[field] = config[field].replace('.', '_')
-                            print(f"Modified field '{field}' value to replace '.' with '_' - before: {before_change}, after: {config[field]}")
-                
-                # Check if all fields ending with '?' are boolean
-                for field in config:
-                    if field.endswith('?') and not isinstance(config[field], bool):
-                        # The config file cannot be used to run the code. Print an error message and exit
-                        print(f"Error: '{field}' should be a boolean.")
-                        exit()
-                        
-                # Assign the required fields based on the type of processing
-                required_fields = required_fields_common
-
-                if 'separation_test_image_generation?' in config and config['separation_test_image_generation?']:
-                    required_fields += required_fields_for_separation_test
-                elif 'generate_regular_dataset?' in config and config['generate_regular_dataset?']:
-                    required_fields += required_fields_for_generation
-                elif 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
-                    required_fields += required_fields_for_analysis
-
-                # Check if all required fields are present in the config file
-                for field in required_fields:
-                    if field not in config:
-                        # If config['separation_test_image_generation?'] is True, then all fields starting with 'sep' are required.
-                        if config['separation_test_image_generation?'] and field.startswith('sep'):
-                            print(f"Error: '{field}' should be set for separation test image generation.")
-                            exit()
-                        # If config['generate_regular_dataset?'] is True, then all fields starting with 'gen' are required.
-                        if config['generate_regular_dataset?'] and field.startswith('gen'):
-                            print(f"Error: '{field}' should be set for image generation.")
-                            exit()
-                        # If config['analyze_the_dataset?'] is True, then all fields starting with 'analysis' are required.
-                        if config['analyze_the_dataset?'] and field.startswith('ana'):
-                            print(f"Error: '{field}' should be set for image analysis.")
-                            exit()
-                
-        # If the config file is not found or invalid, print an error message and continue to the next config file
-        except (FileNotFoundError, json.JSONDecodeError):
-            print(f"Error: {config_file} file not found or invalid. Skipping to the next config file.")
-            continue
-
-        # Generate separation test images
-        if 'separation_test_image_generation?' in config and config['separation_test_image_generation?']:
-            generate_separation_test_images(image_folder_basename=config['image_folder_namebase'], 
-                                            # code_ver=config['code_version_date'],
-                                            sep_distance_ratio_to_psf_sigma = config['sep_distance_ratio_to_psf_sigma'],
-                                            total_image_count=config['sep_image_count'],
-                                            amp_to_background_level=config['sep_intensity_prefactor_to_bg_level'], 
-                                            psf_sigma=config['sep_psf_sigma'], 
-                                            image_side_length=config['sep_img_width'], 
-                                            background_level=config['sep_bg_level'], 
-                                            generation_random_seed=config['sep_random_seed'], 
-                                            config_content=json.dumps(config)
-                                            )
-
-        # Generate regular dataset
-        elif 'generate_regular_dataset?' in config and config['generate_regular_dataset?']:
-            generate_test_images(image_folder_basename=config['image_folder_namebase'], 
-                                # code_ver=config['code_version_date'],
-                                total_image_count=config['gen_total_image_count'],
-                                minimum_number_of_particles=config['gen_minimum_particle_count'], 
-                                maximum_number_of_particles=config['gen_maximum_particle_count'], 
-                                particle_intensity_mean=config['gen_particle_intensity_mean'], 
-                                particle_intensity_sd=config['gen_particle_intensity_sd'], 
-                                psf_sigma=config['gen_psf_sigma'], image_side_length=config['gen_img_width'], 
-                                background_level=config['gen_bg_level'], 
-                                generation_random_seed=config['gen_random_seed'], 
-                                config_content=json.dumps(config))
-
-        # Analyze dataset
-        if 'analyze_the_dataset?' in config and config['analyze_the_dataset?']:
-            timeout = config.get('ana_timeout_per_image', 3600) # time out = 1 hour per image
-            analyses_folder_path, short_folder_name = analyze_whole_folder(image_folder_basename=config['image_folder_namebase'], 
-                                                    code_version_date=config['code_version_date'], 
-                                                    use_exit_condition=config['ana_use_premature_hypothesis_choice?'], 
-                                                    last_h_index=config['ana_maximum_hypothesis_index'], 
-                                                    analysis_rand_seed=config['ana_random_seed'], 
-                                                    psf_sigma=config['ana_predefined_psf_sigma'], 
-                                                    config_content=json.dumps(config), 
-                                                    parallel=parallel, 
-                                                    timeout_per_image=timeout)
-            # Get the dataset name and code version date
-            image_folder_basename = config['image_folder_namebase']
-            code_version_date = config['code_version_date']
-
-            # Combine analysis log files into one.
-            combine_log_files(analyses_folder_path, image_folder_basename, code_version_date, delete_individual_files=True)
-            
-            # Generate confusion matrix
-            label_prediction_log_file_path = os.path.join(analyses_folder_path, f'{short_folder_name}_label_prediction_log.csv')
-            try:
-                generate_confusion_matrix(label_prediction_log_file_path, image_folder_basename, code_version_date, display=False, savefig=True)
-            except Exception as e:
-                print(f"Error generating confusion matrix: {e}")
-
-            # Count occurence
-            count_occurence(label_prediction_log_file_path)
-
-            # Delete the dataset after analysis
-            if config['ana_delete_the_dataset_after_analysis?']:
-                dir_path =os.path.join("datasets", f"{config['image_folder_namebase']}")
-                shutil.rmtree(dir_path)
-                print('Deleting image data.')
-                print('-------------------------------------')
-        
-        if move_finished_config_file:
-            # Move the processed config file to the "finished configs" subfolder
-            finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
-            os.makedirs(finished_configs_dir, exist_ok=True)
-            shutil.move(os.path.join(config_files_dir, config_file), os.path.join(finished_configs_dir, config_file))
-            
 def main(move_finished_config_file=True):
-    
-    """ Main function to run the analysis pipeline. """
-    
+    """
+    Main function to run the particle detection analysis pipeline. 
+    This function serves as the entry point for the particle counting algorithm. It handles
+    command-line arguments, manages configuration files, and executes the analysis process
+    with optional profiling capabilities.
+
+    Args:
+        move_finished_config_file (bool, optional): Flag to determine whether to move
+            processed configuration files after completion. Defaults to True.
+
+    Command-line Arguments:
+        --config-file-folder, -c (str): Path to the folder containing configuration files
+            to be processed. This argument is required.
+        --profile, -p (bool): Flag to enable profiling of the analysis pipeline. When True,
+            generates a profile report saved as 'profile_results.prof'. Defaults to False.
+
+    Returns:
+        None
+
+    Side Effects:
+        - Processes configuration files from the specified directory
+        - May move configuration files to a different location based on move_finished_config_file
+        - Generates profiling statistics if profiling is enabled
+        - Prints execution time and progress information to stdout
+
+    Notes:
+        - When profiling is enabled, the process runs in sequential mode (parallel=False)
+        - When profiling is disabled, the process runs in parallel mode (parallel=True)
+        - Execution time is displayed upon completion
+    """
     # Start the batch job timer
     batchjobstarttime = datetime.now()
 
@@ -1198,11 +1092,12 @@ def main(move_finished_config_file=True):
         print("Please provide the folder name for config files using --config-file-folder or -c option.")
         exit()
     config_files_dir = args.config_file_folder
-    
 
     if args.profile is True:
         with Profile() as profile:
-            process(config_files_dir=config_files_dir, parallel=False, move_finished_config_file=move_finished_config_file)
+            process(config_files_dir=config_files_dir,
+                    parallel=False,
+                    move_finished_config_file=move_finished_config_file)
             (
                 Stats(profile)
                 .strip_dirs()
@@ -1211,31 +1106,31 @@ def main(move_finished_config_file=True):
             )
             # os.system('snakeviz profile_results.prof &')
     else:
-        process(config_files_dir, parallel=True, move_finished_config_file=move_finished_config_file)
+        process(config_files_dir,
+                parallel=True,
+                move_finished_config_file=move_finished_config_file
+                )
 
-    # End the batch job timer
-    batchjobendtime = datetime.now()
     # Print the time taken for the batch job
     # End the batch job timer
     batchjobendtime = datetime.now()
+
     # Calculate the time taken for the batch job
     time_taken = batchjobendtime - batchjobstarttime
+
     # Print the time taken for the batch job in seconds
     print(f'Batch job completed in {time_taken.total_seconds():.2f} seconds')
 
 
 # Run the main function if the script is executed from the command line
 if __name__ == '__main__':
-
     if 'pydevd' in sys.modules or 'debugpy' in sys.modules:
 
         # Run the main function without parallel processing ('-p' option value is False)
-        sys.argv = ['main.py', '-c', './configs/'] # -p for profiling. Default is False, and it will run on multiple processes.
+        sys.argv = ['main.py', '-c', './configs/']  # -p for profiling. Default is False, and it will run on multiple processes.
 
         # Run the main function with profiling (Useful for debugging)
         # sys.argv = ['main.py', '-c', './configs/', '-p', 'True'] # -p for profiling. When True, it will run on **seriallly (instead of parallel)** to profile the code.
 
     # Call the main function
     main()
-    # Run as below if you want to run the code without moving the finished config files to the finished_configs folder. Useful for debugging where you want to repeatedly run the same config file.
-    # main(move_finished_config_file=False)
