@@ -11,7 +11,6 @@ from scipy.stats import poisson
 import os
 from mpl_toolkits.mplot3d import Axes3D
 from datetime import datetime
-import glob
 
 # Function to calculate accuracy from a confusion matrix
 def calculate_avg_accuracy(conf_matrix):
