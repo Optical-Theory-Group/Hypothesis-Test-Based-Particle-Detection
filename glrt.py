@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def gaussianblur_max_min_2d(data, sigma):
     """ Returns the maximum and minimum values of the 2D Gaussian blurred image.
     Args:
@@ -23,24 +24,25 @@ def gaussianblur_max_min_2d(data, sigma):
     for filter_center_x in range(sz):
         for filter_center_y in range(sz):
             # Initialize filtered_pixel and sum_val to zero.
-            filtered_pixel  = 0
+            filtered_pixel = 0
             sum_val = 0
             for contributing_pos1 in range(sz):
                 for contributing_pos2 in range(sz):
                     weight_contributing_pos1 = np.exp(-((contributing_pos1 - filter_center_x) ** 2) * norm)
                     weight_contributing_pos2 = np.exp(-((contributing_pos2 - filter_center_y) ** 2) * norm)
-                    filtered_pixel  += weight_contributing_pos1 * weight_contributing_pos2 * data[contributing_pos1, contributing_pos2]
+                    filtered_pixel += weight_contributing_pos1 * weight_contributing_pos2 * data[contributing_pos1, contributing_pos2]
                     sum_val += weight_contributing_pos1 * weight_contributing_pos2
 
-            filtered_pixel  /= sum_val
+            filtered_pixel /= sum_val
             filtered_img[filter_center_x, filter_center_y] = filtered_pixel
-            
+
             # max_i is the maximum value of the Gaussian blurred image.
-            max_i = max(max_i, filtered_pixel )
+            max_i = max(max_i, filtered_pixel)
             # min_bg is the minimum value of the Gaussian blurred image.
-            min_bg = min(min_bg, filtered_pixel )
+            min_bg = min(min_bg, filtered_pixel)
 
     return max_i, min_bg
+
 
 def center_of_mass_2d(data):
     """ Compute the 2D center of mass of a subregion.
@@ -55,15 +57,15 @@ def center_of_mass_2d(data):
     tmpy = np.sum((data) * i)
     tmpx = np.sum((data) * j)
     tmpsum = np.sum(data)
-    
+
     # Avoid division by zero
     if tmpsum == 0:
         return np.nan, np.nan
-    
+
     # x and y are the x and y coordinates of the center of mass of the image.
     x = tmpx / tmpsum
     y = tmpy / tmpsum
-    
+
     return x, y
 
 
