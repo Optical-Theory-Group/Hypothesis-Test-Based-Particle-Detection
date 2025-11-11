@@ -597,13 +597,28 @@ def main():
     parser.add_argument('-i', '--interval', type=int, default=0, help="Process every Nth file (e.g., 2 means every 2nd file). 0 implies an IQR method timestamps method is used.")
     parser.add_argument('-c', '--crop', type=int, default=0.7, help="Crop down size of raw image files (e.g., 0.7 means image height and width will be reduced to 0.7 of the original size)")
     parser.add_argument('-m', '--maxhindex', type=int, help="Set maximum hypothesis index in config file (ana_maximum_hypothesis_index). Default is 5")
-    parser.add_argument('--save-plots', action='store_true', help="Save plots to file instead of displaying (useful for headless environments)")
-    parser.add_argument('--config-subdir',type=str,help="Optional subfolder under ./configs where config files will be saved"
-    )
+    parser.add_argument('--save-plots',action='store_true',help="Save plots to file instead of displaying (useful for headless environments)")
+    parser.add_argument('--predefined-sigma',type=float,help="Optional predefined PSF sigma to use instead of estimating from images")
+    parser.add_argument('--config-subdir',type=str,help="Optional subfolder under ./configs where config files will be saved",)
     args = parser.parse_args()
 
     #  Terminal mode
     if args.terminal:
+        # Print supplied arguments
+        print("\n" + "=" * 70)
+        print("TERMINAL MODE - Supplied Arguments:")
+        print("=" * 70)
+        print(f"  Folder:           {args.folder}")
+        print(f"  Size:             {args.size}")
+        print(f"  Overlap:          {args.overlap}")
+        print(f"  Interval:         {args.interval}")
+        print(f"  Crop:             {args.crop}")
+        print(f"  Max H-Index:      {args.maxhindex}")
+        print(f"  Save Plots:       {args.save_plots}")
+        print(f"  Predefined Sigma: {args.predefined_sigma}")
+        print(f"  Config Subdir:    {args.config_subdir}")
+        print("=" * 70 + "\n")
+
         if not args.folder:
             print("Error: Folder must be provided.")
             return
@@ -618,14 +633,14 @@ def main():
                 print(f"Error: Folder '{input_folder}' does not exist or is not accessible.")
                 return
 
-    # Process file interval setting
+        # Process file interval setting
         interval = args.interval
         if interval < 0:
             print("Warning: Invalid interval value. Using default of 1 (process all files).")
             interval = 1
         elif interval == 0:
             print("Processing files based on timestamp intervals.")
-        elif interval > 1:
+        elif interval >= 1:
             print(f"Processing every {interval}th file.")
 
         # Crop fraction for terminal mode (0..1, where 1 means no cropping)
@@ -940,68 +955,90 @@ large time gaps between images, selecting the first image after each gap.
         print("Image division completed successfully.")
         print(f"Short names of processed files:\n{', '.join(short_names)}")
 
-    # Select images for Gaussian fitting
+    # Select images for Gaussian fitting (skip if user provided predefined sigma)
     if args.terminal:
-        print("Please choose a folder from the following list to use for determining PSF width:")
-        for i, short_name in enumerate(short_names):
-            output_dir = os.path.join(input_folder, short_name)
-            num_files = len(os.listdir(output_dir))
-            print(f">> {i + 1}. {short_name} ({num_files} files)")
-        folder_choice = int(input("Enter the number of the folder you want to use: ")) - 1
-        selected_folder = os.path.join(input_folder, short_names[folder_choice])
-
-        selected_files = []
-        print(f"Please choose at least 3 TIFF files from the folder {selected_folder} that clearly have particles in them:")
-        tiff_files = [f for f in os.listdir(selected_folder) if f.endswith('.tiff')]
-
-        # Display files with numbers (show only the first 20 if there are many)
-        max_display = 20
-        if len(tiff_files) > max_display:
-            for i in range(max_display):
-                print(f">> {i + 1}. {tiff_files[i]}")
-            print(f"... and {len(tiff_files) - max_display} more files")
+        if args.predefined_sigma is not None:
+            # Skip all Gaussian fitting; use predefined sigma directly
+            mean_sigma = float(args.predefined_sigma)
+            print(f"\n[Predefined Sigma] Using provided sigma value: {mean_sigma:.3f}")
+            print("[Predefined Sigma] Skipping Gaussian fitting and sub-image selection.\n")
         else:
-            for i, tiff_file in enumerate(tiff_files):
-                print(f">> {i + 1}. {tiff_file}")
+            # Proceed with normal Gaussian fitting flow
+            print("Please choose a folder from the following list to use for determining PSF width:")
+            for i, short_name in enumerate(short_names):
+                output_dir = os.path.join(input_folder, short_name)
+                num_files = len(os.listdir(output_dir))
+                print(f">> {i + 1}. {short_name} ({num_files} files)")
+            folder_choice = int(input("Enter the number of the folder you want to use: ")) - 1
+            selected_folder = os.path.join(input_folder, short_names[folder_choice])
 
-        # Ask user to select files by numbers
-        # Default to the first 10% of files if the user presses Enter
-        default_count = max(1, len(tiff_files) // 10)  # Ensure at least 1 file is selected
-        default_selections = ', '.join(str(i + 1) for i in range(min(default_count, len(tiff_files))))
+        if args.predefined_sigma is not None:
+            # Skip all Gaussian fitting; use predefined sigma directly
+            mean_sigma = float(args.predefined_sigma)
+            print(f"\n[Predefined Sigma] Using provided sigma value: {mean_sigma:.3f}")
+            print("[Predefined Sigma] Skipping Gaussian fitting and sub-image selection.\n")
+        else:
+            # Proceed with normal Gaussian fitting flow
+            print("Please choose a folder from the following list to use for determining PSF width:")
+            for i, short_name in enumerate(short_names):
+                output_dir = os.path.join(input_folder, short_name)
+                num_files = len(os.listdir(output_dir))
+                print(f">> {i + 1}. {short_name} ({num_files} files)")
+            folder_choice = int(input("Enter the number of the folder you want to use: ")) - 1
+            selected_folder = os.path.join(input_folder, short_names[folder_choice])
 
-        prompt = f"Enter file numbers (e.g., '1, 4, 6, 11' or '1-5' or '1, 2, 4-7, 9') or press Enter for default (first {min(default_count, len(tiff_files))} files): "
-        selections = input(prompt).strip()
+            selected_files = []
+            print(f"Please choose at least 3 TIFF files from the folder {selected_folder} that clearly have particles in them:")
+            tiff_files = [f for f in os.listdir(selected_folder) if f.endswith('.tiff')]
 
-        if not selections:
-            selections = default_selections
-            print(f"Using default selections: {selections}")
-
-        # Parse the selections
-        selected_indices = []
-        for part in selections.split(','):
-            part = part.strip()
-            if '-' in part:
-                # Handle ranges (e.g., "1-5")
-                start, end = map(int, part.split('-'))
-                selected_indices.extend(range(start, end + 1))
+            # Display files with numbers (show only the first 20 if there are many)
+            max_display = 20
+            if len(tiff_files) > max_display:
+                for i in range(max_display):
+                    print(f">> {i + 1}. {tiff_files[i]}")
+                print(f"... and {len(tiff_files) - max_display} more files")
             else:
-                # Handle individual numbers
-                try:
-                    selected_indices.append(int(part))
-                except ValueError:
-                    print(f"Warning: Ignoring invalid input '{part}'")
+                for i, tiff_file in enumerate(tiff_files):
+                    print(f">> {i + 1}. {tiff_file}")
 
-        # Convert to 0-based indices and get file paths
-        selected_files = []
-        for idx in selected_indices:
-            if 1 <= idx <= len(tiff_files):
-                selected_files.append(os.path.join(selected_folder, tiff_files[idx - 1]))
-            else:
-                print(f"Warning: Ignoring out-of-range index {idx}")
+            # Ask user to select files by numbers
+            # Default to the first 10% of files if the user presses Enter
+            default_count = max(1, len(tiff_files) // 10)  # Ensure at least 1 file is selected
+            default_selections = ', '.join(str(i + 1) for i in range(min(default_count, len(tiff_files))))
 
-        if len(selected_files) < 3:
-            print("Error: Please select at least 3 images.")
-            return
+            prompt = f"Enter file numbers (e.g., '1, 4, 6, 11' or '1-5' or '1, 2, 4-7, 9') or press Enter for default (first {min(default_count, len(tiff_files))} files): "
+            selections = input(prompt).strip()
+
+            if not selections:
+                selections = default_selections
+                print(f"Using default selections: {selections}")
+
+            # Parse the selections
+            selected_indices = []
+            for part in selections.split(','):
+                part = part.strip()
+                if '-' in part:
+                    # Handle ranges (e.g., "1-5")
+                    start, end = map(int, part.split('-'))
+                    selected_indices.extend(range(start, end + 1))
+                else:
+                    # Handle individual numbers
+                    try:
+                        selected_indices.append(int(part))
+                    except ValueError:
+                        print(f"Warning: Ignoring invalid input '{part}'")
+
+            # Convert to 0-based indices and get file paths
+            selected_files = []
+            for idx in selected_indices:
+                if 1 <= idx <= len(tiff_files):
+                    selected_files.append(os.path.join(selected_folder, tiff_files[idx - 1]))
+                else:
+                    print(f"Warning: Ignoring out-of-range index {idx}")
+
+            if len(selected_files) < 3:
+                print("Error: Please select at least 3 images.")
+                return
     else:
         root = tk.Tk()
         root.withdraw()
@@ -1027,111 +1064,117 @@ large time gaps between images, selecting the first image after each gap.
     fitted_images = []
     skipped_files = []
 
-    for file in selected_files:
-        image = np.array(Image.open(file))
-        params = fit_gaussian_2d(image)
-
-        if params is None:
-            print(f"Skipping {os.path.basename(file)} - no clear particle detected")
-            skipped_files.append(os.path.basename(file))
-            continue
-
-        sigma_values.append(params[2])
-        fitted_image = gaussian_2d(*np.meshgrid(np.arange(image.shape[1]), np.arange(image.shape[0])), *params).reshape(image.shape)
-        images.append(image)
-        fitted_images.append(fitted_image)
-        print(f"Fitted parameters for {file}: (x, y) = ({params[0]:0.1f}, {params[1]:0.1f}), sigma = {params[2]:0.1f}, amplitude = {params[3]:0.1f}, background = {params[4]:0.1f}")
-
-    # Calculate mode from histogram
-    hist, bin_edges = np.histogram(sigma_values, bins=20)
-    max_freq = np.max(hist)
-    mode_bin_indices = np.where(hist == max_freq)[0]
-
-    # Only proceed with mode filtering if there's a single clear mode
-    if len(mode_bin_indices) == 1:
-        mode = (bin_edges[mode_bin_indices[0]] + bin_edges[mode_bin_indices[0] + 1]) / 2
-
-        # Create a filter mask for values within 0.25*mode to 2*mode
-        filter_mask = [(0.25 * mode <= s <= 2 * mode) for s in sigma_values]
-
-        # Apply filter to all three arrays simultaneously to keep them in sync
-        filtered_sigma_values = [s for i, s in enumerate(sigma_values) if filter_mask[i]]
-        filtered_images = [img for i, img in enumerate(images) if filter_mask[i]]
-        filtered_fitted_images = [img for i, img in enumerate(fitted_images) if filter_mask[i]]
-
-        # Count how many were filtered out
-        filtered_out_count = len(sigma_values) - len(filtered_sigma_values)
-
-        # Replace the original arrays with the filtered versions
-        sigma_values = filtered_sigma_values
-        images = filtered_images
-        fitted_images = filtered_fitted_images
-
-        print(f"\nMode sigma: {mode:.2f}")
-        print(f"Filtered {filtered_out_count} outlier values")
+    # If terminal mode and predefined sigma provided, bypass fitting and use directly
+    if args.terminal and args.predefined_sigma is not None:
+        mean_sigma = float(args.predefined_sigma)
+        # Already announced earlier; no fitting performed
     else:
-        print("\nMultiple modes detected - skipping outlier filtering")
+        for file in selected_files:
+            image = np.array(Image.open(file))
+            params = fit_gaussian_2d(image)
 
-    if not sigma_values:
-        if not args.terminal:
-            messagebox.showerror("Error", "No valid particles detected in any of the selected images. Please select different images.")
+            if params is None:
+                print(f"Skipping {os.path.basename(file)} - no clear particle detected")
+                skipped_files.append(os.path.basename(file))
+                continue
+
+            sigma_values.append(params[2])
+            fitted_image = gaussian_2d(*np.meshgrid(np.arange(image.shape[1]), np.arange(image.shape[0])), *params).reshape(image.shape)
+            images.append(image)
+            fitted_images.append(fitted_image)
+            print(f"Fitted parameters for {file}: (x, y) = ({params[0]:0.1f}, {params[1]:0.1f}), sigma = {params[2]:0.1f}, amplitude = {params[3]:0.1f}, background = {params[4]:0.1f}")
+
+        # Calculate mode from histogram
+        hist, bin_edges = np.histogram(sigma_values, bins=20)
+        max_freq = np.max(hist)
+        mode_bin_indices = np.where(hist == max_freq)[0]
+
+        # Only proceed with mode filtering if there's a single clear mode
+        if len(mode_bin_indices) == 1:
+            mode = (bin_edges[mode_bin_indices[0]] + bin_edges[mode_bin_indices[0] + 1]) / 2
+
+            # Create a filter mask for values within 0.25*mode to 2*mode
+            filter_mask = [(0.25 * mode <= s <= 2 * mode) for s in sigma_values]
+
+            # Apply filter to all three arrays simultaneously to keep them in sync
+            filtered_sigma_values = [s for i, s in enumerate(sigma_values) if filter_mask[i]]
+            filtered_images = [img for i, img in enumerate(images) if filter_mask[i]]
+            filtered_fitted_images = [img for i, img in enumerate(fitted_images) if filter_mask[i]]
+
+            # Count how many were filtered out
+            filtered_out_count = len(sigma_values) - len(filtered_sigma_values)
+
+            # Replace the original arrays with the filtered versions
+            sigma_values = filtered_sigma_values
+            images = filtered_images
+            fitted_images = filtered_fitted_images
+
+            print(f"\nMode sigma: {mode:.2f}")
+            print(f"Filtered {filtered_out_count} outlier values")
         else:
-            print("ERROR: No valid particles detected in any of the selected images. Please select different images.")
-        return
+            print("\nMultiple modes detected - skipping outlier filtering")
 
-    mean_sigma = np.mean(sigma_values)
-    if not args.terminal:
-        messagebox.showinfo("Gaussian Fitting", f"Gaussian fitting completed. Mean sigma: {mean_sigma:.2f}")
-    else:
-        print(f"Mean sigma: {mean_sigma:.2f}")
+        if not sigma_values:
+            if not args.terminal:
+                messagebox.showerror("Error", "No valid particles detected in any of the selected images. Please select different images.")
+            else:
+                print("ERROR: No valid particles detected in any of the selected images. Please select different images.")
+            return
 
-    # Plot the original and fitted images side-by-side for the selected images
-    plt.figure(figsize=(5, 9))
+        mean_sigma = np.mean(sigma_values)
+        if not args.terminal:
+            messagebox.showinfo("Gaussian Fitting", f"Gaussian fitting completed. Mean sigma: {mean_sigma:.2f}")
+        else:
+            print(f"Mean sigma: {mean_sigma:.2f}")
 
-    # Determine the common color range for the original and fitted images
-    vmin = min(np.min(image) for image in images)
-    vmax = max(np.max(image) for image in images)
+    if not (args.terminal and args.predefined_sigma is not None):
+        # Plot the original and fitted images side-by-side for the selected images
+        plt.figure(figsize=(5, 9))
 
-    # Plot original and fitted images side-by-side for the selected images
-    n_plot = min(5, len(images))  # Ensure at least 5 plots are shown
-    for i in range(n_plot):
-        plt.subplot(n_plot, 2, 2 * i + 1)
-        plt.title(f'Original {i+1}', fontsize=8)
-        plt.imshow(images[i], cmap='viridis', vmin=vmin, vmax=vmax)
-        plt.colorbar().ax.tick_params(labelsize=6)
+        # Determine the common color range for the original and fitted images
+        vmin = min(np.min(image) for image in images)
+        vmax = max(np.max(image) for image in images)
+
+        # Plot original and fitted images side-by-side for the selected images
+        n_plot = min(5, len(images))  # Ensure at least 5 plots are shown
+        for i in range(n_plot):
+            plt.subplot(n_plot, 2, 2 * i + 1)
+            plt.title(f'Original {i+1}', fontsize=8)
+            plt.imshow(images[i], cmap='viridis', vmin=vmin, vmax=vmax)
+            plt.colorbar().ax.tick_params(labelsize=6)
+            plt.xticks(fontsize=6)
+            plt.yticks(fontsize=6)
+            plt.subplot(n_plot, 2, 2 * i + 2)
+            plt.title(f'Fitting {i+1} - Sigma: {sigma_values[i]:.2f}', fontsize=8)
+            plt.imshow(fitted_images[i], cmap='viridis', vmin=vmin, vmax=vmax)
+            plt.colorbar().ax.tick_params(labelsize=6)
+            plt.xticks(fontsize=6)
+            plt.yticks(fontsize=6)
+
+        # Save or show the fitting plots
+        if args.terminal and args.save_plots:
+            fits_plot_path = os.path.join(input_folder, "gaussian_fits.png")
+            plt.savefig(fits_plot_path)
+            print(f"Gaussian fits plot saved to {fits_plot_path}")
+
+        # Plot histogram of sigma values
+        plt.figure(figsize=(4, 3))
+        plt.hist(sigma_values, bins=20, edgecolor='black')
+        plt.axvline(mean_sigma, color='r', linestyle='dashed', linewidth=1)
+        plt.text(mean_sigma, plt.ylim()[1] * 0.9, f'Mean: {mean_sigma:.2f}', color='r', fontsize=8)
+        plt.title('Histogram of Sigma Values', fontsize=10)
+        plt.xlabel('Sigma', fontsize=8)
+        plt.ylabel('Frequency', fontsize=8)
         plt.xticks(fontsize=6)
         plt.yticks(fontsize=6)
-        plt.subplot(n_plot, 2, 2 * i + 2)
-        plt.title(f'Fitting {i+1} - Sigma: {sigma_values[i]:.2f}', fontsize=8)
-        plt.imshow(fitted_images[i], cmap='viridis', vmin=vmin, vmax=vmax)
-        plt.colorbar().ax.tick_params(labelsize=6)
-        plt.xticks(fontsize=6)
-        plt.yticks(fontsize=6)
 
-    # Save or show the fitting plots
-    if args.terminal and args.save_plots:
-        fits_plot_path = os.path.join(input_folder, "gaussian_fits.png")
-        plt.savefig(fits_plot_path)
-        print(f"Gaussian fits plot saved to {fits_plot_path}")
-
-    # Plot histogram of sigma values
-    plt.figure(figsize=(4, 3))
-    plt.hist(sigma_values, bins=20, edgecolor='black')
-    plt.axvline(mean_sigma, color='r', linestyle='dashed', linewidth=1)
-    plt.text(mean_sigma, plt.ylim()[1] * 0.9, f'Mean: {mean_sigma:.2f}', color='r', fontsize=8)
-    plt.title('Histogram of Sigma Values', fontsize=10)
-    plt.xlabel('Sigma', fontsize=8)
-    plt.ylabel('Frequency', fontsize=8)
-    plt.xticks(fontsize=6)
-    plt.yticks(fontsize=6)
-
-    # Save or show the histogram plot
-    if args.terminal and args.save_plots:
-        hist_plot_path = os.path.join(input_folder, "sigma_histogram.png")
-        plt.savefig(hist_plot_path)
-        print(f"Sigma histogram plot saved to {hist_plot_path}")
-    else:
-        plt.show(block=False)
+        # Save or show the histogram plot
+        if args.terminal and args.save_plots:
+            hist_plot_path = os.path.join(input_folder, "sigma_histogram.png")
+            plt.savefig(hist_plot_path)
+            print(f"Sigma histogram plot saved to {hist_plot_path}")
+        else:
+            plt.show(block=False)
 
     # Move the folders containing the subdivided images to ./datasets for analysis
     if args.terminal or messagebox.askokcancel("Move Folders", f"The subdivided images folders will now be moved to {os.path.abspath('./datasets')} for analysis"):
