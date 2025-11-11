@@ -598,6 +598,8 @@ def main():
     parser.add_argument('-c', '--crop', type=int, default=0.7, help="Crop down size of raw image files (e.g., 0.7 means image height and width will be reduced to 0.7 of the original size)")
     parser.add_argument('-m', '--maxhindex', type=int, help="Set maximum hypothesis index in config file (ana_maximum_hypothesis_index). Default is 5")
     parser.add_argument('--save-plots', action='store_true', help="Save plots to file instead of displaying (useful for headless environments)")
+    parser.add_argument('--config-subdir',type=str,help="Optional subfolder under ./configs where config files will be saved"
+    )
     args = parser.parse_args()
 
     #  Terminal mode
@@ -616,7 +618,7 @@ def main():
                 print(f"Error: Folder '{input_folder}' does not exist or is not accessible.")
                 return
 
-        # Process file interval setting
+    # Process file interval setting
         interval = args.interval
         if interval < 0:
             print("Warning: Invalid interval value. Using default of 1 (process all files).")
@@ -629,6 +631,15 @@ def main():
         # Crop fraction for terminal mode (0..1, where 1 means no cropping)
         crop_img_fraction = args.crop
 
+        # Optional config subfolder from CLI
+        config_subdir = None
+        if args.config_subdir:
+            sub = args.config_subdir.strip().replace('\\', '/').strip('/')
+            if sub and not os.path.isabs(sub) and '..' not in sub:
+                config_subdir = sub
+            else:
+                print("Warning: Ignoring invalid --config-subdir value; using ./configs")
+
         # List TIFF files in the folder
         try:
             # Get all TIFF files in the folder
@@ -639,7 +650,7 @@ def main():
                 if all_tiff_files:
                     print(f"Found {len(all_tiff_files)} files with .tif extension instead")
                 else:
-                    print(f"No TIFF or TIF files found in the folder. Exiting.")
+                    print("No TIFF or TIF files found in the folder. Exiting.")
                     return
 
             intervaled_tiff_files = get_intervaled_tiffs_files(all_tiff_files, interval)
@@ -682,8 +693,14 @@ def main():
                     print(f"\n(Rougly) estimated {particle_count} particles in the entire image.")
                     print(f"Suggested sub-image: {sz}x{sz} pixels")
                     if not 20 < sz < 200:
-                        print("Warning: The suggested size is outside the range of 20 to 200 pixels. Clipping to this range.")
-                        print("If you want to use size outside this range, please run the program again with the '--size' (or '-s') argument.") 
+                        print(
+                            "Warning: The suggested size is outside the range of 20 to 200 pixels. "
+                            "Clipping to this range."
+                        )
+                        print(
+                            "If you want to use size outside this range, please run again with the --size "
+                            "(or -s) argument."
+                        )
                         if sz < 20:
                             sz = 20
                         elif sz > 200:
@@ -739,6 +756,20 @@ def main():
         if crop_img_fraction is None:
             messagebox.showerror("Error", "No crop fraction provided. Exiting.")
             return
+
+        # Ask for optional config subfolder under ./configs
+        config_subdir = None
+        sub = simpledialog.askstring(
+            "Config subfolder (optional)",
+            "Enter a subfolder name under ./configs to save config files (leave blank to use ./configs):",
+            initialvalue=""
+        )
+        if sub:
+            sub = sub.strip().replace('\\', '/').strip('/')
+            if os.path.isabs(sub) or '..' in sub:
+                messagebox.showerror("Invalid subfolder", "Please enter a simple subfolder name under ./configs.")
+                return
+            config_subdir = sub
 
         # Get file interval setting and file list
         interval = simpledialog.askinteger("Tiff file skip interval",
@@ -1084,7 +1115,7 @@ large time gaps between images, selecting the first image after each gap.
         print(f"Gaussian fits plot saved to {fits_plot_path}")
 
     # Plot histogram of sigma values
-    plt.figure(figsize=(4,3))
+    plt.figure(figsize=(4, 3))
     plt.hist(sigma_values, bins=20, edgecolor='black')
     plt.axvline(mean_sigma, color='r', linestyle='dashed', linewidth=1)
     plt.text(mean_sigma, plt.ylim()[1] * 0.9, f'Mean: {mean_sigma:.2f}', color='r', fontsize=8)
@@ -1140,7 +1171,8 @@ large time gaps between images, selecting the first image after each gap.
             messagebox.showinfo("Move Folders", f"All subdivided images have been moved to {os.path.abspath('./datasets')} for analysis:\n\n" + "\n".join(moved_folders))
 
     # Create config JSON files for each dataset
-    config_dir = './configs'
+    config_root = './configs'
+    config_dir = os.path.join(config_root, config_subdir) if 'config_subdir' in locals() and config_subdir else config_root
     os.makedirs(config_dir, exist_ok=True)
     skipall_edits = False
     for short_name in short_names:

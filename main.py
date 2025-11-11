@@ -251,7 +251,9 @@ def analyze_whole_folder(image_folder_basename,
         print("Analyzing images in parallel...")
 
         # Analyze the images in parallel using ProcessPoolExecutor
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        executor = concurrent.futures.ProcessPoolExecutor()
+        try:
+        # with concurrent.futures.ProcessPoolExecutor() as executor:
             # Create a list of futures for each image
             futures = [executor.submit(analyze_image, filename, psf_sigma, last_h_index,
                                        analysis_rand_seed_per_image, analyses_folder,
@@ -307,6 +309,20 @@ def analyze_whole_folder(image_folder_basename,
                 # Increment the progress counter
                 progress += 1
 
+            # ensure a newline after the progress bar in parallel mode too
+            print()
+
+        finally:
+            # Cancel any futures that are not done and don’t wait on shutdown
+            canceled = 0
+            for f in futures:
+                if not f.done():
+                    if f.cancel():
+                        canceled += 1
+            executor.shutdown(wait=False, cancel_futures=True)
+            if canceled:
+                print(f"Canceled {canceled} unfinished tasks.")
+
     else:  # If the analysis is to be done sequentially
         print("Analyzing images in serial...")
         # Initialize the progress counter
@@ -345,11 +361,12 @@ def analyze_whole_folder(image_folder_basename,
 
             total_count = len(all_image_files)
             report_progress(progress, total_count, starttime, statusmsg)
-            
+
             # Increment the progress counter
             progress += 1
             print()  # Print a newline after the progress bar
 
+    print('Returning')
     return analyses_folder, short_folder_name  # Return the path of the folder containing the analyses outputs and the shortened folder name
 
 
@@ -691,17 +708,21 @@ def process(config_files_dir,
                 parallel=parallel,
                 timeout_per_image=timeout
                 )
-            
+
+            print('Done analyzing the dataset.')
+
             # Get the dataset name and code version date
             image_folder_basename = config['image_folder_namebase']
             code_version_date = config['code_version_date']
 
+            print('Combining logs and generating analysis figures...')
             # Combine analysis log files into one.
             combine_log_files(analyses_folder_path,
                               image_folder_basename,
                               code_version_date,
                               delete_individual_files=True
                               )
+            print('Combined analysis log files.')
 
             # Generate confusion matrix
             label_prediction_log_file_path = os.path.join(analyses_folder_path, 
@@ -717,16 +738,22 @@ def process(config_files_dir,
                 print(f"Error generating confusion matrix: {e}")
 
             # Count occurence
+            print('Counting occurrences...')
             count_occurence(label_prediction_log_file_path)
 
+            print('Done counting occurrences.')
             # Delete the dataset after analysis
             if config['ana_delete_the_dataset_after_analysis?']:
+                print('Deleting dataset')
+
                 dir_path = os.path.join("datasets", f"{config['image_folder_namebase']}")
                 shutil.rmtree(dir_path)
                 print('Deleting image data.')
                 print('-------------------------------------')
 
         if move_finished_config_file:
+            print('Moving config')
+
             # Move the processed config file to the "finished configs" subfolder
             finished_configs_dir = os.path.join(config_files_dir, "finished_configs")
             os.makedirs(finished_configs_dir, exist_ok=True)
