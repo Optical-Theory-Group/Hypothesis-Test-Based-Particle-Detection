@@ -265,49 +265,66 @@ def analyze_whole_folder(image_folder_basename,
             progress = 0
 
             first_future_flag = True
+            timed_out = 0
             for future, future_filename in zip(futures, all_image_files):
                 if first_future_flag:
                     print(f"First future processing: {future_filename}")
                     first_future_flag = False
 
                 try:
-                    # Get the result (dictionary) of the future
                     analysis_result = future.result(timeout=timeout_per_image)
-
-                    # Extract the results from the analysis result
                     actual_num_particles = analysis_result['actual_num_particles']
                     estimated_num_particles = analysis_result['estimated_num_particles']
                     input_image_file = analysis_result['image_filename']
                     input_basename = os.path.basename(input_image_file)
                     determined_particle_intensities = analysis_result['determined_particle_intensities']
-
-                    # Write the results to the label_prediction log file
                     with open(label_prediction_log_file_path, 'a', newline='') as f:
                         writer = csv.writer(f)
-                        writer.writerow([input_image_file, actual_num_particles,
-                                         estimated_num_particles, determined_particle_intensities])
-
-                    # Set status message on whether the analysis overestimated, underestimated,
-                    # or correctly estimated the number of particles
+                        writer.writerow([
+                            input_image_file,
+                            actual_num_particles,
+                            estimated_num_particles,
+                            determined_particle_intensities
+                        ])
                     sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''
                     if estimated_num_particles == -1:
                         if actual_num_particles < 0:
-                            statusmsg = f'\"{input_basename}\" Error in the analysis. Estimated count will be logged as "-1" (true count unknown)'
+                            statusmsg = (
+                                f'"{input_basename}" Error in analysis. '
+                                'Estimated count = -1 (true count unknown)'
+                            )
                         else:
-                            statusmsg = f'\"{input_basename}\" Error in the analysis. Estimated count will be logged as "-1" (true count: {actual_num_particles})'
+                            statusmsg = (
+                                f'"{input_basename}" Error in analysis. '
+                                f'Estimated count = -1 (true count: {actual_num_particles})'
+                            )
                     else:
                         if actual_num_particles < 0:
-                            statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
+                            statusmsg = (
+                                f'"{input_basename}" count readout: '
+                                f'{estimated_num_particles} (true count unknown)'
+                            )
                         else:
-                            statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
-
+                            diff = estimated_num_particles - actual_num_particles
+                            statusmsg = (
+                                f'"{input_basename}" {actual_num_particles} -> '
+                                f'{estimated_num_particles} ({sign}{diff})'
+                            )
+                except concurrent.futures.TimeoutError:
+                    if future.cancel():
+                        timed_out += 1
+                    statusmsg = (
+                        f'TIMEOUT after {timeout_per_image}s (file: {future_filename}). '
+                        'Task canceled.'
+                    )
                 except Exception as e:
                     statusmsg = f'error: {e} (file: {future_filename})'
 
-                # Report the progress
                 report_progress(progress, len(futures), starttime, statusmsg)
-                # Increment the progress counter
                 progress += 1
+
+            if timed_out:
+                print(f"Total timed-out tasks canceled: {timed_out}")
 
             # ensure a newline after the progress bar in parallel mode too
             print()
@@ -349,12 +366,19 @@ def analyze_whole_folder(image_folder_basename,
                     writer.writerow([input_image_file, actual_num_particles,
                                      estimated_num_particles, determined_particle_intensities])
 
-                # Set status message on whether the analysis overestimated, underestimated, or correctly estimated the number of particles
-                if actual_num_particles < 0: 
-                    statusmsg = f'\"{input_basename}\" count readout: {estimated_num_particles} (true count unknown)'
-                else:   
-                    sign = '+' if estimated_num_particles - actual_num_particles >= 0 else ''  # negative sign will automatically be added if the difference is negative
-                    statusmsg = f'\"{input_basename}\" {actual_num_particles} -> {estimated_num_particles} ({sign}{estimated_num_particles - actual_num_particles})'
+                # Build status message about estimation accuracy
+                if actual_num_particles < 0:
+                    statusmsg = (
+                        f'"{input_basename}" count readout: '
+                        f'{estimated_num_particles} (true count unknown)'
+                    )
+                else:
+                    diff = estimated_num_particles - actual_num_particles
+                    sign = '+' if diff >= 0 else ''
+                    statusmsg = (
+                        f'"{input_basename}" {actual_num_particles} -> '
+                        f'{estimated_num_particles} ({sign}{diff})'
+                    )
 
             except Exception as e:
                 statusmsg = f'Error: {e} File: {filename} '
@@ -367,7 +391,8 @@ def analyze_whole_folder(image_folder_basename,
             print()  # Print a newline after the progress bar
 
     print('Returning')
-    return analyses_folder, short_folder_name  # Return the path of the folder containing the analyses outputs and the shortened folder name
+    # Return the path of the folder containing the analyses outputs and the shortened folder name
+    return analyses_folder, short_folder_name
 
 
 def analyze_image(image_filename,
@@ -395,7 +420,7 @@ def analyze_image(image_filename,
         use_exit_condition (bool): Whether to use the exit condition. Default is False.
         tile_width (int): The width of the tile. Default is 40. Tiling only occurs if the image is
                           larger than the tile size.
-        tile_jump_distance (int): Default is 30. This is the distance between adjacent tiles in pixels. 
+    tile_jump_distance (int): Default is 30. This is the distance between adjacent tiles in pixels.
                           It is less than the tile width to ensure overlap between adjacent tiles.
 
     Returns:
@@ -417,7 +442,11 @@ def analyze_image(image_filename,
     elif entire_image.ndim == 3 and entire_image.shape[2] == 3:  # RGB image
         color_mode = 'rgb'
     else:
-        raise ValueError(f"Unexpected dimension for file: {image_filename}. Expected 2 (grayscale) or 3 (RGB). Instead got {entire_image.ndim} dimensions.")
+        raise ValueError(
+            "Unexpected dimension for file: "
+            f"{image_filename}. Expected 2 (grayscale) or 3 (RGB). "
+            f"Instead got {entire_image.ndim} dimensions."
+        )
 
     # Extract the number of particles from image_filename
     basename = os.path.basename(image_filename)
@@ -433,10 +462,31 @@ def analyze_image(image_filename,
 
     # foldername = os.path.basename(os.path.dirname(image_filename))
 
-    def analyze_region_of_interest(tiling, roi_image, psf_sigma, last_h_index, analysis_rand_seed_per_image, display_fit_results, display_xi_graph, use_exit_condition, roi_name=None, color_mode=None):
+    def analyze_region_of_interest(
+        tiling,
+        roi_image,
+        psf_sigma,
+        last_h_index,
+        analysis_rand_seed_per_image,
+        display_fit_results,
+        display_xi_graph,
+        use_exit_condition,
+        roi_name=None,
+        color_mode=None,
+    ):
         """ Analyze the region of interest (ROI) of the image. """
         # Call the generalized_maximum_likelihood_rule (GMLR) function to analyze the image
-        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(roi_image=roi_image, psf_sigma=psf_sigma, last_h_index=last_h_index, random_seed=analysis_rand_seed_per_image, display_fit_results=display_fit_results, display_xi_graph=display_xi_graph, use_exit_condition=use_exit_condition, roi_name=roi_name, color_mode=color_mode) 
+        estimated_num_particles, fit_results, test_metrics = generalized_maximum_likelihood_rule(
+            roi_image=roi_image,
+            psf_sigma=psf_sigma,
+            last_h_index=last_h_index,
+            random_seed=analysis_rand_seed_per_image,
+            display_fit_results=display_fit_results,
+            display_xi_graph=display_xi_graph,
+            use_exit_condition=use_exit_condition,
+            roi_name=roi_name,
+            color_mode=color_mode,
+        )
 
         # Extract xi, lli, and penalty from test_metrics
         xi = test_metrics['xi']
@@ -444,25 +494,27 @@ def analyze_image(image_filename,
         xi_bic = test_metrics['xi_bic']
         lli = test_metrics['lli']
         penalty = test_metrics['penalty']
-        penalty_aic = test_metrics['penalty_aic'] # Akaike Information Criterion (AIC) 
-        penalty_bic = test_metrics['penalty_bic'] # Bayesian Information Criterion (BIC)
+        penalty_aic = test_metrics['penalty_aic']  # Akaike Information Criterion (AIC)
+        penalty_bic = test_metrics['penalty_bic']  # Bayesian Information Criterion (BIC)
 
         # Extract the Fisher Information Matrix and the fit parameters (theta) from the test_metrics
-        fisher_info = test_metrics['fisher_info'] # Fisher Information Matrix
-        fit_parameters = [result['theta'] for result in fit_results]  
-        chosen_fit = fit_parameters[estimated_num_particles] # TODO: check if this is correct (2025.03.10, Neil)
+        fisher_info = test_metrics['fisher_info']  # Fisher Information Matrix
+        fit_parameters = [result['theta'] for result in fit_results]
+        chosen_fit = fit_parameters[estimated_num_particles]  # TODO: validate (2025.03.10, Neil)
 
-        # Create a list of tuples containing hypothesis_index, xi, lli, and penalty
-        roi_name_h_index = [f"{roi_name} (h{h_index})" for h_index in range(len(xi))] # filename and hypothesis index
-        true_counts = [actual_num_particles for _ in range(len(xi))] 
-        h_numbers = [h_index for h_index in range(len(xi))] # hypothesis index
-        selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))] # 1 if the hypothesis is selected, 0 otherwise
+        # Create lists for hypothesis indexing and selection flags
+        roi_name_h_index = [f"{roi_name} (h{h_index})" for h_index in range(len(xi))]
+        true_counts = [actual_num_particles for _ in range(len(xi))]
+        h_numbers = [h_index for h_index in range(len(xi))]
+        selected_bools = [1 if estimated_num_particles == h_index else 0 for h_index in range(len(xi))]
 
         # Extract the determined particle intensities (to see the particle intensity distribution)
         particle_intensities = []
         if estimated_num_particles > 0:
             for i in range(1, estimated_num_particles + 1):
-                particle_intensities.append(fit_parameters[estimated_num_particles][i][0])
+                particle_intensities.append(
+                    fit_parameters[estimated_num_particles][i][0]
+                )
             
         # Create a list of tuples containing the results of the individual hypothesis tests
         individual_hypothesis_test_results = list(zip(roi_name_h_index, true_counts, h_numbers, selected_bools, xi, lli, penalty, fisher_info, fit_parameters, xi_aic, xi_bic, penalty_aic, penalty_bic))
@@ -1086,6 +1138,8 @@ def main(move_finished_config_file=True):
             to be processed. This argument is required.
         --profile, -p (bool): Flag to enable profiling of the analysis pipeline. When True,
             generates a profile report saved as 'profile_results.prof'. Defaults to False.
+        --parallel, -x (bool): Flag to enable parallel processing. When True, the analysis
+            runs in parallel mode. Defaults to False.
 
     Returns:
         None
@@ -1098,7 +1152,6 @@ def main(move_finished_config_file=True):
 
     Notes:
         - When profiling is enabled, the process runs in sequential mode (parallel=False)
-        - When profiling is disabled, the process runs in parallel mode (parallel=True)
         - Execution time is displayed upon completion
     """
     # Start the batch job timer
@@ -1107,6 +1160,7 @@ def main(move_finished_config_file=True):
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Process config files.')
     parser.add_argument('--config-file-folder', '-c', type=str, help='Folder containing config files to run.')
+    parser.add_argument('--parallel', '-x', type=bool, default=False, help='Boolean to decide whether to run in parallel or not.')
     parser.add_argument('--profile', '-p', type=bool, default=False, help='Boolean to decide whether to profile or not.')
     args = parser.parse_args()
 
@@ -1120,10 +1174,12 @@ def main(move_finished_config_file=True):
         exit()
     config_files_dir = args.config_file_folder
 
+    parallel_flag = args.parallel
+
     if args.profile is True:
         with Profile() as profile:
             process(config_files_dir=config_files_dir,
-                    parallel=False,
+                    parallel=parallel_flag,
                     move_finished_config_file=move_finished_config_file)
             (
                 Stats(profile)
@@ -1134,7 +1190,7 @@ def main(move_finished_config_file=True):
             # os.system('snakeviz profile_results.prof &')
     else:
         process(config_files_dir,
-                parallel=True,
+                parallel=parallel_flag,
                 move_finished_config_file=move_finished_config_file
                 )
 
