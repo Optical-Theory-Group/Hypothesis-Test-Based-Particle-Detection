@@ -3,6 +3,7 @@ __pycache__/
 .downloads/
 .lprof/
 .venv/
+*.pyc
 image_dataset/
 datasets/
 runs/
@@ -27,4 +28,4 @@ test_configs/*
 *.tiff
 local_code_backup/*
 psf_tolerance_test_configs/*
-process_algorithms.py
+snapshots_*.txt

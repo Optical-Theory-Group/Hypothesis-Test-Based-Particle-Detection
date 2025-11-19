@@ -54,11 +54,7 @@ def update_config_json_randomize_seeds(directory, change_dict):
             json.dump(data, file, indent=4)
 
 # # Directory containing the JSON files
-# directory = './example_config_folder'
-# directory = 'psf4_const_peak_height_bg_test'
-directory = './configs_to_run_on_server'
-# directory = './psf_tolerance_test_configs'
-# directory = './configs'
+directory = './configs'
 
 # # New value for "sep_bg_level"
 change_dict = {

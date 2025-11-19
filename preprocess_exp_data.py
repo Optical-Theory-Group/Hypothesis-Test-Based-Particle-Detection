@@ -574,6 +574,8 @@ def main():
         -c, --crop: Crop fraction for raw images (default: 0.7)
         -m, --maxhindex: Maximum hypothesis index for analysis (default: 5)
         --save-plots: Save plots to file instead of displaying (for headless environments)
+        --predefined-sigma: Optional predefined PSF sigma to use instead of estimating from images
+        --config-subdir: Optional subfolder under ./configs to save config files
 
     Workflow:
         - In terminal mode: Validates folder path, lists TIFF files, and prompts for parameters
@@ -595,11 +597,11 @@ def main():
     parser.add_argument('-s', '--size', type=int, help="Size of sub-image (sz x sz)")
     parser.add_argument('-o', '--overlap', type=int, default=0, help="Overlap size in pixels")
     parser.add_argument('-i', '--interval', type=int, default=0, help="Process every Nth file (e.g., 2 means every 2nd file). 0 implies an IQR method timestamps method is used.")
-    parser.add_argument('-c', '--crop', type=int, default=0.7, help="Crop down size of raw image files (e.g., 0.7 means image height and width will be reduced to 0.7 of the original size)")
+    parser.add_argument('-c', '--crop', type=float, default=0.7, help="Crop down size of raw image files (e.g., 0.7 means image height and width will be reduced to 0.7 of the original size)")
     parser.add_argument('-m', '--maxhindex', type=int, help="Set maximum hypothesis index in config file (ana_maximum_hypothesis_index). Default is 5")
-    parser.add_argument('--save-plots',action='store_true',help="Save plots to file instead of displaying (useful for headless environments)")
-    parser.add_argument('--predefined-sigma',type=float,help="Optional predefined PSF sigma to use instead of estimating from images")
-    parser.add_argument('--config-subdir',type=str,help="Optional subfolder under ./configs where config files will be saved",)
+    parser.add_argument('--save-plots', action='store_true',help="Save plots to file instead of displaying (useful for headless environments)")
+    parser.add_argument('--predefined-sigma', type=float,help="Optional predefined PSF sigma to use instead of estimating from images")
+    parser.add_argument('--config-subdir', type=str,help="Optional subfolder under ./configs where config files will be saved",)
     args = parser.parse_args()
 
     #  Terminal mode
@@ -1223,7 +1225,7 @@ large time gaps between images, selecting the first image after each gap.
         if os.path.isdir(folder_path):
             config_data = {
                 "image_folder_namebase": short_name,
-                "code_version_date": "2025-05-02",
+                "code_version_date": "2025-11-19",
                 "file_format": "tiff",
                 "analyze_the_dataset?": True,
                 "ana_random_seed": np.random.randint(0, 10000),
@@ -1317,6 +1319,7 @@ large time gaps between images, selecting the first image after each gap.
 
     print(f"\n-- Please open the config file {short_name}.json in {os.path.abspath(config_dir)} to edit as necessary before running the analysis program.")
     print("All done.")
+
 
 if __name__ == "__main__":
     # if 'pydevd' in sys.modules or 'debugpy' in sys.modules:

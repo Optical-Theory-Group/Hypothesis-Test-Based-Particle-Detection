@@ -1580,8 +1580,8 @@ def generalized_maximum_likelihood_rule(roi_image,
             num_minimize_trials = 10  # Arbitrary number of trials to attempt to avoid the error in the minimization - Thus far num_minimize_trials = 2 has been sufficient.
             for minimizing_trial_index in range(num_minimize_trials):
                 # Initialize storage for minimization snapshots if record_snapshots is True
-                # record_snapshots = False
-                record_snapshots = True
+                record_snapshots = False
+                # record_snapshots = True
                 if record_snapshots:
                     jac_snapshots = []
                     gradientnorm_snapshots = []
@@ -1772,7 +1772,7 @@ def generalized_maximum_likelihood_rule(roi_image,
             penalty_laplace[-1] = np.nan
         # Calculate the AIC and BIC penalties (not likely to be used)
         penalty_aic += [2*num_parameters_for_current_model] 
-        penalty_bic += [2*num_parameters_for_current_model * np.log(szy*szx)] 
+        penalty_bic += [2*num_parameters_for_current_model * np.log(szy*szx)]
 
         # Append the xi value to the list
         xi += [lli[-1] - penalty_laplace[-1]]
