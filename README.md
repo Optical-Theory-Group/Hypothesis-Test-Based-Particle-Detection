@@ -25,7 +25,6 @@ The core algorithm uses maximum likelihood estimation under different hypotheses
 ```
 ├── main.py                      # Main entry point for dataset generation and analysis
 ├── process_algorithms.py        # Core GLRT algorithm implementation
-├── glrt.py                      # Gaussian blur and likelihood computation functions
 ├── image_generation.py          # Synthetic image generation with PSF convolution
 ├── preprocess_exp_data.py       # Experimental data preprocessing and PSF estimation
 └── requirements.txt             # Python package dependencies
@@ -51,18 +50,6 @@ The core algorithm uses maximum likelihood estimation under different hypotheses
   - `merge_coincident_particles()`: Combines detections from overlapping tiles
   - Particle position/intensity optimization using scipy.optimize
   - Fisher information matrix computation
-
-### Scripts Directory
-
-```
-scripts/
-├── exp_data_analysis.py                   # Statistical analysis and plotting utilities
-├── figures_notebook.ipynb                 # Visualization and figure generation
-├── graphing_scripts.py                    # Plotting helper functions
-├── imgproc_scripts.py                     # Image processing utilities
-├── json_scripts.py                        # JSON config manipulation
-└── unclassified_scripts.py                # Miscellaneous utility functions
-```
 
 ### Data Directories
 
