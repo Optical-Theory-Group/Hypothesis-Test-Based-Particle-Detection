@@ -28,4 +28,3 @@ test_configs/*
 *.tiff
 local_code_backup/*
 psf_tolerance_test_configs/*
-snapshots_*.txt

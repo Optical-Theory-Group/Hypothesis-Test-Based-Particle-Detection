@@ -1,2 +1,0 @@
-Snapshots for hypothesis_index == 1
-
