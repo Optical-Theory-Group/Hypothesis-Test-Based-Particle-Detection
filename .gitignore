@@ -3,6 +3,7 @@ __pycache__/
 .downloads/
 .lprof/
 .venv/
+
 *.pyc
 image_dataset/
 datasets/
