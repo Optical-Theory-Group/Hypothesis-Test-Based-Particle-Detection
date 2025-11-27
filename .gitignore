@@ -9,6 +9,8 @@ datasets/
 runs/
 analyses/
 analyses/*
+scripts/
+scripts/*
 config_files/
 configs/
 config_submission/
