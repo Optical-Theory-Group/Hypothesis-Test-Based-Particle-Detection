@@ -3,8 +3,12 @@ __pycache__/
 .downloads/
 .lprof/
 .venv/
-
-*.pyc
+.vscode/
+.vscode/*
+.mypy_cache/
+.pytest_cache/
+*.log
+*.pyc   
 image_dataset/
 datasets/
 runs/
