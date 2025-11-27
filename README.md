@@ -5,6 +5,7 @@ A Python-based particle detection and counting system for nanoparticle assay ima
 
 **Publication:** Details of the algorithm will be available upon publication. 
 
+NB/ Whilst current implementation contains some RGB functionality, only the grayscale functionality has fully implemented and tested. Use RGB capabilities at your own peril. 
 
 ## Description
 
