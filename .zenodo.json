@@ -1,0 +1,45 @@
+{
+  "title": "Multiple Hypothesis Based Particle Counting",
+  "description": "A Python implementation of the algorithm detailed in DOI: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX, for detecting and counting nanoparticles in optical microscopy images. This package provides tools for automated particle detection, PSF estimation, and statistical analysis of experimental data.",
+  "creators": [
+    {
+      "name": "Neil. H. Kim",
+      "affiliation": "Institute for Digital Molecular Analytics and Science, Nanyang Technological University, Singapore",
+      "orcid": "0000-0001-9966-4998"
+    },
+    {
+      "name": "Matthew R. Foreman",
+      "affiliation": "Institute for Digital Molecular Analytics and Science and School of Electrical and Electronic Engineering, Nanyang Technological University, Singapore ",
+      "orcid": "0000-0001-5864-9636"
+    }
+  ],
+  "license": "CC-BY-NC-4.0",
+  "keywords": [
+    "particle detection",
+    "multiple hypothesis test",
+    "optical microscopy",
+    "nanoparticle counting",
+    "image analysis",
+    "Python"
+  ],
+  "upload_type": "software",
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "relation": "isSupplementTo",
+      "identifier": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      "scheme": "doi"
+    }
+  ],
+  "grants": [
+    {
+      "id": "Singapore Ministry of Education Research Centres of Excellence scheme (EDUN C-33-18-279-V12)"
+    },
+    {
+      "id": "Singapore Ministry of Education Academic Research Fund (Tier 1) Grant RG137/24"
+    }
+  ],
+  "publication_date": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "version": "1.0.0",
+  "language": "eng"
+}
