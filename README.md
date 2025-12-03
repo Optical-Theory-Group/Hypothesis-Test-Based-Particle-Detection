@@ -1,22 +1,22 @@
 # Hypothesis Test-Based Particle Detection
 
-A Python-based particle detection and counting system for nanoparticle assay images using a mutliple hypothesis testing approach and information-theoretic model selection.
+A Python-based particle detection and counting system for nanoparticle assay images using a multiple-hypothesis testing approach and information-theoretic model selection.
 
 
 **Publication:** Details of the algorithm will be available upon publication. 
 
-NB/ Whilst current implementation contains some RGB functionality, only the grayscale functionality has fully implemented and tested. Use RGB capabilities at your own peril. 
+NB/ Whilst current implementation contains some RGB functionality, only the grayscale functionality has been fully implemented and tested. Use RGB capabilities at your own peril. 
 
 ## Description
 
-This project provides a comprehensive framework for detecting and counting fluorescent spots or scattering nanoparticles in microscopy images through a mutliple hypothesis testing approach. The system can:
+This project provides a comprehensive framework for detecting and counting fluorescent spots or scattering nanoparticles in microscopy images through a multiple-hypothesis testing approach. The system can:
 
 - **Generate synthetic test datasets** with configurable particle counts, PSF properties, and noise characteristics
 - **Analyze experimental or synthetic images** to detect and count particles
 - **Preprocess experimental data** by dividing large images into analyzable tiles and estimating PSF parameters
 - **Evaluate algorithm performance** through confusion matrices, accuracy metrics, and statistical analysis
 
-The core algorithm uses maximum likelihood estimation under different hypotheses (0 particles, 1 particle, 2 particles, etc.) and selects the best model using an information theoretic criterion.
+The core algorithm uses maximum likelihood estimation under different hypotheses (0 particles, 1 particle, 2 particles, etc.) and selects the best model using an information-theoretic criterion.
 
 ## Repository Structure
 
@@ -72,7 +72,9 @@ data/                            # Raw experimental data (user-provided)
 
 ```powershell
 # Clone the repository
-git clone ***UPDATE ME*** 
+Use the "Code" → "Clone" button on the GitHub page to copy the HTTPS or SSH URL, then run:
+git clone <paste-clone-URL-here>
+
 cd Hypothesis-Test-Based-Particle-Detection
 
 # Create and activate virtual environment (recommended)
@@ -112,8 +114,8 @@ python main.py --config-files-dir "configs/exp_batch1" --parallel
 
 **What happens:**
 - `preprocess_exp_data.py` divides large images into 80×80 pixel tiles with 0px overlap (or user-supplied values)
-- Interval 1 processes all images in datafolder. Timestamping based filter is available but unlikely of use to most users.
-- PSF sigma = 1.5 (or this estimated from Gaussian fitting if not provided)
+- Interval 1 processes all images in datafolder (i.e., no file is skipped). Timestamping based filter is available but unlikely of use to most users.
+- PSF sigma = 1.5. If a predefined sigma is not provided, the script will guide you to estimate it via Gaussian fitting.
 - Configs saved to `./configs/exp_batch1/`
 - Analysis outputs to `./analyses/` with confusion matrices and performance metrics
 
