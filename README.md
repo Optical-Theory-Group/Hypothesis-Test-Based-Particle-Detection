@@ -24,7 +24,7 @@ The core algorithm uses maximum likelihood estimation under different hypotheses
 
 ```
 ├── main.py                      # Main entry point for dataset generation and analysis
-├── process_algorithms.py        # Core GLRT algorithm implementation
+├── process_algorithms.py        # Core algorithm implementation
 ├── image_generation.py          # Synthetic image generation with PSF convolution
 ├── preprocess_exp_data.py       # Experimental data preprocessing and PSF estimation
 └── requirements.txt             # Python package dependencies
